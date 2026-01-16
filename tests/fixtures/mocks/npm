@@ -1,0 +1,25 @@
+#!/bin/bash
+# Mock npm command for testing
+
+TEST_TMP="${TEST_TMP:-/tmp}"
+
+case "$1" in
+    "run")
+        if [[ "$2" == "build" ]]; then
+            exit_code=$(cat "$TEST_TMP/mock_compile_exit_code" 2>/dev/null || echo "0")
+            output=$(cat "$TEST_TMP/mock_compile_output" 2>/dev/null || echo "Build completed")
+            echo "$output"
+            exit "$exit_code"
+        fi
+        ;;
+    "test")
+        exit_code=$(cat "$TEST_TMP/mock_test_exit_code" 2>/dev/null || echo "0")
+        output=$(cat "$TEST_TMP/mock_test_output" 2>/dev/null || echo "All tests passed")
+        echo "$output"
+        exit "$exit_code"
+        ;;
+    *)
+        echo "Mock npm: $*"
+        exit 0
+        ;;
+esac

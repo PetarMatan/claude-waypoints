@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Waypoints Workflow Configuration",
+  "description": "Configuration for Waypoints Workflow hooks - defines technology profiles with detection patterns, source patterns, and commands",
+  "type": "object",
+  "required": ["version", "profiles"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference"
+    },
+    "version": {
+      "type": "string",
+      "description": "Configuration version",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of this configuration"
+    },
+    "profiles": {
+      "type": "object",
+      "description": "Technology profiles keyed by profile ID",
+      "additionalProperties": {
+        "$ref": "#/definitions/profile"
+      }
+    },
+    "activeProfile": {
+      "type": ["string", "null"],
+      "description": "Optional: Force a specific profile instead of auto-detection (null for auto-detect)"
+    }
+  },
+  "definitions": {
+    "profile": {
+      "type": "object",
+      "description": "A technology profile defining how to detect, compile, and test a project type",
+      "required": ["name", "detection", "sourcePatterns", "commands"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for this profile (e.g., 'Kotlin/Maven')"
+        },
+        "detection": {
+          "type": "object",
+          "description": "How to auto-detect this profile",
+          "required": ["files"],
+          "properties": {
+            "files": {
+              "type": "array",
+              "description": "Files that indicate this project type (e.g., ['pom.xml', 'build.gradle'])",
+              "items": { "type": "string" }
+            },
+            "patterns": {
+              "type": "array",
+              "description": "Glob patterns for source files (e.g., ['**/*.kt'])",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "sourcePatterns": {
+          "type": "object",
+          "description": "Glob patterns to identify file types",
+          "required": ["main", "test"],
+          "properties": {
+            "main": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ],
+              "description": "Pattern(s) for main source files"
+            },
+            "test": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ],
+              "description": "Pattern(s) for test source files"
+            },
+            "config": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "array", "items": { "type": "string" } }
+              ],
+              "description": "Pattern(s) for configuration files"
+            }
+          }
+        },
+        "commands": {
+          "type": "object",
+          "description": "Shell commands for build operations",
+          "required": ["compile", "test"],
+          "properties": {
+            "compile": {
+              "type": "string",
+              "description": "Command to compile main sources"
+            },
+            "testCompile": {
+              "type": "string",
+              "description": "Command to compile test sources"
+            },
+            "test": {
+              "type": "string",
+              "description": "Command to run all tests"
+            },
+            "testSingle": {
+              "type": "string",
+              "description": "Command to run a single test (use {testClass} or {testName} placeholders)"
+            }
+          }
+        },
+        "todoPlaceholder": {
+          "type": "string",
+          "description": "Code snippet for unimplemented methods (e.g., 'TODO(\"...\")' or 'raise NotImplementedError(...)')"
+        },
+        "testFramework": {
+          "type": "string",
+          "description": "Test framework identifier (e.g., 'junit5', 'jest', 'pytest')"
+        }
+      }
+    }
+  }
+}

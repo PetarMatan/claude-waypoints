@@ -1,0 +1,77 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install bats
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y bats
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install bats-core
+          fi
+        shell: bash
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Make scripts executable
+        run: |
+          chmod +x hooks/*.py
+          chmod +x install.sh
+          chmod +x uninstall.sh
+          chmod +x tests/run_tests.sh
+          chmod +x tests/fixtures/mocks/*
+
+      - name: Run all tests
+        run: ./tests/run_tests.sh
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          shellcheck install.sh || true
+          shellcheck uninstall.sh || true
+          shellcheck tests/run_tests.sh || true
+
+  validate-json:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate JSON files
+        run: |
+          for f in config/*.json; do
+            echo "Validating $f..."
+            python3 -m json.tool "$f" > /dev/null
+          done

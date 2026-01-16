@@ -1,0 +1,36 @@
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+/tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Test artifacts
+/tests/.bats-run-*
+
+# Installation backups
+*.backup.*
+
+# Local Claude Code settings
+.claude/
+
+# Python local env
+venv/
+.venv/
+.pytest_cache/

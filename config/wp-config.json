@@ -1,0 +1,228 @@
+{
+  "$schema": "./schema.json",
+  "version": "1.0.0",
+  "description": "Waypoints Workflow configuration - auto-detected or manually specified",
+
+  "profiles": {
+    "kotlin-maven": {
+      "name": "Kotlin/Maven",
+      "detection": {
+        "files": ["pom.xml"],
+        "patterns": ["**/*.kt"]
+      },
+      "sourcePatterns": {
+        "main": "**/src/main/**/*.kt",
+        "test": "**/src/test/**/*.kt",
+        "config": ["**/application.yaml", "**/application.yml", "**/pom.xml"]
+      },
+      "commands": {
+        "compile": "mvn clean compile -q",
+        "testCompile": "mvn clean test-compile -q",
+        "test": "mvn clean test -q",
+        "testSingle": "mvn clean test -Dtest={testClass} -q"
+      },
+      "todoPlaceholder": "TODO(\"Implementation pending - tests first\")",
+      "testFramework": "junit5"
+    },
+
+    "kotlin-gradle": {
+      "name": "Kotlin/Gradle",
+      "detection": {
+        "files": ["build.gradle.kts", "build.gradle"],
+        "patterns": ["**/*.kt"]
+      },
+      "sourcePatterns": {
+        "main": "**/src/main/**/*.kt",
+        "test": "**/src/test/**/*.kt",
+        "config": ["**/application.yaml", "**/application.yml", "**/build.gradle.kts", "**/build.gradle"]
+      },
+      "commands": {
+        "compile": "./gradlew compileKotlin -q",
+        "testCompile": "./gradlew compileTestKotlin -q",
+        "test": "./gradlew test -q",
+        "testSingle": "./gradlew test --tests {testClass} -q"
+      },
+      "todoPlaceholder": "TODO(\"Implementation pending - tests first\")",
+      "testFramework": "junit5"
+    },
+
+    "typescript-npm": {
+      "name": "TypeScript/npm",
+      "detection": {
+        "files": ["package.json", "tsconfig.json"],
+        "patterns": ["**/*.ts", "**/*.tsx"]
+      },
+      "sourcePatterns": {
+        "main": ["**/src/**/*.ts", "**/src/**/*.tsx"],
+        "test": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+        "config": ["**/package.json", "**/tsconfig.json", "**/*.config.ts", "**/*.config.js"]
+      },
+      "commands": {
+        "compile": "npm run build",
+        "testCompile": "npx tsc --noEmit",
+        "test": "npm test",
+        "testSingle": "npm test -- --testNamePattern=\"{testName}\""
+      },
+      "todoPlaceholder": "throw new Error('TODO: Implementation pending - tests first');",
+      "testFramework": "jest"
+    },
+
+    "javascript-npm": {
+      "name": "JavaScript/npm",
+      "detection": {
+        "files": ["package.json"],
+        "patterns": ["**/*.js", "**/*.jsx"]
+      },
+      "sourcePatterns": {
+        "main": ["**/src/**/*.js", "**/src/**/*.jsx"],
+        "test": ["**/*.test.js", "**/*.test.jsx", "**/*.spec.js", "**/*.spec.jsx"],
+        "config": ["**/package.json", "**/*.config.js", "**/babel.config.js", "**/webpack.config.js"]
+      },
+      "commands": {
+        "compile": "npm run build --if-present || echo 'No build script'",
+        "testCompile": "npm run lint --if-present || echo 'No lint script'",
+        "test": "npm test",
+        "testSingle": "npm test -- --testNamePattern=\"{testName}\""
+      },
+      "todoPlaceholder": "throw new Error('TODO: Implementation pending - tests first');",
+      "testFramework": "jest"
+    },
+
+    "typescript-pnpm": {
+      "name": "TypeScript/pnpm",
+      "detection": {
+        "files": ["package.json", "tsconfig.json", "pnpm-lock.yaml"],
+        "patterns": ["**/*.ts", "**/*.tsx"]
+      },
+      "sourcePatterns": {
+        "main": ["**/src/**/*.ts", "**/src/**/*.tsx"],
+        "test": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+        "config": ["**/package.json", "**/tsconfig.json", "**/*.config.ts", "**/*.config.js", "**/pnpm-lock.yaml"]
+      },
+      "commands": {
+        "compile": "pnpm run build",
+        "testCompile": "pnpm exec tsc --noEmit",
+        "test": "pnpm test",
+        "testSingle": "pnpm test -- --testNamePattern=\"{testName}\""
+      },
+      "todoPlaceholder": "throw new Error('TODO: Implementation pending - tests first');",
+      "testFramework": "jest"
+    },
+
+    "javascript-pnpm": {
+      "name": "JavaScript/pnpm",
+      "detection": {
+        "files": ["package.json", "pnpm-lock.yaml"],
+        "patterns": ["**/*.js", "**/*.jsx"]
+      },
+      "sourcePatterns": {
+        "main": ["**/src/**/*.js", "**/src/**/*.jsx"],
+        "test": ["**/*.test.js", "**/*.test.jsx", "**/*.spec.js", "**/*.spec.jsx"],
+        "config": ["**/package.json", "**/*.config.js", "**/babel.config.js", "**/webpack.config.js", "**/pnpm-lock.yaml"]
+      },
+      "commands": {
+        "compile": "pnpm run build --if-present || echo 'No build script'",
+        "testCompile": "pnpm run lint --if-present || echo 'No lint script'",
+        "test": "pnpm test",
+        "testSingle": "pnpm test -- --testNamePattern=\"{testName}\""
+      },
+      "todoPlaceholder": "throw new Error('TODO: Implementation pending - tests first');",
+      "testFramework": "jest"
+    },
+
+    "python-pytest": {
+      "name": "Python/pytest",
+      "detection": {
+        "files": ["pyproject.toml", "setup.py", "requirements.txt"],
+        "patterns": ["**/*.py"]
+      },
+      "sourcePatterns": {
+        "main": "**/src/**/*.py",
+        "test": "**/tests/**/*.py",
+        "config": ["**/pyproject.toml", "**/setup.py", "**/requirements.txt"]
+      },
+      "commands": {
+        "compile": "python -m compileall . -q",
+        "testCompile": "python -m pytest --collect-only -q",
+        "test": "python -m pytest -q",
+        "testSingle": "python -m pytest {testFile}::{testName} -q"
+      },
+      "todoPlaceholder": "raise NotImplementedError('TODO: Implementation pending - tests first')",
+      "testFramework": "pytest"
+    },
+
+    "go": {
+      "name": "Go",
+      "detection": {
+        "files": ["go.mod"],
+        "patterns": ["**/*.go"]
+      },
+      "sourcePatterns": {
+        "main": "**/*.go",
+        "test": "**/*_test.go",
+        "config": ["**/go.mod", "**/go.sum"]
+      },
+      "commands": {
+        "compile": "go build ./...",
+        "testCompile": "go test -c ./...",
+        "test": "go test ./...",
+        "testSingle": "go test -run {testName} ./..."
+      },
+      "todoPlaceholder": "panic(\"TODO: Implementation pending - tests first\")",
+      "testFramework": "go-test"
+    },
+
+    "rust": {
+      "name": "Rust",
+      "detection": {
+        "files": ["Cargo.toml"],
+        "patterns": ["**/*.rs"]
+      },
+      "sourcePatterns": {
+        "main": "**/src/**/*.rs",
+        "test": "**/tests/**/*.rs",
+        "config": ["**/Cargo.toml"]
+      },
+      "commands": {
+        "compile": "cargo build",
+        "testCompile": "cargo test --no-run",
+        "test": "cargo test",
+        "testSingle": "cargo test {testName}"
+      },
+      "todoPlaceholder": "todo!(\"Implementation pending - tests first\")",
+      "testFramework": "cargo-test"
+    },
+
+    "java-maven": {
+      "name": "Java/Maven",
+      "detection": {
+        "files": ["pom.xml"],
+        "patterns": ["**/*.java"]
+      },
+      "sourcePatterns": {
+        "main": "**/src/main/**/*.java",
+        "test": "**/src/test/**/*.java",
+        "config": ["**/application.yaml", "**/application.yml", "**/pom.xml"]
+      },
+      "commands": {
+        "compile": "mvn clean compile -q",
+        "testCompile": "mvn test-compile -q",
+        "test": "mvn test -q",
+        "testSingle": "mvn test -Dtest={testClass} -q"
+      },
+      "todoPlaceholder": "throw new UnsupportedOperationException(\"TODO: Implementation pending - tests first\");",
+      "testFramework": "junit5"
+    }
+  },
+
+  "activeProfile": null,
+
+  "markers": {
+    "wpMode": "~/.claude/tmp/wp-mode",
+    "phase": "~/.claude/tmp/wp-phase",
+    "requirementsConfirmed": "~/.claude/tmp/wp-requirements-confirmed",
+    "interfacesDesigned": "~/.claude/tmp/wp-interfaces-designed",
+    "testsApproved": "~/.claude/tmp/wp-tests-approved",
+    "testsPassing": "~/.claude/tmp/wp-tests-passing"
+  }
+}

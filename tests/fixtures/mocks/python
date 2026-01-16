@@ -1,0 +1,25 @@
+#!/bin/bash
+# Mock python command for testing
+
+TEST_TMP="${TEST_TMP:-/tmp}"
+
+# python -m py_compile or python -m pytest
+if [[ "$1" == "-m" ]]; then
+    case "$2" in
+        "py_compile")
+            exit_code=$(cat "$TEST_TMP/mock_compile_exit_code" 2>/dev/null || echo "0")
+            output=$(cat "$TEST_TMP/mock_compile_output" 2>/dev/null || echo "")
+            echo "$output"
+            exit "$exit_code"
+            ;;
+        "pytest")
+            exit_code=$(cat "$TEST_TMP/mock_test_exit_code" 2>/dev/null || echo "0")
+            output=$(cat "$TEST_TMP/mock_test_output" 2>/dev/null || echo "10 passed")
+            echo "$output"
+            exit "$exit_code"
+            ;;
+    esac
+fi
+
+echo "Mock python: $*"
+exit 0

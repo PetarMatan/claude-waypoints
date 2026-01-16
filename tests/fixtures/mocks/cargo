@@ -1,0 +1,30 @@
+#!/bin/bash
+# Mock cargo command for testing
+
+TEST_TMP="${TEST_TMP:-/tmp}"
+
+case "$1" in
+    "build")
+        exit_code=$(cat "$TEST_TMP/mock_compile_exit_code" 2>/dev/null || echo "0")
+        output=$(cat "$TEST_TMP/mock_compile_output" 2>/dev/null || echo "Compiling...")
+        echo "$output"
+        exit "$exit_code"
+        ;;
+    "test")
+        if [[ "$2" == "--no-run" ]]; then
+            # cargo test --no-run (compile only)
+            exit_code=$(cat "$TEST_TMP/mock_compile_exit_code" 2>/dev/null || echo "0")
+            output=$(cat "$TEST_TMP/mock_compile_output" 2>/dev/null || echo "")
+            echo "$output"
+            exit "$exit_code"
+        else
+            exit_code=$(cat "$TEST_TMP/mock_test_exit_code" 2>/dev/null || echo "0")
+            output=$(cat "$TEST_TMP/mock_test_output" 2>/dev/null || echo "test result: ok")
+            echo "$output"
+            exit "$exit_code"
+        fi
+        ;;
+esac
+
+echo "Mock cargo: $*"
+exit 0

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p ~/.claude/tmp:*)",
+      "Bash(mkdir -p ~/.claude/tmp &&:*)",
+      "Bash(echo:*)",
+      "Bash(rm -f ~/.claude/tmp/wp-*:*)",
+      "Bash(cat ~/.claude/tmp/:*)",
+      "Bash(true # wp:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/waypoints/hooks/wp-activation.py",
+            "timeout": 5000
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/waypoints/hooks/wp-phase-guard.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/waypoints/hooks/wp-auto-compile.py",
+            "timeout": 120000
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/waypoints/hooks/wp-auto-test.py",
+            "timeout": 300000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/waypoints/hooks/wp-orchestrator.py",
+            "timeout": 120000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/waypoints/hooks/wp-cleanup-markers.py",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

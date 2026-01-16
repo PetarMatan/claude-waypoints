@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#
+# wp-supervisor - Launch Waypoints Supervisor
+#
+# Usage:
+#   wp-supervisor [OPTIONS]
+#
+# Options:
+#   -d, --dir PATH      Project working directory (default: current)
+#   -t, --task TEXT     Initial task description
+#   -i, --id ID         Workflow ID (for resuming)
+#   -h, --help          Show help
+#
+# Examples:
+#   wp-supervisor
+#   wp-supervisor -d ./my-project
+#   wp-supervisor -t "Build a REST API for users"
+#
+
+set -e
+
+# Find the wp_supervisor module location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Check if running from installed location (~/.claude/waypoints/bin)
+# or from repo location (repo/bin)
+if [[ -d "$SCRIPT_DIR/../wp_supervisor" ]]; then
+    # Installed location: ~/.claude/waypoints/bin/../wp_supervisor
+    SUPERVISOR_DIR="$(dirname "$SCRIPT_DIR")"
+elif [[ -d "$(dirname "$SCRIPT_DIR")/wp_supervisor" ]]; then
+    # Repo location: repo/bin/../wp_supervisor
+    SUPERVISOR_DIR="$(dirname "$SCRIPT_DIR")"
+else
+    echo "Error: Cannot find wp_supervisor module."
+    echo "Expected at: $SCRIPT_DIR/../wp_supervisor"
+    exit 1
+fi
+
+# Add to PYTHONPATH so wp_supervisor module can be found
+export PYTHONPATH="${SUPERVISOR_DIR}:${PYTHONPATH:-}"
+
+# Check if claude-agent-sdk is installed
+if ! python3 -c "import claude_agent_sdk" 2>/dev/null; then
+    echo "Error: claude-agent-sdk not installed."
+    echo ""
+    echo "Install with:"
+    echo "  pip install claude-agent-sdk"
+    echo ""
+    echo "Or if using a virtual environment:"
+    echo "  source your-venv/bin/activate"
+    echo "  pip install claude-agent-sdk"
+    exit 1
+fi
+
+# Run the supervisor module
+exec python3 -m wp_supervisor "$@"
