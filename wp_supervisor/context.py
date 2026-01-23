@@ -14,12 +14,15 @@ from .templates import (
     PHASE2_CONTEXT,
     PHASE3_CONTEXT,
     PHASE4_CONTEXT,
+    PHASE_NAMES,
     REQUIREMENTS_SUMMARY_PROMPT,
     INTERFACES_SUMMARY_PROMPT,
     TESTS_SUMMARY_PROMPT,
     REQUIREMENTS_REVIEW_PROMPT,
     INTERFACES_REVIEW_PROMPT,
     TESTS_REVIEW_PROMPT,
+    REGENERATION_CONVERSATION_CONTEXT,
+    REGENERATION_FINAL_SUMMARY_PROMPT,
 )
 
 
@@ -103,3 +106,37 @@ class ContextBuilder:
             3: TESTS_REVIEW_PROMPT,
         }
         return prompts.get(phase, "")
+
+    @staticmethod
+    def build_regeneration_context(
+        phase: int,
+        current_summary: str,
+        initial_feedback: str
+    ) -> str:
+        """
+        Build context for summary regeneration conversation.
+
+        Args:
+            phase: Phase number (1-3)
+            current_summary: The current summary being reviewed
+            initial_feedback: User's initial feedback
+
+        Returns:
+            Context prompt for the regeneration conversation
+        """
+        phase_name = PHASE_NAMES.get(phase, f"Phase {phase}")
+        return REGENERATION_CONVERSATION_CONTEXT.format(
+            phase_name=phase_name,
+            current_summary=current_summary,
+            initial_feedback=initial_feedback
+        )
+
+    @staticmethod
+    def get_regeneration_summary_prompt() -> str:
+        """
+        Get the prompt for generating final summary after regeneration conversation.
+
+        Returns:
+            Prompt string for final summary generation
+        """
+        return REGENERATION_FINAL_SUMMARY_PROMPT

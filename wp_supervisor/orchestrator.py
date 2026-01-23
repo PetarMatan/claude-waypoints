@@ -110,6 +110,22 @@ class WPOrchestrator:
     SUMMARY_VERIFIED_SIGNAL = "SUMMARY_VERIFIED"
     GAPS_FOUND_SIGNAL = "GAPS_FOUND"
 
+    # Regeneration conversation signals
+    REGENERATION_COMPLETE_PATTERNS = [
+        "---REGENERATION_COMPLETE---",
+        "**REGENERATION_COMPLETE**",
+        "REGENERATION_COMPLETE"
+    ]
+    REGENERATION_CANCELED_PATTERNS = [
+        "---REGENERATION_CANCELED---",
+        "**REGENERATION_CANCELED**",
+        "REGENERATION_CANCELED"
+    ]
+
+    # Signal detection return values
+    SIGNAL_COMPLETE = 'complete'
+    SIGNAL_CANCELED = 'canceled'
+
     def __init__(self, working_dir: Optional[str] = None):
         """
         Initialize the Waypoints orchestrator.
@@ -567,21 +583,185 @@ class WPOrchestrator:
             print(f"[Supervisor] Summary captured.")
             return review_response if review_response else initial_summary
 
+    def _check_regeneration_signal(self, text: str) -> Optional[str]:
+        """
+        Check if text contains regeneration completion or cancellation signals.
+
+        Args:
+            text: Text to check for signals
+
+        Returns:
+            SIGNAL_COMPLETE if REGENERATION_COMPLETE found
+            SIGNAL_CANCELED if REGENERATION_CANCELED found
+            None if no signal found
+        """
+        if not text:
+            return None
+
+        # Check for completion first (takes precedence)
+        for pattern in self.REGENERATION_COMPLETE_PATTERNS:
+            if pattern in text:
+                return self.SIGNAL_COMPLETE
+
+        # Check for cancellation
+        for pattern in self.REGENERATION_CANCELED_PATTERNS:
+            if pattern in text:
+                return self.SIGNAL_CANCELED
+
+        return None
+
+    async def _run_regeneration_conversation(
+        self,
+        phase: int,
+        current_summary: str,
+        initial_feedback: str
+    ) -> tuple:
+        """
+        Run interactive conversation for summary regeneration.
+
+        Streams Claude's responses to user, handles multiple back-and-forth
+        exchanges, detects completion/cancellation signals.
+
+        Args:
+            phase: Phase number (for usage tracking)
+            current_summary: The current summary being reviewed
+            initial_feedback: User's initial feedback
+
+        Returns:
+            Tuple of (was_completed, session_id)
+            - was_completed: True if REGENERATION_COMPLETE, False if REGENERATION_CANCELED
+            - session_id: Session ID for follow-up summary generation (None if canceled)
+        """
+        env_vars = self.markers.get_env_vars()
+
+        # Build conversation context
+        context = ContextBuilder.build_regeneration_context(
+            phase=phase,
+            current_summary=current_summary,
+            initial_feedback=initial_feedback
+        )
+
+        session_id = None
+        conversation_complete = False
+        was_completed = False
+        working_indicator_shown = False
+
+        async with ClaudeSDKClient(
+            options=ClaudeAgentOptions(
+                cwd=str(self.working_dir),
+                env=env_vars,
+                permission_mode="bypassPermissions",
+                hooks=self.hooks.get_hooks_config(),
+            )
+        ) as client:
+            # Send initial context
+            await client.query(context)
+
+            # Process initial response
+            async for message in client.receive_response():
+                # Capture session ID
+                if hasattr(message, 'session_id') and message.session_id:
+                    session_id = message.session_id
+
+                if isinstance(message, AssistantMessage) and message.content:
+                    for block in message.content:
+                        if hasattr(block, 'text'):
+                            if working_indicator_shown:
+                                print("\n", end='')
+                                working_indicator_shown = False
+                            print(block.text, end='', flush=True)
+
+                            # Check for signals
+                            signal = self._check_regeneration_signal(block.text)
+                            if signal == self.SIGNAL_COMPLETE:
+                                conversation_complete = True
+                                was_completed = True
+                            elif signal == self.SIGNAL_CANCELED:
+                                conversation_complete = True
+                                was_completed = False
+                        elif hasattr(block, 'name'):
+                            # Tool use - show dot as progress indicator
+                            print(".", end='', flush=True)
+                            working_indicator_shown = True
+
+                if isinstance(message, ResultMessage):
+                    self._record_usage(phase, message)
+
+            # Ensure newline after response
+            print()
+
+            # Interactive loop until conversation completes
+            while not conversation_complete:
+                user_input = read_user_input("\nYou: ").strip()
+
+                if not user_input:
+                    continue
+
+                self.logger.log_user_input(user_input)
+
+                # Check for /done command
+                if user_input.lower() == '/done':
+                    self.logger.log_user_command('/done')
+                    was_completed = True
+                    break
+
+                # Continue conversation
+                print("\n", end='', flush=True)
+                working_indicator_shown = False
+                await client.query(user_input)
+
+                async for message in client.receive_response():
+                    if isinstance(message, AssistantMessage) and message.content:
+                        for block in message.content:
+                            if hasattr(block, 'text'):
+                                if working_indicator_shown:
+                                    print("\n", end='')
+                                    working_indicator_shown = False
+                                print(block.text, end='', flush=True)
+
+                                # Check for signals
+                                signal = self._check_regeneration_signal(block.text)
+                                if signal == self.SIGNAL_COMPLETE:
+                                    conversation_complete = True
+                                    was_completed = True
+                                elif signal == self.SIGNAL_CANCELED:
+                                    conversation_complete = True
+                                    was_completed = False
+                            elif hasattr(block, 'name'):
+                                print(".", end='', flush=True)
+                                working_indicator_shown = True
+
+                    if isinstance(message, ResultMessage):
+                        self._record_usage(phase, message)
+
+                # Ensure newline after response
+                print()
+
+        return (was_completed, session_id if was_completed else None)
+
     async def _regenerate_summary(
         self,
         phase: int,
         session_id: Optional[str] = None
     ) -> str:
         """
-        Regenerate summary based on user feedback.
+        Regenerate summary through interactive conversation with user.
+
+        Starts a fresh session (not resuming phase session) with:
+        - Current summary as context
+        - User's initial feedback
+        - Interactive dialogue until user is satisfied or cancels
 
         Args:
             phase: Phase number
-            session_id: Session ID to resume (maintains conversation context)
+            session_id: Deprecated - kept for API compatibility
 
         Returns:
-            Regenerated summary text
+            Regenerated summary text, or original if canceled
         """
+        # Silence unused parameter warning - kept for API compatibility
+        _ = session_id
+
         # Get current summary for reference
         current_summary = self.markers.get_phase_document(phase)
 
@@ -596,26 +776,26 @@ class WPOrchestrator:
 
         self.logger.log_user_input(f"Regenerate feedback: {feedback}")
 
-        # Build regeneration prompt
-        regenerate_prompt = f"""
-The user has reviewed the summary and wants changes.
+        print(f"\n[Supervisor] Starting revision discussion...\n")
 
-## Current Summary
-{current_summary}
+        # Run interactive conversation
+        was_completed, conversation_session_id = await self._run_regeneration_conversation(
+            phase=phase,
+            current_summary=current_summary,
+            initial_feedback=feedback
+        )
 
-## User Feedback
-{feedback}
+        if not was_completed:
+            print(f"\n[Supervisor] Keeping original summary.")
+            return current_summary
 
-## Your Task
-Update the summary based on the user's feedback. Keep the same format but incorporate
-their requested changes. Output ONLY the updated summary, no explanations.
-"""
+        # Generate final summary using the conversation context
+        print(f"\n[Supervisor] Generating final summary...")
 
-        print(f"\n[Supervisor] Regenerating summary with your feedback...")
-
+        final_summary_prompt = ContextBuilder.get_regeneration_summary_prompt()
         new_summary = await self._query_for_text(
-            regenerate_prompt,
-            session_id=session_id,
+            final_summary_prompt,
+            session_id=conversation_session_id,
             phase=phase
         )
 

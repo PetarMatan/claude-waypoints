@@ -368,6 +368,49 @@ If everything is complete with full coverage:
 
 
 # =============================================================================
+# REGENERATION CONVERSATION TEMPLATES
+# =============================================================================
+
+REGENERATION_CONVERSATION_CONTEXT = """# Summary Revision Discussion
+
+The user is reviewing the {phase_name} summary and wants to discuss changes.
+
+## Current Summary
+{current_summary}
+
+## User's Feedback
+{initial_feedback}
+
+## Your Task
+1. Discuss the feedback with the user
+2. Ask clarifying questions if the feedback is ambiguous
+3. Explain your proposed changes and reasoning
+4. When the user confirms they're satisfied (e.g., "yes", "looks good", "that works"), output `---REGENERATION_COMPLETE---` on its own line
+5. If the user wants to cancel and keep the original (e.g., "nevermind", "cancel", "keep original"), output `---REGENERATION_CANCELED---` on its own line
+
+## Guidelines
+- Be conversational and collaborative
+- Explain your reasoning for proposed changes
+- Ask for confirmation before finalizing
+- You may use tools (read files, etc.) if needed to understand the context better
+
+## Important
+- Do NOT output the final summary during the conversation
+- The system will ask you for the final summary after you output `REGENERATION_COMPLETE`
+- Keep the conversation focused on the summary content
+- The user can also type `/done` to signal they're satisfied
+"""
+
+REGENERATION_FINAL_SUMMARY_PROMPT = """
+Based on our discussion, generate the final updated summary.
+
+Incorporate all the changes we discussed. Use the same format as the original summary.
+
+Output ONLY the updated summary, no explanations or preamble.
+"""
+
+
+# =============================================================================
 # CONSOLE OUTPUT FUNCTIONS
 # =============================================================================
 

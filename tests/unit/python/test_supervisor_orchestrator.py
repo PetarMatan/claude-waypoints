@@ -540,7 +540,8 @@ class TestRegenerateSummary:
 
                 assert result == "# Current Summary"
 
-    def test_regenerate_summary_calls_query_with_feedback(self):
+    def test_regenerate_summary_calls_conversation_with_feedback(self):
+        """Test that _regenerate_summary calls _run_regeneration_conversation with feedback."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -549,20 +550,31 @@ class TestRegenerateSummary:
                 # Save initial document
                 orchestrator.markers.save_phase_document(1, "# Current Summary")
 
-                captured_prompt = []
+                # Track conversation calls
+                conversation_calls = []
+
+                async def mock_run_conversation(phase, current_summary, initial_feedback):
+                    conversation_calls.append({
+                        'phase': phase,
+                        'current_summary': current_summary,
+                        'initial_feedback': initial_feedback
+                    })
+                    return (True, "session-123")
+
                 async def mock_query_for_text(prompt, session_id=None, phase=None):
-                    captured_prompt.append(prompt)
                     return "# Updated Summary"
 
+                orchestrator._run_regeneration_conversation = mock_run_conversation
                 orchestrator._query_for_text = mock_query_for_text
 
                 with patch('builtins.input', return_value='Add error handling section'):
                     result = run_async(orchestrator._regenerate_summary(1))
 
                 assert result == "# Updated Summary"
-                assert len(captured_prompt) == 1
-                assert "Add error handling section" in captured_prompt[0]
-                assert "# Current Summary" in captured_prompt[0]
+                assert len(conversation_calls) == 1
+                assert conversation_calls[0]['phase'] == 1
+                assert conversation_calls[0]['initial_feedback'] == "Add error handling section"
+                assert "# Current Summary" in conversation_calls[0]['current_summary']
 
 
 class TestGenerateAndVerifySummary:
