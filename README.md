@@ -68,6 +68,7 @@ See [Supervisor Mode](#supervisor-mode) for details on when and why to use it.
 - **User Approval Gates** - Human confirms each phase transition
 - **Clean Cleanup** - Session end automatically removes markers
 - **Supervisor Mode** - Multi-session orchestration for large features (prevents context bloat)
+- **Living Project Documents** - Persistent knowledge that accumulates across sessions (architecture decisions, lessons learned)
 
 ## Quick Start
 
@@ -254,6 +255,44 @@ wp-supervisor                  # Start supervisor workflow
 ```
 
 See [Supervisor Mode Guide](docs/supervisor-mode.md) for details.
+
+## Living Project Documents
+
+Waypoints automatically builds project knowledge that persists across sessions. Instead of starting fresh each time, Claude has access to:
+
+- **Architecture** - System structure, services, integrations
+- **Decisions** - Why choices were made, trade-offs considered
+- **Lessons Learned** - Technology gotchas, patterns that work
+
+### How It Works
+
+1. **Session Start**: Existing knowledge is loaded into context
+2. **During Work**: Claude stages valuable learnings using `wp:stage`
+3. **Session End**: Staged learnings are auto-applied to permanent files
+
+### Knowledge Storage
+
+```
+~/.claude/waypoints/knowledge/
+├── {project-id}/
+│   ├── architecture.md    # Per-project
+│   └── decisions.md       # Per-project
+└── lessons-learned.md     # Global (shared across projects)
+```
+
+Projects are identified by: `.waypoints-project` file > git remote name > directory name.
+
+### Staging Learnings
+
+The Knowledge Curator agent guides what to capture. Claude stages learnings with:
+
+```bash
+true # wp:stage architecture "Service Topology" "ServiceA calls ServiceB via Kafka"
+true # wp:stage decisions "Async Pattern" "Chose async for exports due to timeouts"
+true # wp:stage lessons-learned "[MongoDB] @BsonId" "Required for update operations"
+```
+
+Learnings are automatically applied when implementation completes.
 
 ## Troubleshooting
 

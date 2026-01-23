@@ -26,6 +26,7 @@ if str(_hooks_lib) not in sys.path:
     sys.path.insert(0, str(_hooks_lib))
 
 from wp_agents import AgentLoader
+from wp_knowledge import KnowledgeManager, extract_from_text, ExtractionResult
 from .markers import SupervisorMarkers
 from .context import ContextBuilder
 from .logger import SupervisorLogger
@@ -130,6 +131,12 @@ class WPOrchestrator:
             working_dir=str(self.working_dir)
         )
 
+        # Initialize knowledge manager for loading and applying knowledge [REQ-1]
+        self._knowledge_manager = KnowledgeManager(project_dir=str(self.working_dir))
+
+        # Knowledge context loaded once at workflow start [REQ-6]
+        self._knowledge_context: str = ""
+
         # Validate working directory
         if not self.working_dir.is_dir():
             raise ValueError(f"Working directory does not exist: {self.working_dir}")
@@ -152,11 +159,17 @@ class WPOrchestrator:
             self.markers.initialize()
             self.logger.log_workflow_start(initial_task or "")
 
+            # Load knowledge context once at workflow start [REQ-1, REQ-6]
+            self._knowledge_context = self._load_knowledge_context()
+
             # Run all 4 phases
             await self._run_phase(1, initial_task)
             await self._run_phase(2)
             await self._run_phase(3)
             await self._run_phase(4)
+
+            # Apply staged knowledge at workflow end [REQ-17]
+            self._apply_knowledge_at_workflow_end()
 
             # Log completion with usage summary
             self.logger.log_workflow_complete(self.markers.get_usage_summary_text())
@@ -171,34 +184,92 @@ class WPOrchestrator:
         except KeyboardInterrupt:
             print("\n\nWorkflow interrupted by user.")
             self.logger.log_workflow_aborted("User interrupted")
+            # Cleanup staged knowledge on abort [REQ-24, REQ-25]
+            self.markers.clear_staged_knowledge()
             self.markers.cleanup()
             print("Markers cleaned up.")
         except Exception as e:
             print(f"\n\nWorkflow error: {e}", file=sys.stderr)
             self.logger.log_error("Workflow failed", e)
             self.logger.log_workflow_aborted(str(e))
+            # Cleanup staged knowledge on error [REQ-24, REQ-25]
+            self.markers.clear_staged_knowledge()
             self.markers.cleanup()
             raise
 
+    # --- Knowledge Management [REQ-1, REQ-6, REQ-7, REQ-17, REQ-22] ---
+
+    def _load_knowledge_context(self) -> str:
+        """
+        Load knowledge context at workflow start [REQ-1, REQ-6].
+
+        Returns:
+            Formatted project knowledge section for injection into phase contexts.
+            Returns empty string if no knowledge files exist.
+        """
+        raise NotImplementedError("TODO: Implementation pending - tests first")
+
+    async def _extract_and_stage_knowledge(
+        self,
+        phase: int,
+        session_id: Optional[str] = None
+    ) -> None:
+        """
+        Extract knowledge from phase completion and stage for later application [REQ-7].
+
+        Sends extraction prompt to Claude in the same session [REQ-7].
+        Runs silently during phases 1-3 (no console output) [REQ-12].
+        Parses response and stages any extracted knowledge [REQ-13].
+
+        Args:
+            phase: Phase number (1-4)
+            session_id: Session ID for resuming conversation
+
+        Note:
+            On malformed response [ERR-1]: Logs warning, skips extraction,
+            continues workflow normally.
+        """
+        raise NotImplementedError("TODO: Implementation pending - tests first")
+
+    def _apply_knowledge_at_workflow_end(self) -> None:
+        """
+        Apply staged knowledge to permanent files after Phase 4 [REQ-17].
+
+        Creates directories if needed [REQ-18].
+        Displays console message listing updated files [REQ-22].
+        Cleans up staged knowledge file after successful application [REQ-23].
+        """
+        raise NotImplementedError("TODO: Implementation pending - tests first")
+
     def _build_phase_context(self, phase: int, initial_task: Optional[str] = None) -> str:
-        """Build context for a specific phase, including phase-bound agents."""
-        # Build base context from templates
+        """
+        Build context for a specific phase, including phase-bound agents and knowledge [REQ-5].
+
+        All phases receive identical knowledge context [REQ-6].
+        """
+        # Build base context from templates with knowledge injection [REQ-5]
         if phase == 1:
-            context = ContextBuilder.build_phase1_context(initial_task)
+            context = ContextBuilder.build_phase1_context(
+                initial_task,
+                knowledge_context=self._knowledge_context
+            )
         elif phase == 2:
             context = ContextBuilder.build_phase2_context(
-                self.markers.get_requirements_summary()
+                self.markers.get_requirements_summary(),
+                knowledge_context=self._knowledge_context
             )
         elif phase == 3:
             context = ContextBuilder.build_phase3_context(
                 self.markers.get_requirements_summary(),
-                self.markers.get_interfaces_list()
+                self.markers.get_interfaces_list(),
+                knowledge_context=self._knowledge_context
             )
         elif phase == 4:
             context = ContextBuilder.build_phase4_context(
                 self.markers.get_requirements_summary(),
                 self.markers.get_interfaces_list(),
-                self.markers.get_tests_list()
+                self.markers.get_tests_list(),
+                knowledge_context=self._knowledge_context
             )
         else:
             raise ValueError(f"Invalid phase: {phase}")
@@ -240,6 +311,10 @@ class WPOrchestrator:
                 self.logger.log_phase_summary_saved(phase, doc_path)
                 print(f"\n[Supervisor] {phase_name} document saved: {doc_path}")
 
+            # Extract knowledge after phase completion [REQ-7]
+            # Runs silently during phases 1-3 [REQ-12]
+            await self._extract_and_stage_knowledge(phase, session_id)
+
             # Confirmation loop with edit/regenerate options
             while True:
                 action = await self._confirm_phase_completion(phase, doc_path, session_id)
@@ -270,8 +345,13 @@ class WPOrchestrator:
                         self.logger.log_phase_summary_saved(phase, doc_path)
                         print(f"[Supervisor] Updated document saved: {doc_path}")
         else:
+            # Phase 4 completion
             print(f"\n[Supervisor] Implementation complete - all tests passing!")
             self.logger.log_phase_complete(phase, phase_name)
+
+            # Extract knowledge from Phase 4 [REQ-7]
+            await self._extract_and_stage_knowledge(phase, session_id)
+
             self._display_usage_summary()
             # Keep documents for reference, only remove state.json
             self.markers.cleanup(keep_documents=True)

@@ -368,6 +368,59 @@ If everything is complete with full coverage:
 
 
 # =============================================================================
+# KNOWLEDGE EXTRACTION TEMPLATES [REQ-7, REQ-8, REQ-9, REQ-10, REQ-11]
+# =============================================================================
+
+KNOWLEDGE_EXTRACTION_PROMPT = """
+Review the work done in this phase and identify any learnings worth capturing.
+
+## Categories to Consider
+
+**ARCHITECTURE**: System structure, service responsibilities, data flow, component interactions
+- Worth capturing: Design patterns used, architectural decisions, integration approaches
+
+**DECISIONS**: Why choices were made, trade-offs considered, constraints discovered
+- Worth capturing: Technical decisions with rationale, rejected alternatives and why
+
+**LESSONS_LEARNED**: Technology-specific gotchas, patterns, corrections
+- Worth capturing: Things that surprised you, workarounds discovered, best practices learned
+- MUST include a technology tag like [Python], [Git], [TypeScript], etc.
+
+## Existing Project Knowledge (DO NOT REPEAT)
+{existing_knowledge}
+
+## Output Format
+
+If you identified knowledge worth capturing, output in this EXACT format:
+
+```
+ARCHITECTURE:
+- Title: Description (1-3 sentences with context)
+- Another Title: Another description
+
+DECISIONS:
+- Title: Description with rationale
+
+LESSONS_LEARNED:
+- [Tag] Title: Description
+- [AnotherTag] Title: Description
+```
+
+If nothing notable was discovered in this phase, output ONLY:
+```
+NO_KNOWLEDGE_EXTRACTED
+```
+
+## Guidelines
+- Only capture things that would help someone working on this project 6 months from now
+- Do NOT repeat information already in project knowledge
+- Be specific and include context
+- Lessons learned MUST have a technology tag in [brackets]
+- Empty sections can be omitted
+"""
+
+
+# =============================================================================
 # CONSOLE OUTPUT FUNCTIONS
 # =============================================================================
 

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-01-22
+
+### Added
+
+- **Living Project Documents** - Persistent knowledge that accumulates across sessions
+  - `wp_knowledge.py` - Core library for knowledge management with `KnowledgeCategory` enum
+  - `wp:stage` command to persist learnings during sessions
+  - Knowledge loading at `wp:init` (architecture, decisions, lessons-learned)
+  - Auto-apply staged learnings when implementation phase completes
+  - `wp-knowledge-curator.md` - Agent guiding knowledge extraction at phase transitions
+  - Project identification via `.waypoints-project` file, git remote, or directory name
+  - Per-project storage for architecture/decisions, global storage for lessons-learned
+
 ## [1.1.0] - 2026-01-16
 
 ### Added

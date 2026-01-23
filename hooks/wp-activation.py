@@ -18,6 +18,9 @@ Commands intercepted (as comments in bash commands):
   true # wp:mark-complete tests         - Mark tests done
   true # wp:mark-complete implementation - Mark implementation done
   true # wp:set-phase N       - Set phase to N
+
+Note: Knowledge staging (wp:stage) has been removed from CLI mode [DEC-1].
+Knowledge extraction is now supervisor-exclusive.
 """
 
 import os
@@ -30,12 +33,26 @@ from hook_io import HookInput, approve_with_message
 from markers import MarkerManager
 from wp_logging import WPLogger
 from wp_agents import AgentLoader
+from wp_knowledge import KnowledgeManager
 
 
-def respond(message: str, agents: str = ""):
+def respond(message: str, additional: str = ""):
     """Provide feedback to Claude via approve with additional context."""
-    full_message = message + agents if agents else message
+    full_message = message + additional if additional else message
     approve_with_message("Waypoints", "PreToolUse", full_message)
+
+
+def format_knowledge_summary(summary: dict) -> str:
+    """Format knowledge update summary for display."""
+    if not summary:
+        return ""
+
+    parts = []
+    for category, count in summary.items():
+        entry_word = "entry" if count == 1 else "entries"
+        parts.append(f"   {category}.md (+{count} {entry_word})")
+
+    return "\n\n📚 Knowledge updated:\n" + "\n".join(parts)
 
 
 def main():
@@ -65,15 +82,19 @@ def main():
 
     # Handle: wp:init
     if 'wp:init' in command:
+        knowledge = KnowledgeManager(hook.cwd)
+        knowledge_context = knowledge.load_knowledge_context()
+        knowledge_section = f"\n\n## Project Knowledge\n\n{knowledge_context}" if knowledge_context else ""
+
         if not markers.is_wp_active():
             markers._state.initialize()
             logger.log_wp(f"Activation hook: Initialized WP state for session {hook.session_id}")
             phase_agents = agents.load_phase_agents(1, logger, skip_already_loaded=True)
-            respond("Waypoints workflow initialized. You are now in Phase 1: Requirements Gathering.", phase_agents)
+            respond("Waypoints workflow initialized. You are now in Phase 1: Requirements Gathering.", phase_agents + knowledge_section)
         else:
             current_phase = markers.get_phase()
             phase_agents = agents.load_phase_agents(current_phase, logger, skip_already_loaded=True)
-            respond(f"Waypoints workflow already active (Phase {current_phase}).", phase_agents)
+            respond(f"Waypoints workflow already active (Phase {current_phase}).", phase_agents + knowledge_section)
         return
 
     # Handle: wp:mark-complete <phase>
@@ -100,7 +121,14 @@ def main():
         elif 'implementation' in command:
             markers.mark_implementation_complete()
             logger.log_wp("Activation hook: Marked implementation complete")
-            respond("Implementation complete. Waypoints workflow finished!")
+
+            # Apply staged learnings and cleanup
+            knowledge = KnowledgeManager(hook.session_id, hook.cwd)
+            summary = knowledge.apply_staged_learnings()
+            knowledge.cleanup_staging()
+            summary_msg = format_knowledge_summary(summary)
+
+            respond("Implementation complete. Waypoints workflow finished!" + summary_msg)
         return
 
     # Handle: wp:set-phase <n>
@@ -136,6 +164,9 @@ def main():
         else:
             respond(status_msg)
         return
+
+    # Note: wp:stage command has been removed [REQ-26, DEC-1]
+    # Knowledge extraction is now supervisor-exclusive
 
 
 if __name__ == '__main__':

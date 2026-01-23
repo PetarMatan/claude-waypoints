@@ -15,6 +15,8 @@ def truncate_head(output: str, max_lines: int = 20) -> str:
 
 def truncate_tail(output: str, max_lines: int = 30) -> str:
     """Get last N lines of output."""
+    if max_lines <= 0:
+        return ""
     lines = output.strip().split('\n')[-max_lines:]
     return '\n'.join(lines)
 
