@@ -42,19 +42,6 @@ def respond(message: str, additional: str = ""):
     approve_with_message("Waypoints", "PreToolUse", full_message)
 
 
-def format_knowledge_summary(summary: dict) -> str:
-    """Format knowledge update summary for display."""
-    if not summary:
-        return ""
-
-    parts = []
-    for category, count in summary.items():
-        entry_word = "entry" if count == 1 else "entries"
-        parts.append(f"   {category}.md (+{count} {entry_word})")
-
-    return "\n\n📚 Knowledge updated:\n" + "\n".join(parts)
-
-
 def main():
     hook = HookInput.from_stdin()
 
@@ -121,14 +108,7 @@ def main():
         elif 'implementation' in command:
             markers.mark_implementation_complete()
             logger.log_wp("Activation hook: Marked implementation complete")
-
-            # Apply staged learnings and cleanup
-            knowledge = KnowledgeManager(hook.session_id, hook.cwd)
-            summary = knowledge.apply_staged_learnings()
-            knowledge.cleanup_staging()
-            summary_msg = format_knowledge_summary(summary)
-
-            respond("Implementation complete. Waypoints workflow finished!" + summary_msg)
+            respond("Implementation complete. Waypoints workflow finished!")
         return
 
     # Handle: wp:set-phase <n>

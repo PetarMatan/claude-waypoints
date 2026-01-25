@@ -33,10 +33,12 @@ from .logger import SupervisorLogger
 from .hooks import SupervisorHooks
 from .templates import (
     PHASE_NAMES,
+    KNOWLEDGE_EXTRACTION_PROMPT,
     format_phase_header,
     format_workflow_header,
     format_phase_complete_banner,
     format_workflow_complete,
+    format_staged_knowledge_for_prompt,
 )
 
 
@@ -223,7 +225,8 @@ class WPOrchestrator:
             Formatted project knowledge section for injection into phase contexts.
             Returns empty string if no knowledge files exist.
         """
-        raise NotImplementedError("TODO: Implementation pending - tests first")
+        knowledge_manager = KnowledgeManager(str(self.working_dir))
+        return knowledge_manager.load_knowledge_context()
 
     async def _extract_and_stage_knowledge(
         self,
@@ -245,7 +248,49 @@ class WPOrchestrator:
             On malformed response [ERR-1]: Logs warning, skips extraction,
             continues workflow normally.
         """
-        raise NotImplementedError("TODO: Implementation pending - tests first")
+        self.logger.log_event("KNOWLEDGE", f"Starting knowledge extraction for phase {phase}")
+        try:
+            # Get already-staged knowledge from this session to prevent duplicates
+            staged = self.markers.get_staged_knowledge()
+            staged_str = format_staged_knowledge_for_prompt(staged)
+
+            # Build extraction prompt with existing knowledge and staged knowledge
+            prompt = KNOWLEDGE_EXTRACTION_PROMPT.format(
+                existing_knowledge=self._knowledge_context or "No existing knowledge.",
+                staged_this_session=staged_str
+            )
+            self.logger.log_event("KNOWLEDGE", "Prompt built, querying Claude...")
+
+            # Send prompt silently (no console output during phases 1-3) [REQ-12]
+            response = await self._query_for_text(
+                prompt,
+                session_id=session_id,
+                phase=phase
+            )
+            self.logger.log_event("KNOWLEDGE", f"Got response: {len(response)} chars")
+
+            # Parse response [REQ-13]
+            result = extract_from_text(response)
+            self.logger.log_event("KNOWLEDGE", f"Parsed: had_content={result.had_content}, is_empty={result.knowledge.is_empty() if result.knowledge else 'N/A'}")
+
+            # Handle parse errors [ERR-1]
+            if result.parse_error:
+                self.logger.log_error(f"Knowledge extraction parse error: {result.parse_error}")
+                return
+
+            # Stage extracted knowledge if any [REQ-13]
+            if result.had_content and not result.knowledge.is_empty():
+                self.markers.stage_knowledge(result.knowledge)
+                self.logger.log_event("KNOWLEDGE", "Knowledge staged successfully")
+            else:
+                self.logger.log_event("KNOWLEDGE", "No knowledge to stage")
+
+        except Exception as e:
+            # Log warning and continue [ERR-1]
+            self.logger.log_error(f"Knowledge extraction failed: {e}")
+            import traceback
+            self.logger.log_error(f"Traceback: {traceback.format_exc()}")
+            # Don't re-raise - continue workflow normally
 
     def _apply_knowledge_at_workflow_end(self) -> None:
         """
@@ -255,7 +300,27 @@ class WPOrchestrator:
         Displays console message listing updated files [REQ-22].
         Cleans up staged knowledge file after successful application [REQ-23].
         """
-        raise NotImplementedError("TODO: Implementation pending - tests first")
+        # Check if there's staged knowledge
+        if not self.markers.has_staged_knowledge():
+            return
+
+        try:
+            # Apply staged knowledge to permanent files [REQ-17, REQ-18]
+            counts = self.markers.apply_staged_knowledge(str(self.working_dir))
+
+            # Display console message with updated files [REQ-22]
+            if counts:
+                knowledge_manager = KnowledgeManager(str(self.working_dir))
+                summary = knowledge_manager.get_updated_files_summary(counts)
+                print(f"\n{summary}")
+
+            # Clean up staged knowledge file [REQ-23]
+            self.markers.clear_staged_knowledge()
+
+        except Exception as e:
+            self.logger.log_error(f"Failed to apply staged knowledge: {e}")
+            # Still clean up on error to avoid stale data
+            self.markers.clear_staged_knowledge()
 
     def _build_phase_context(self, phase: int, initial_task: Optional[str] = None) -> str:
         """

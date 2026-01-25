@@ -434,7 +434,8 @@ class KnowledgeManager:
         """
         self.project_dir = project_dir
         self._project_identifier = ProjectIdentifier(project_dir)
-        self._knowledge_base_dir = Path.home() / ".claude" / "waypoints" / "knowledge"
+        claude_config = os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))
+        self._knowledge_base_dir = Path(claude_config) / "waypoints" / "knowledge"
         self._logger = logging.getLogger(__name__)
 
     @property

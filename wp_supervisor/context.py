@@ -191,7 +191,8 @@ class ContextBuilder:
     @staticmethod
     def get_knowledge_extraction_prompt(
         phase: int,
-        existing_knowledge: str = ""
+        existing_knowledge: str = "",
+        staged_this_session: str = ""
     ) -> str:
         """
         Get the knowledge extraction prompt for a phase [REQ-7, REQ-8, REQ-9, REQ-11].
@@ -199,6 +200,7 @@ class ContextBuilder:
         Args:
             phase: Phase number (1-4)
             existing_knowledge: Current project knowledge to avoid duplicates [REQ-11]
+            staged_this_session: Already staged knowledge from this session to avoid duplicates
 
         Returns:
             Extraction prompt instructing Claude to output in exact format:
@@ -207,4 +209,8 @@ class ContextBuilder:
         """
         # Format the extraction prompt with existing knowledge [REQ-11]
         existing = existing_knowledge if existing_knowledge else "(No existing project knowledge)"
-        return KNOWLEDGE_EXTRACTION_PROMPT.format(existing_knowledge=existing)
+        staged = staged_this_session if staged_this_session else "None yet"
+        return KNOWLEDGE_EXTRACTION_PROMPT.format(
+            existing_knowledge=existing,
+            staged_this_session=staged
+        )

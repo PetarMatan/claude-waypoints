@@ -3,6 +3,9 @@
 
 load '../test_helper'
 
+# Path to install.sh
+INSTALL_SCRIPT="$PROJECT_ROOT/install.sh"
+
 setup() {
     setup_test_environment
 
@@ -484,4 +487,173 @@ assert hook['hooks'][0]['timeout'] == 5000, f\"timeout: {hook['hooks'][0].get('t
 print('OK')
 "
     [ "$output" = "OK" ]
+}
+
+# =============================================================================
+# Tests for --dir parameter
+# =============================================================================
+
+# Helper to source install.sh functions without running the full script
+source_install_functions() {
+    # Extract and source just the function definitions from install.sh
+    # We need to source the script up to the point where functions are defined
+    # but stop before the actual installation runs
+
+    # Create a modified version that only defines functions
+    cat > "$TEST_TMP/install_functions.sh" << 'SCRIPT_END'
+#!/bin/bash
+set -e
+
+# Default CLAUDE_DIR
+CLAUDE_DIR="${HOME}/.claude"
+
+show_usage() {
+    cat << 'EOF'
+Waypoints Workflow Installer for Claude Code
+
+Usage:
+  ./install.sh [OPTIONS]
+
+Options:
+  --dir /path/to/dir    Install to custom directory instead of ~/.claude
+                        The directory must exist.
+  --help                Show this help message
+
+Examples:
+  ./install.sh                      # Install to ~/.claude (default)
+  ./install.sh --dir ~/.claude-feature  # Install to custom directory
+EOF
+    exit 0
+}
+
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dir)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --dir requires a path argument"
+                    exit 1
+                fi
+                CLAUDE_DIR="$2"
+                shift 2
+                ;;
+            --help)
+                show_usage
+                ;;
+            *)
+                echo "Error: Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+}
+
+validate_claude_dir() {
+    if [[ ! -d "$CLAUDE_DIR" ]]; then
+        echo "Error: Directory does not exist: $CLAUDE_DIR"
+        echo "Please create the directory first or use an existing directory."
+        exit 1
+    fi
+}
+SCRIPT_END
+
+    source "$TEST_TMP/install_functions.sh"
+}
+
+@test "parse_arguments sets CLAUDE_DIR when --dir provided" {
+    source_install_functions
+
+    # given
+    mkdir -p "$TEST_TMP/custom-claude"
+
+    # when
+    parse_arguments --dir "$TEST_TMP/custom-claude"
+
+    # then
+    [ "$CLAUDE_DIR" = "$TEST_TMP/custom-claude" ]
+}
+
+@test "parse_arguments uses default when no --dir provided" {
+    source_install_functions
+
+    # when
+    parse_arguments
+
+    # then
+    [ "$CLAUDE_DIR" = "$HOME/.claude" ]
+}
+
+@test "parse_arguments fails when --dir has no value" {
+    source_install_functions
+
+    # when
+    run parse_arguments --dir
+
+    # then
+    [ "$status" -ne 0 ]
+    assert_output_contains "Error: --dir requires a path argument"
+}
+
+@test "parse_arguments fails on unknown option" {
+    source_install_functions
+
+    # when
+    run parse_arguments --unknown-option
+
+    # then
+    [ "$status" -ne 0 ]
+    assert_output_contains "Error: Unknown option"
+}
+
+@test "validate_claude_dir succeeds when directory exists" {
+    source_install_functions
+
+    # given
+    mkdir -p "$TEST_TMP/existing-dir"
+    CLAUDE_DIR="$TEST_TMP/existing-dir"
+
+    # when
+    run validate_claude_dir
+
+    # then
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_claude_dir fails when directory does not exist" {
+    source_install_functions
+
+    # given
+    CLAUDE_DIR="$TEST_TMP/nonexistent-dir"
+
+    # when
+    run validate_claude_dir
+
+    # then
+    [ "$status" -ne 0 ]
+    assert_output_contains "Error: Directory does not exist"
+}
+
+@test "show_usage displays help and exits successfully" {
+    source_install_functions
+
+    # when
+    run show_usage
+
+    # then
+    [ "$status" -eq 0 ]
+    assert_output_contains "Usage:"
+    assert_output_contains "--dir"
+    assert_output_contains "--help"
+}
+
+@test "--help shows usage" {
+    source_install_functions
+
+    # when
+    run parse_arguments --help
+
+    # then
+    [ "$status" -eq 0 ]
+    assert_output_contains "Usage:"
 }

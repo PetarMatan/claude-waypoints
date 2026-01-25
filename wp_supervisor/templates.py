@@ -6,6 +6,16 @@ All prompt templates used throughout the supervisor workflow.
 Separated for maintainability and easy customization.
 """
 
+import sys
+from typing import TYPE_CHECKING
+
+# Add hooks/lib to path for imports
+sys.path.insert(0, 'hooks/lib')
+from wp_knowledge import KnowledgeCategory
+
+if TYPE_CHECKING:
+    from wp_knowledge import StagedKnowledge
+
 
 # =============================================================================
 # PHASE METADATA
@@ -415,22 +425,38 @@ Output ONLY the updated summary, no explanations or preamble.
 # =============================================================================
 
 KNOWLEDGE_EXTRACTION_PROMPT = """
-Review the work done in this phase and identify any learnings worth capturing.
+Review the work done in this phase and identify knowledge worth capturing for future sessions.
 
-## Categories to Consider
+BE HIGHLY SELECTIVE. Most phases should result in NO_KNOWLEDGE_EXTRACTED. Only capture knowledge that:
+- Would genuinely help someone 6 months from now
+- Is NOT obvious from reading the code
+- Represents reusable patterns, not one-time implementation details
 
-**ARCHITECTURE**: System structure, service responsibilities, data flow, component interactions
-- Worth capturing: Design patterns used, architectural decisions, integration approaches
+## Categories
 
-**DECISIONS**: Why choices were made, trade-offs considered, constraints discovered
-- Worth capturing: Technical decisions with rationale, rejected alternatives and why
+**ARCHITECTURE**: High-level system patterns and component relationships
+- CAPTURE: Design patterns that span multiple components, data flow approaches, integration strategies
+- SKIP: How a specific service works (that's code documentation), implementation details of one feature
 
-**LESSONS_LEARNED**: Technology-specific gotchas, patterns, corrections
-- Worth capturing: Things that surprised you, workarounds discovered, best practices learned
-- MUST include a technology tag like [Python], [Git], [TypeScript], etc.
+**DECISIONS**: Significant architectural choices that affect the system broadly
+- CAPTURE: Choices between fundamentally different approaches (REST vs GraphQL, sync vs async)
+- CAPTURE: Decisions that would be non-obvious to a new team member
+- SKIP: Implementation details for a single feature (e.g., "chose < instead of <=")
+- SKIP: Service-specific choices that don't affect other parts of the system
+
+**LESSONS_LEARNED**: Non-obvious gotchas and surprises specific to THIS project
+- CAPTURE: Framework quirks, library behaviors that surprised you, project-specific patterns
+- CAPTURE: Things that caused bugs or confusion that others might hit
+- SKIP: Basic language features (safe navigation, null handling, standard patterns)
+- SKIP: Specific code paths or class hierarchies (that duplicates code structure)
+- SKIP: General best practices everyone should already know
+- MUST include a technology tag like [Kotlin], [Quarkus], [Ditto], etc.
 
 ## Existing Project Knowledge (DO NOT REPEAT)
 {existing_knowledge}
+
+## Already Staged This Session (DO NOT REPEAT)
+{staged_this_session}
 
 ## Output Format
 
@@ -438,29 +464,87 @@ If you identified knowledge worth capturing, output in this EXACT format:
 
 ```
 ARCHITECTURE:
-- Title: Description (1-3 sentences with context)
-- Another Title: Another description
+- Title: Description (1-3 sentences, focus on the pattern not specific classes)
 
 DECISIONS:
-- Title: Description with rationale
+- Title: Description with rationale (must be architectural, not implementation detail)
 
 LESSONS_LEARNED:
-- [Tag] Title: Description
-- [AnotherTag] Title: Description
+- [Tag] Title: Description (must be non-obvious, project-specific)
 ```
 
-If nothing notable was discovered in this phase, output ONLY:
+If nothing notable was discovered (this is expected for most phases), output ONLY:
 ```
 NO_KNOWLEDGE_EXTRACTED
 ```
 
-## Guidelines
-- Only capture things that would help someone working on this project 6 months from now
-- Do NOT repeat information already in project knowledge
-- Be specific and include context
-- Lessons learned MUST have a technology tag in [brackets]
-- Empty sections can be omitted
+## Examples of What NOT to Capture
+
+BAD ARCHITECTURE: "MutingService uses Clock for time" (implementation detail)
+BAD DECISION: "Used < instead of <= for expiry check" (code-level detail)
+BAD LESSON: "[Kotlin] Use ?. for null safety" (basic language feature)
+BAD LESSON: "[Kotlin] Path is features.monitoring.muting.period.to" (duplicates code)
+
+## Examples of What TO Capture
+
+GOOD ARCHITECTURE: "Services return AccumulativeResult for composable updates"
+GOOD DECISION: "Event-driven processing supplements scheduled jobs for responsiveness"
+GOOD LESSON: "[WoT] Generator creates top-level DSL functions, not class methods"
+GOOD LESSON: "[Quarkus] @InjectMock requires the bean to be CDI-managed"
 """
+
+
+# =============================================================================
+# KNOWLEDGE FORMATTING FUNCTIONS
+# =============================================================================
+
+def format_staged_knowledge_for_prompt(staged: "StagedKnowledge") -> str:
+    """
+    Format staged knowledge as concise list for extraction prompt.
+
+    Used to show Claude what knowledge has already been extracted in this
+    session, preventing duplicate entries across phases.
+
+    Args:
+        staged: StagedKnowledge container with entries from previous phases
+
+    Returns:
+        Formatted string with titles and first sentence of each entry,
+        or "None yet" if no entries staged.
+    """
+    if staged.is_empty():
+        return "None yet"
+
+    lines = []
+
+    def get_first_sentence(content: str) -> str:
+        """Extract first sentence from content."""
+        # Split on period followed by space or end of string
+        for end in ['. ', '.\n', '.']:
+            if end in content:
+                return content.split(end)[0] + '.'
+        return content
+
+    if staged.architecture:
+        lines.append(f"{KnowledgeCategory.ARCHITECTURE.name}:")
+        for entry in staged.architecture:
+            first_sentence = get_first_sentence(entry.content)
+            lines.append(f"- {entry.title}: {first_sentence}")
+
+    if staged.decisions:
+        lines.append(f"{KnowledgeCategory.DECISIONS.name}:")
+        for entry in staged.decisions:
+            first_sentence = get_first_sentence(entry.content)
+            lines.append(f"- {entry.title}: {first_sentence}")
+
+    if staged.lessons_learned:
+        lines.append(f"{KnowledgeCategory.LESSONS_LEARNED.name}:")
+        for entry in staged.lessons_learned:
+            first_sentence = get_first_sentence(entry.content)
+            tag = f"[{entry.tag}] " if entry.tag else ""
+            lines.append(f"- {tag}{entry.title}: {first_sentence}")
+
+    return "\n".join(lines)
 
 
 # =============================================================================

@@ -1109,5 +1109,528 @@ class TestSupervisorEndToEnd:
                     "Initial task should be in phase 1 context"
 
 
+class TestExtractAndStageKnowledge:
+    """
+    Integration tests for _extract_and_stage_knowledge method.
+
+    These tests verify the orchestrator correctly integrates:
+    - _query_for_text (mocked)
+    - extract_from_text (real)
+    - markers.stage_knowledge (real)
+
+    Unit tests for individual components are in test_knowledge_extraction.py.
+    """
+
+    def test_stages_knowledge_when_claude_returns_valid_content(self):
+        """When Claude returns valid knowledge, it should be staged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Mock response with valid knowledge format
+                mock_response = """ARCHITECTURE:
+- Service Pattern: The service uses a pipeline pattern for processing
+
+DECISIONS:
+- Chose REST: REST was chosen over GraphQL for simplicity
+"""
+
+                async def mock_query(*args, **kwargs):
+                    return mock_response
+
+                orchestrator._query_for_text = mock_query
+
+                # when
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert orchestrator.markers.has_staged_knowledge()
+
+    def test_does_not_stage_when_claude_returns_no_knowledge_extracted(self):
+        """When Claude returns NO_KNOWLEDGE_EXTRACTED, nothing should be staged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                mock_response = "NO_KNOWLEDGE_EXTRACTED"
+
+                async def mock_query(*args, **kwargs):
+                    return mock_response
+
+                orchestrator._query_for_text = mock_query
+
+                # when
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert not orchestrator.markers.has_staged_knowledge()
+
+    def test_does_not_stage_when_response_has_empty_sections(self):
+        """When Claude returns format but no actual entries, nothing should be staged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Empty sections - format present but no entries
+                mock_response = """ARCHITECTURE:
+
+DECISIONS:
+
+LESSONS_LEARNED:
+"""
+
+                async def mock_query(*args, **kwargs):
+                    return mock_response
+
+                orchestrator._query_for_text = mock_query
+
+                # when
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert not orchestrator.markers.has_staged_knowledge()
+
+    def test_continues_workflow_when_query_raises_exception(self):
+        """When _query_for_text raises exception, workflow should continue without staging."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                async def mock_query_that_fails(*args, **kwargs):
+                    raise ConnectionError("Network error")
+
+                orchestrator._query_for_text = mock_query_that_fails
+
+                # when - should not raise
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then - no knowledge staged, but no crash
+                assert not orchestrator.markers.has_staged_knowledge()
+
+    def test_logs_error_when_query_fails(self):
+        """When _query_for_text fails, error should be logged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                async def mock_query_that_fails(*args, **kwargs):
+                    raise ValueError("Test error")
+
+                orchestrator._query_for_text = mock_query_that_fails
+
+                # Capture log calls
+                log_calls = []
+                original_log_error = orchestrator.logger.log_error
+                def capture_log_error(msg, error=None):
+                    log_calls.append(msg)
+                    original_log_error(msg, error)
+                orchestrator.logger.log_error = capture_log_error
+
+                # when
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert any("Knowledge extraction failed" in call for call in log_calls)
+
+    def test_stages_only_architecture_when_only_architecture_present(self):
+        """When only architecture is returned, only architecture should be staged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                mock_response = """ARCHITECTURE:
+- Pipeline Pattern: Services use a pipeline for data processing
+"""
+
+                async def mock_query(*args, **kwargs):
+                    return mock_response
+
+                orchestrator._query_for_text = mock_query
+
+                # when
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert orchestrator.markers.has_staged_knowledge()
+                staged = orchestrator.markers.get_staged_knowledge()
+                assert len(staged.architecture) == 1
+                assert len(staged.decisions) == 0
+                assert len(staged.lessons_learned) == 0
+
+    def test_stages_lessons_learned_with_tags(self):
+        """Lessons learned with tags should be staged correctly."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                mock_response = """LESSONS_LEARNED:
+- [Kotlin] Use data classes: Data classes provide equals/hashCode automatically
+- [Git] Commit often: Small commits are easier to review
+"""
+
+                async def mock_query(*args, **kwargs):
+                    return mock_response
+
+                orchestrator._query_for_text = mock_query
+
+                # when
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert orchestrator.markers.has_staged_knowledge()
+                staged = orchestrator.markers.get_staged_knowledge()
+                assert len(staged.lessons_learned) == 2
+                assert staged.lessons_learned[0].tag == "Kotlin"
+                assert staged.lessons_learned[1].tag == "Git"
+
+    def test_passes_existing_knowledge_context_to_prompt(self):
+        """Existing knowledge context should be included in the extraction prompt."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Set existing knowledge context
+                orchestrator._knowledge_context = "# Existing Architecture\nService A talks to B"
+
+                captured_prompts = []
+
+                async def mock_query(prompt, *args, **kwargs):
+                    captured_prompts.append(prompt)
+                    return "NO_KNOWLEDGE_EXTRACTED"
+
+                orchestrator._query_for_text = mock_query
+
+                # when
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert len(captured_prompts) == 1
+                assert "Existing Architecture" in captured_prompts[0]
+                assert "Service A talks to B" in captured_prompts[0]
+
+    def test_uses_default_when_no_existing_knowledge(self):
+        """When no existing knowledge, prompt should include default text."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # No existing knowledge (empty string)
+                orchestrator._knowledge_context = ""
+
+                captured_prompts = []
+
+                async def mock_query(prompt, *args, **kwargs):
+                    captured_prompts.append(prompt)
+                    return "NO_KNOWLEDGE_EXTRACTED"
+
+                orchestrator._query_for_text = mock_query
+
+                # when
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert len(captured_prompts) == 1
+                assert "No existing knowledge" in captured_prompts[0]
+
+    def test_accumulates_knowledge_across_phases(self):
+        """Knowledge from multiple phases should accumulate."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                phase1_response = """ARCHITECTURE:
+- Pattern A: Description of pattern A
+"""
+                phase2_response = """DECISIONS:
+- Decision B: Rationale for decision B
+"""
+
+                call_count = 0
+
+                async def mock_query(*args, **kwargs):
+                    nonlocal call_count
+                    call_count += 1
+                    if call_count == 1:
+                        return phase1_response
+                    return phase2_response
+
+                orchestrator._query_for_text = mock_query
+
+                # when - extract from two phases
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+                run_async(orchestrator._extract_and_stage_knowledge(phase=2))
+
+                # then - both should be staged
+                staged = orchestrator.markers.get_staged_knowledge()
+                assert len(staged.architecture) == 1
+                assert len(staged.decisions) == 1
+
+
+class TestApplyKnowledgeAtWorkflowEnd:
+    """
+    Integration tests for _apply_knowledge_at_workflow_end method.
+
+    Tests the orchestrator's integration with markers for applying staged knowledge.
+    """
+
+    def test_does_nothing_when_no_staged_knowledge(self):
+        """When no knowledge is staged, should return silently."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # when - should not raise
+                orchestrator._apply_knowledge_at_workflow_end()
+
+                # then - nothing staged, nothing applied
+                assert not orchestrator.markers.has_staged_knowledge()
+
+    def test_clears_staged_knowledge_after_apply(self):
+        """After applying, staged knowledge should be cleared."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Stage some knowledge first
+                async def mock_query(*args, **kwargs):
+                    return """ARCHITECTURE:
+- Pattern: Description
+"""
+                orchestrator._query_for_text = mock_query
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+                assert orchestrator.markers.has_staged_knowledge()
+
+                # when
+                orchestrator._apply_knowledge_at_workflow_end()
+
+                # then
+                assert not orchestrator.markers.has_staged_knowledge()
+
+    def test_clears_staged_knowledge_even_on_error(self):
+        """Even if apply fails, staged knowledge should be cleared to prevent retry loops."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Stage some knowledge
+                async def mock_query(*args, **kwargs):
+                    return """ARCHITECTURE:
+- Pattern: Description
+"""
+                orchestrator._query_for_text = mock_query
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # Make apply fail
+                original_apply = orchestrator.markers.apply_staged_knowledge
+                def failing_apply(*args, **kwargs):
+                    raise IOError("Disk full")
+                orchestrator.markers.apply_staged_knowledge = failing_apply
+
+                # when - should not raise
+                orchestrator._apply_knowledge_at_workflow_end()
+
+                # then - staged knowledge should still be cleared
+                assert not orchestrator.markers.has_staged_knowledge()
+
+
+class TestFormatStagedKnowledgeForPrompt:
+    """
+    Unit tests for format_staged_knowledge_for_prompt function.
+
+    Tests the formatting of staged knowledge entries for inclusion
+    in the extraction prompt to prevent duplicates.
+    """
+
+    def test_returns_none_yet_when_no_staged_knowledge(self):
+        """When no knowledge is staged, should return 'None yet'."""
+        # given
+        from wp_supervisor.templates import format_staged_knowledge_for_prompt
+        sys.path.insert(0, 'hooks/lib')
+        from wp_knowledge import StagedKnowledge
+
+        staged = StagedKnowledge()
+
+        # when
+        result = format_staged_knowledge_for_prompt(staged)
+
+        # then
+        assert result == "None yet"
+
+    def test_formats_architecture_entry_with_title_and_first_sentence(self):
+        """Architecture entries should show title and first sentence."""
+        # given
+        from wp_supervisor.templates import format_staged_knowledge_for_prompt
+        sys.path.insert(0, 'hooks/lib')
+        from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+        staged = StagedKnowledge(
+            architecture=[
+                StagedKnowledgeEntry(
+                    title="Pipeline Pattern",
+                    content="Services use a pipeline for processing. This enables composability. More details here.",
+                    phase=1
+                )
+            ]
+        )
+
+        # when
+        result = format_staged_knowledge_for_prompt(staged)
+
+        # then
+        assert "Pipeline Pattern" in result
+        assert "Services use a pipeline for processing" in result
+
+    def test_formats_decisions_entry(self):
+        """Decisions entries should show title and first sentence."""
+        # given
+        from wp_supervisor.templates import format_staged_knowledge_for_prompt
+        sys.path.insert(0, 'hooks/lib')
+        from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+        staged = StagedKnowledge(
+            decisions=[
+                StagedKnowledgeEntry(
+                    title="Event-Driven Design",
+                    content="Chose events over polling for responsiveness. This reduces latency significantly.",
+                    phase=1
+                )
+            ]
+        )
+
+        # when
+        result = format_staged_knowledge_for_prompt(staged)
+
+        # then
+        assert "Event-Driven Design" in result
+        assert "Chose events over polling" in result
+
+    def test_formats_lessons_learned_with_tag(self):
+        """Lessons learned should include the technology tag."""
+        # given
+        from wp_supervisor.templates import format_staged_knowledge_for_prompt
+        sys.path.insert(0, 'hooks/lib')
+        from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+        staged = StagedKnowledge(
+            lessons_learned=[
+                StagedKnowledgeEntry(
+                    title="DSL Builder Pattern",
+                    content="WoT generator creates top-level functions. Import them directly.",
+                    phase=2,
+                    tag="Kotlin"
+                )
+            ]
+        )
+
+        # when
+        result = format_staged_knowledge_for_prompt(staged)
+
+        # then
+        assert "[Kotlin]" in result
+        assert "DSL Builder Pattern" in result
+
+    def test_formats_multiple_categories(self):
+        """Should format entries from all categories."""
+        # given
+        from wp_supervisor.templates import format_staged_knowledge_for_prompt
+        sys.path.insert(0, 'hooks/lib')
+        from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+        staged = StagedKnowledge(
+            architecture=[
+                StagedKnowledgeEntry(title="Pattern A", content="Arch content", phase=1)
+            ],
+            decisions=[
+                StagedKnowledgeEntry(title="Decision B", content="Dec content", phase=1)
+            ],
+            lessons_learned=[
+                StagedKnowledgeEntry(title="Lesson C", content="Lesson content", phase=2, tag="Python")
+            ]
+        )
+
+        # when
+        result = format_staged_knowledge_for_prompt(staged)
+
+        # then
+        assert "Pattern A" in result
+        assert "Decision B" in result
+        assert "Lesson C" in result
+        assert "[Python]" in result
+
+
+class TestStagedKnowledgeInPrompt:
+    """
+    Integration tests for staged knowledge being passed to extraction prompt.
+    """
+
+    def test_staged_knowledge_included_in_prompt(self):
+        """Staged knowledge from previous phases should be in extraction prompt."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Stage some knowledge first (simulating phase 1 extraction)
+                async def phase1_query(*args, **kwargs):
+                    return """ARCHITECTURE:
+- Pipeline Pattern: Services use pipeline for composability
+"""
+                orchestrator._query_for_text = phase1_query
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # Capture prompt for phase 2
+                captured_prompts = []
+
+                async def phase2_query(prompt, *args, **kwargs):
+                    captured_prompts.append(prompt)
+                    return "NO_KNOWLEDGE_EXTRACTED"
+
+                orchestrator._query_for_text = phase2_query
+
+                # when - extract for phase 2
+                run_async(orchestrator._extract_and_stage_knowledge(phase=2))
+
+                # then - staged knowledge should be in prompt
+                assert len(captured_prompts) == 1
+                assert "Pipeline Pattern" in captured_prompts[0]
+
+    def test_no_staged_knowledge_shows_none_yet(self):
+        """When no staged knowledge, prompt should show 'None yet'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                captured_prompts = []
+
+                async def mock_query(prompt, *args, **kwargs):
+                    captured_prompts.append(prompt)
+                    return "NO_KNOWLEDGE_EXTRACTED"
+
+                orchestrator._query_for_text = mock_query
+
+                # when - extract for phase 1 (no prior staged knowledge)
+                run_async(orchestrator._extract_and_stage_knowledge(phase=1))
+
+                # then
+                assert len(captured_prompts) == 1
+                assert "None yet" in captured_prompts[0]
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
