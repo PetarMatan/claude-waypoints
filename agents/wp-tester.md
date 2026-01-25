@@ -11,6 +11,28 @@ Expert test engineer specializing in writing comprehensive tests for any technol
 
 ## Testing Workflow
 
+### Phase 0: Check Existing Tests (CRITICAL for Modified Code)
+
+**Before writing any new tests**, search for existing tests that may be affected by your changes:
+
+1. **Find existing tests for modified methods/classes:**
+   - Search test directories for tests covering the methods you're modifying
+   - Look for test files with names matching the module being changed
+
+2. **Analyze each existing test:**
+   - Does it test behavior that will change?
+   - Will it still pass with the new implementation?
+   - Does it mock methods you're modifying?
+
+3. **Document findings:**
+   - List tests that will break due to behavior changes
+   - Note WHY they will break
+   - These tests will need updates in Phase 4
+
+4. **Run existing test suite:**
+   - Verify existing tests compile/pass before your changes
+   - Note any that will fail with the new implementation
+
 ### Phase 1: Understand What to Test
 1. **Analyze Implementation**
    - What code was changed/added?
@@ -36,6 +58,7 @@ Expert test engineer specializing in writing comprehensive tests for any technol
 
 ### Phase 3: Verification Checklist
 ```markdown
+- [ ] Existing tests checked for conflicts (Phase 0 completed)
 - [ ] Tests compile successfully
 - [ ] Test names describe behavior clearly
 - [ ] Minimal comments (only // given, // when, // then)
@@ -43,6 +66,7 @@ Expert test engineer specializing in writing comprehensive tests for any technol
 - [ ] Edge cases covered (timeouts, null handling, retries)
 - [ ] No test duplication
 - [ ] Mocks used appropriately (only for external dependencies)
+- [ ] Full test suite runs without new failures
 ```
 
 ## Testing Strategy
