@@ -121,27 +121,33 @@ When you identify learnings to stage, output them in this format:
 
 Only include categories where learnings exist. Empty categories should be omitted.
 
-## How to Stage Learnings
+## How Knowledge Extraction Works
 
-After identifying learnings, use the `wp:stage` command to persist them:
+In **Supervisor mode**, knowledge extraction is automatic:
 
-```bash
-true # wp:stage architecture "Service Topology" "ServiceA calls ServiceB via Kafka events"
-true # wp:stage decisions "Async over Sync" "Chose async pattern for exports due to gateway timeouts"
-true # wp:stage lessons-learned "[MongoDB] @BsonId required" "Update operations require @BsonId annotation"
+1. At each phase transition, you'll be prompted to identify learnings
+2. Output learnings in the format shown above (ARCHITECTURE:, DECISIONS:, LESSONS_LEARNED: sections)
+3. The supervisor parses your response and stages the entries automatically
+4. Staged knowledge is applied to permanent files when the workflow completes
+
+**Output Format for Extraction:**
+```
+ARCHITECTURE:
+- Title: Description (1-3 sentences)
+
+DECISIONS:
+- Title: Description with rationale
+
+LESSONS_LEARNED:
+- [Tech Tag] Title: Description
 ```
 
-**Command Format:**
+If nothing notable was discovered, output:
 ```
-true # wp:stage <category> "<title>" "<content>"
+NO_KNOWLEDGE_EXTRACTED
 ```
 
-**Valid Categories:**
-- `architecture` - Per-project architectural knowledge
-- `decisions` - Per-project decision records
-- `lessons-learned` - Global technology lessons
-
-Staged learnings are automatically applied to permanent files when the implementation phase completes (`wp:mark-complete implementation`).
+**Note**: This agent is used in Supervisor mode only. CLI mode does not have knowledge extraction.
 
 ## Examples
 

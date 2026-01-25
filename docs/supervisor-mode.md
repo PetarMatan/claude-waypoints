@@ -181,3 +181,74 @@ If a phase isn't advancing, use the manual completion commands:
 - `/done`, `/complete`, or `/next`
 
 You'll then be prompted to confirm before proceeding to the next phase.
+
+## Living Project Documents
+
+Supervisor mode automatically extracts and preserves knowledge across sessions. This feature is **only available in Supervisor mode** - CLI mode does not have knowledge extraction.
+
+### How It Works
+
+At each phase transition, the supervisor prompts Claude to identify learnings worth preserving:
+
+```
+Phase 1 complete → Extract architectural decisions discovered
+Phase 2 complete → Extract interface design rationale
+Phase 3 complete → Extract testing constraints and edge cases
+Phase 4 complete → Extract implementation gotchas and lessons
+```
+
+### Knowledge Categories
+
+| Category | Scope | What Gets Captured |
+|----------|-------|-------------------|
+| **Architecture** | Per-project | Services, dependencies, data flow, system structure |
+| **Decisions** | Per-project | Why choices were made (ADRs), trade-offs considered |
+| **Lessons Learned** | Global | Technology gotchas, patterns, corrections (organized by tech tag) |
+
+### Storage Location
+
+Knowledge is stored in your Claude config directory:
+
+```
+~/.claude/waypoints/knowledge/
+├── {project-id}/
+│   ├── architecture.md    # Per-project architecture
+│   └── decisions.md       # Per-project decisions
+└── lessons-learned.md     # Global lessons (shared across projects)
+```
+
+Project identification uses (in order): `.waypoints-project` file, git remote URL hash, or directory name.
+
+### Session Flow
+
+1. **Session Start**: Existing knowledge is loaded into Claude's context
+2. **During Work**: Knowledge informs Claude's decisions (e.g., "use Result type per project patterns")
+3. **Phase Transitions**: New knowledge is staged for review
+4. **Session End**: Staged knowledge is applied to permanent files
+
+### Example Extracted Knowledge
+
+**Architecture:**
+```markdown
+## PostProcessor Service Topology
+Consumes from `device-events` topic, produces to `device-commands`.
+Uses schema-registry for Avro serialization.
+```
+
+**Decisions:**
+```markdown
+## Async Exports for Large Datasets (2026-01-21)
+Chose async job pattern for exports >1000 records because
+synchronous processing caused gateway timeouts in load testing.
+```
+
+**Lessons Learned:**
+```markdown
+## [MongoDB] @BsonId required for updates (2026-01-21)
+Update operations require @BsonId annotation on the ID field.
+Without it, updates silently fail with no error.
+```
+
+### Knowledge Extraction Behavior
+
+Knowledge extraction happens automatically at phase transitions. The supervisor prompts Claude to identify learnings, parses the response, and stages them without user intervention. Staged knowledge is applied to permanent files when the workflow completes.

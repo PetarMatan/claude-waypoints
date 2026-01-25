@@ -72,7 +72,8 @@ Each phase runs in a **fresh Claude session** with clean context. Summaries are 
 - **User Approval Gates** - Human confirms each phase transition
 - **Clean Cleanup** - Session end automatically removes markers
 - **Supervisor Mode** - Multi-session orchestration for large features (prevents context bloat)
-- **Living Project Documents** - Persistent knowledge that accumulates across sessions (architecture decisions, lessons learned)
+- **Living Project Documents** - Persistent knowledge that accumulates across sessions (architecture decisions, lessons learned) - *Supervisor mode only*
+- **Property-Based Testing** - Optional PBT support in Phase 3 for finding edge cases automatically
 
 ## Quick Start
 

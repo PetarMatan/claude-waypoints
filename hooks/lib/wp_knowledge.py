@@ -119,21 +119,6 @@ class ExtractionResult:
     parse_error: Optional[str] = None
 
 
-# Legacy dataclass for backward compatibility with CLI mode
-@dataclass
-class StagedLearning:
-    """
-    A single learning staged for later merge.
-
-    DEPRECATED: Use StagedKnowledgeEntry instead. Kept for backward compatibility
-    with CLI mode staging via wp:stage command.
-    """
-    category: str          # Use KnowledgeCategory.value for serialization
-    title: str
-    content: str
-    source_phase: int
-
-
 class ProjectIdentifier:
     """Identifies the current project for knowledge scoping."""
 

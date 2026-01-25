@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 
 # Add hooks/lib to path
 sys.path.insert(0, 'hooks/lib')
-from wp_knowledge import ProjectIdentifier, KnowledgeManager, StagedLearning
+from wp_knowledge import ProjectIdentifier, KnowledgeManager
 
 
 class TestProjectIdentifier:
@@ -235,33 +235,6 @@ class TestKnowledgeManagerLoading:
                     assert "ARCH_CONTENT" in result
                     assert "DECISIONS_CONTENT" in result
                     assert "LESSONS_CONTENT" in result
-
-
-class TestStagedLearning:
-    """Tests for StagedLearning dataclass."""
-
-    def test_staged_learning_creation(self):
-        # when
-        learning = StagedLearning(
-            category="architecture",
-            title="My Title",
-            content="My Content",
-            source_phase=2
-        )
-
-        # then
-        assert learning.category == "architecture"
-        assert learning.title == "My Title"
-        assert learning.content == "My Content"
-        assert learning.source_phase == 2
-
-    def test_staged_learning_equality(self):
-        # given
-        learning1 = StagedLearning("architecture", "Title", "Content", 2)
-        learning2 = StagedLearning("architecture", "Title", "Content", 2)
-
-        # then
-        assert learning1 == learning2
 
 
 if __name__ == '__main__':
