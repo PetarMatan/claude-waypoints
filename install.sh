@@ -2,7 +2,7 @@
 set -e
 
 # Waypoints Workflow Installer for Claude Code
-# Version: 2.0.0
+# Version: 2.1.0
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/PetarMatan/claude-waypoints/main/install.sh | bash
@@ -10,13 +10,76 @@ set -e
 # Or clone and run locally:
 #   git clone https://github.com/PetarMatan/claude-waypoints.git
 #   cd claude-waypoints && ./install.sh
+#
+# Options:
+#   --dir /path/to/dir    Install to custom directory instead of ~/.claude
+#                         The directory must exist. Example:
+#                         ./install.sh --dir ~/.claude-feature
 
 REPO_URL="https://github.com/PetarMatan/claude-waypoints.git"
 VERSION="main"
 
-INSTALL_DIR="${HOME}/.claude/waypoints"
-COMMANDS_DIR="${HOME}/.claude/commands"
-SETTINGS_FILE="${HOME}/.claude/settings.json"
+# --- Interface: Functions ---
+
+show_usage() {
+    cat << 'EOF'
+Waypoints Workflow Installer for Claude Code
+
+Usage:
+  ./install.sh [OPTIONS]
+
+Options:
+  --dir /path/to/dir    Install to custom directory instead of ~/.claude
+                        The directory must exist.
+  --help                Show this help message
+
+Examples:
+  ./install.sh                      # Install to ~/.claude (default)
+  ./install.sh --dir ~/.claude-feature  # Install to custom directory
+EOF
+    exit 0
+}
+
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dir)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --dir requires a path argument"
+                    exit 1
+                fi
+                CLAUDE_DIR="$2"
+                shift 2
+                ;;
+            --help)
+                show_usage
+                ;;
+            *)
+                echo "Error: Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+}
+
+validate_claude_dir() {
+    if [[ ! -d "$CLAUDE_DIR" ]]; then
+        echo "Error: Directory does not exist: $CLAUDE_DIR"
+        echo "Please create the directory first or use an existing directory."
+        exit 1
+    fi
+}
+
+# --- Parse arguments ---
+CLAUDE_DIR="${HOME}/.claude"
+parse_arguments "$@"
+validate_claude_dir
+
+# --- Directory paths (derived from CLAUDE_DIR) ---
+INSTALL_DIR="${CLAUDE_DIR}/waypoints"
+COMMANDS_DIR="${CLAUDE_DIR}/commands"
+SETTINGS_FILE="${CLAUDE_DIR}/settings.json"
 
 echo "=== Waypoints Workflow Installer ==="
 echo ""
@@ -66,12 +129,12 @@ fi
 
 echo ""
 
-# Backup existing .claude folder before any modifications
-if [[ -d "${HOME}/.claude" ]]; then
-    BACKUP_DIR="${HOME}/.claude-backup-$(date +%Y%m%d-%H%M%S)"
+# Backup existing directory before any modifications
+if [[ -d "${CLAUDE_DIR}" ]]; then
+    BACKUP_DIR="${CLAUDE_DIR}-backup-$(date +%Y%m%d-%H%M%S)"
     echo "=== Creating Backup ==="
-    echo "Backing up ~/.claude to $BACKUP_DIR"
-    cp -r "${HOME}/.claude" "$BACKUP_DIR"
+    echo "Backing up ${CLAUDE_DIR} to $BACKUP_DIR"
+    cp -r "${CLAUDE_DIR}" "$BACKUP_DIR"
     echo "Backup complete: $BACKUP_DIR"
     echo ""
 fi
@@ -80,9 +143,9 @@ fi
 echo "Creating directories..."
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$COMMANDS_DIR"
-mkdir -p "${HOME}/.claude/tmp"
-mkdir -p "${HOME}/.claude/logs/sessions"
-mkdir -p "${HOME}/.claude/agents"
+mkdir -p "${CLAUDE_DIR}/tmp"
+mkdir -p "${CLAUDE_DIR}/logs/sessions"
+mkdir -p "${CLAUDE_DIR}/agents"
 
 # Copy hook files
 echo "Installing hooks..."
@@ -168,7 +231,7 @@ fi
 if [[ "$SKIP_SETTINGS" == "true" ]]; then
     echo "=== Manual Settings Setup Required ==="
     echo ""
-    echo "Add the following to your ~/.claude/settings.json:"
+    echo "Add the following to your ${CLAUDE_DIR}/settings.json:"
     echo ""
     echo "See: $INSTALL_DIR/config/settings.example.json"
     echo ""
@@ -205,7 +268,7 @@ echo "Restart Claude Code to apply changes."
 echo ""
 if [[ -n "$BACKUP_DIR" ]]; then
     echo "If something goes wrong, restore with:"
-    echo "  rm -rf ~/.claude && cp -r $BACKUP_DIR ~/.claude"
+    echo "  rm -rf ${CLAUDE_DIR} && cp -r $BACKUP_DIR ${CLAUDE_DIR}"
     echo ""
 fi
 echo "Documentation: https://github.com/PetarMatan/claude-waypoints"

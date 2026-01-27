@@ -425,11 +425,11 @@ class TestRegenerateSummaryInteractive:
                     })
                     return (True, "session-123")
 
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     return "# Updated Summary"
 
                 orchestrator._run_regeneration_conversation = mock_conversation
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 with patch('builtins.input', return_value='Add more details'):
                     result = run_async(orchestrator._regenerate_summary(1))
@@ -453,12 +453,12 @@ class TestRegenerateSummaryInteractive:
 
                 query_prompts = []
 
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     query_prompts.append(prompt)
                     return "# Final Updated Summary"
 
                 orchestrator._run_regeneration_conversation = mock_conversation
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 with patch('builtins.input', return_value='Add details'):
                     result = run_async(orchestrator._regenerate_summary(1))
@@ -500,12 +500,12 @@ class TestRegenerateSummaryInteractive:
 
                 captured_session_ids = []
 
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     captured_session_ids.append(session_id)
                     return "# Updated"
 
                 orchestrator._run_regeneration_conversation = mock_conversation
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 with patch('builtins.input', return_value='feedback'):
                     run_async(orchestrator._regenerate_summary(1))
@@ -668,11 +668,11 @@ class TestRegenerationIntegration:
                     return (True, "session-123")
 
                 # Mock final summary generation
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     return "# Updated Requirements\n- Feature A\n- Error Handling (added)"
 
                 orchestrator._run_regeneration_conversation = mock_conversation
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 with patch('builtins.input', return_value='Add error handling section'):
                     result = run_async(orchestrator._regenerate_summary(1))

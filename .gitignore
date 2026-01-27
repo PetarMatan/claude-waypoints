@@ -20,6 +20,7 @@ Thumbs.db
 __pycache__/
 *.pyc
 *.pyo
+.hypothesis/
 
 # Test artifacts
 /tests/.bats-run-*

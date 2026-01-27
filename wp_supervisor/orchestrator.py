@@ -26,16 +26,19 @@ if str(_hooks_lib) not in sys.path:
     sys.path.insert(0, str(_hooks_lib))
 
 from wp_agents import AgentLoader
+from wp_knowledge import KnowledgeManager, extract_from_text, ExtractionResult
 from .markers import SupervisorMarkers
 from .context import ContextBuilder
 from .logger import SupervisorLogger
 from .hooks import SupervisorHooks
 from .templates import (
     PHASE_NAMES,
+    KNOWLEDGE_EXTRACTION_PROMPT,
     format_phase_header,
     format_workflow_header,
     format_phase_complete_banner,
     format_workflow_complete,
+    format_staged_knowledge_for_prompt,
 )
 
 
@@ -146,6 +149,12 @@ class WPOrchestrator:
             working_dir=str(self.working_dir)
         )
 
+        # Initialize knowledge manager for loading and applying knowledge [REQ-1]
+        self._knowledge_manager = KnowledgeManager(project_dir=str(self.working_dir))
+
+        # Knowledge context loaded once at workflow start [REQ-6]
+        self._knowledge_context: str = ""
+
         # Validate working directory
         if not self.working_dir.is_dir():
             raise ValueError(f"Working directory does not exist: {self.working_dir}")
@@ -168,11 +177,17 @@ class WPOrchestrator:
             self.markers.initialize()
             self.logger.log_workflow_start(initial_task or "")
 
+            # Load knowledge context once at workflow start [REQ-1, REQ-6]
+            self._knowledge_context = self._load_knowledge_context()
+
             # Run all 4 phases
             await self._run_phase(1, initial_task)
             await self._run_phase(2)
             await self._run_phase(3)
             await self._run_phase(4)
+
+            # Apply staged knowledge at workflow end [REQ-17]
+            self._apply_knowledge_at_workflow_end()
 
             # Log completion with usage summary
             self.logger.log_workflow_complete(self.markers.get_usage_summary_text())
@@ -187,34 +202,155 @@ class WPOrchestrator:
         except KeyboardInterrupt:
             print("\n\nWorkflow interrupted by user.")
             self.logger.log_workflow_aborted("User interrupted")
+            # Cleanup staged knowledge on abort [REQ-24, REQ-25]
+            self.markers.clear_staged_knowledge()
             self.markers.cleanup()
             print("Markers cleaned up.")
         except Exception as e:
             print(f"\n\nWorkflow error: {e}", file=sys.stderr)
             self.logger.log_error("Workflow failed", e)
             self.logger.log_workflow_aborted(str(e))
+            # Cleanup staged knowledge on error [REQ-24, REQ-25]
+            self.markers.clear_staged_knowledge()
             self.markers.cleanup()
             raise
 
+    # --- Knowledge Management [REQ-1, REQ-6, REQ-7, REQ-17, REQ-22] ---
+
+    def _load_knowledge_context(self) -> str:
+        """
+        Load knowledge context at workflow start [REQ-1, REQ-6].
+
+        Returns:
+            Formatted project knowledge section for injection into phase contexts.
+            Returns empty string if no knowledge files exist.
+        """
+        knowledge_manager = KnowledgeManager(str(self.working_dir))
+        return knowledge_manager.load_knowledge_context()
+
+    async def _extract_and_stage_knowledge(
+        self,
+        phase: int,
+        session_id: Optional[str] = None
+    ) -> None:
+        """
+        Extract knowledge from phase completion and stage for later application [REQ-7].
+
+        Sends extraction prompt to Claude in the same session [REQ-7].
+        Runs silently during phases 1-3 (no console output) [REQ-12].
+        Parses response and stages any extracted knowledge [REQ-13].
+
+        Args:
+            phase: Phase number (1-4)
+            session_id: Session ID for resuming conversation
+
+        Note:
+            On malformed response [ERR-1]: Logs warning, skips extraction,
+            continues workflow normally.
+        """
+        self.logger.log_event("KNOWLEDGE", f"Starting knowledge extraction for phase {phase}")
+        try:
+            # Get already-staged knowledge from this session to prevent duplicates
+            staged = self.markers.get_staged_knowledge()
+            staged_str = format_staged_knowledge_for_prompt(staged)
+
+            # Build extraction prompt with existing knowledge and staged knowledge
+            prompt = KNOWLEDGE_EXTRACTION_PROMPT.format(
+                existing_knowledge=self._knowledge_context or "No existing knowledge.",
+                staged_this_session=staged_str
+            )
+            self.logger.log_event("KNOWLEDGE", "Prompt built, querying Claude...")
+
+            # Send prompt silently (no console output during phases 1-3) [REQ-12]
+            response = await self._extract_text_response(
+                prompt,
+                session_id=session_id,
+                phase=phase
+            )
+            self.logger.log_event("KNOWLEDGE", f"Got response: {len(response)} chars")
+
+            # Parse response [REQ-13]
+            result = extract_from_text(response)
+            self.logger.log_event("KNOWLEDGE", f"Parsed: had_content={result.had_content}, is_empty={result.knowledge.is_empty() if result.knowledge else 'N/A'}")
+
+            # Handle parse errors [ERR-1]
+            if result.parse_error:
+                self.logger.log_error(f"Knowledge extraction parse error: {result.parse_error}")
+                return
+
+            # Stage extracted knowledge if any [REQ-13]
+            if result.had_content and not result.knowledge.is_empty():
+                self.markers.stage_knowledge(result.knowledge)
+                self.logger.log_event("KNOWLEDGE", "Knowledge staged successfully")
+            else:
+                self.logger.log_event("KNOWLEDGE", "No knowledge to stage")
+
+        except Exception as e:
+            # Log warning and continue [ERR-1]
+            self.logger.log_error(f"Knowledge extraction failed: {e}")
+            import traceback
+            self.logger.log_error(f"Traceback: {traceback.format_exc()}")
+            # Don't re-raise - continue workflow normally
+
+    def _apply_knowledge_at_workflow_end(self) -> None:
+        """
+        Apply staged knowledge to permanent files after Phase 4 [REQ-17].
+
+        Creates directories if needed [REQ-18].
+        Displays console message listing updated files [REQ-22].
+        Cleans up staged knowledge file after successful application [REQ-23].
+        """
+        # Check if there's staged knowledge
+        if not self.markers.has_staged_knowledge():
+            return
+
+        try:
+            # Apply staged knowledge to permanent files [REQ-17, REQ-18]
+            counts = self.markers.apply_staged_knowledge(str(self.working_dir))
+
+            # Display console message with updated files [REQ-22]
+            if counts:
+                knowledge_manager = KnowledgeManager(str(self.working_dir))
+                summary = knowledge_manager.get_updated_files_summary(counts)
+                print(f"\n{summary}")
+
+            # Clean up staged knowledge file [REQ-23]
+            self.markers.clear_staged_knowledge()
+
+        except Exception as e:
+            self.logger.log_error(f"Failed to apply staged knowledge: {e}")
+            # Still clean up on error to avoid stale data
+            self.markers.clear_staged_knowledge()
+
     def _build_phase_context(self, phase: int, initial_task: Optional[str] = None) -> str:
-        """Build context for a specific phase, including phase-bound agents."""
-        # Build base context from templates
+        """
+        Build context for a specific phase, including phase-bound agents and knowledge [REQ-5].
+
+        All phases receive identical knowledge context [REQ-6].
+        """
+        # Build base context from templates with knowledge injection [REQ-5]
         if phase == 1:
-            context = ContextBuilder.build_phase1_context(initial_task)
+            context = ContextBuilder.build_phase1_context(
+                initial_task,
+                knowledge_context=self._knowledge_context
+            )
         elif phase == 2:
             context = ContextBuilder.build_phase2_context(
-                self.markers.get_requirements_summary()
+                self.markers.get_requirements_summary(),
+                knowledge_context=self._knowledge_context
             )
         elif phase == 3:
             context = ContextBuilder.build_phase3_context(
                 self.markers.get_requirements_summary(),
-                self.markers.get_interfaces_list()
+                self.markers.get_interfaces_list(),
+                knowledge_context=self._knowledge_context
             )
         elif phase == 4:
             context = ContextBuilder.build_phase4_context(
                 self.markers.get_requirements_summary(),
                 self.markers.get_interfaces_list(),
-                self.markers.get_tests_list()
+                self.markers.get_tests_list(),
+                knowledge_context=self._knowledge_context
             )
         else:
             raise ValueError(f"Invalid phase: {phase}")
@@ -256,6 +392,10 @@ class WPOrchestrator:
                 self.logger.log_phase_summary_saved(phase, doc_path)
                 print(f"\n[Supervisor] {phase_name} document saved: {doc_path}")
 
+            # Extract knowledge after phase completion [REQ-7]
+            # Runs silently during phases 1-3 [REQ-12]
+            await self._extract_and_stage_knowledge(phase, session_id)
+
             # Confirmation loop with edit/regenerate options
             while True:
                 action = await self._confirm_phase_completion(phase, doc_path, session_id)
@@ -286,8 +426,13 @@ class WPOrchestrator:
                         self.logger.log_phase_summary_saved(phase, doc_path)
                         print(f"[Supervisor] Updated document saved: {doc_path}")
         else:
+            # Phase 4 completion
             print(f"\n[Supervisor] Implementation complete - all tests passing!")
             self.logger.log_phase_complete(phase, phase_name)
+
+            # Extract knowledge from Phase 4 [REQ-7]
+            await self._extract_and_stage_knowledge(phase, session_id)
+
             self._display_usage_summary()
             # Keep documents for reference, only remove state.json
             self.markers.cleanup(keep_documents=True)
@@ -547,7 +692,7 @@ class WPOrchestrator:
 
         print(f"\n[Supervisor] Generating phase {phase} summary...")
 
-        initial_summary = await self._query_for_text(summary_prompt, session_id=session_id, phase=phase)
+        initial_summary = await self._extract_text_response(summary_prompt, session_id=session_id, phase=phase)
 
         # Step 2: Self-review
         review_prompt = ContextBuilder.get_review_prompt(phase)
@@ -556,7 +701,7 @@ class WPOrchestrator:
 
         print(f"[Supervisor] Verifying summary completeness...")
 
-        review_response = await self._query_for_text(review_prompt, session_id=session_id, phase=phase)
+        review_response = await self._extract_text_response(review_prompt, session_id=session_id, phase=phase)
 
         # Parse review response
         if review_response.startswith(self.GAPS_FOUND_SIGNAL):
@@ -793,7 +938,7 @@ class WPOrchestrator:
         print(f"\n[Supervisor] Generating final summary...")
 
         final_summary_prompt = ContextBuilder.get_regeneration_summary_prompt()
-        new_summary = await self._query_for_text(
+        new_summary = await self._extract_text_response(
             final_summary_prompt,
             session_id=conversation_session_id,
             phase=phase
@@ -806,7 +951,7 @@ class WPOrchestrator:
             print(f"[Supervisor] Regeneration failed, keeping current summary.")
             return current_summary
 
-    async def _query_for_text(
+    async def _extract_text_response(
         self,
         prompt: str,
         timeout: float = 300.0,
@@ -829,14 +974,14 @@ class WPOrchestrator:
         env_vars = self.markers.get_env_vars()
 
         async def collect_response() -> None:
-            # Use async context manager for proper streaming mode
+            # Use lightweight hooks (no build_verify) for internal queries
             async with ClaudeSDKClient(
                 options=ClaudeAgentOptions(
                     cwd=str(self.working_dir),
                     env=env_vars,
                     resume=session_id,
                     permission_mode="bypassPermissions",
-                    hooks=self.hooks.get_hooks_config(),
+                    hooks=self.hooks.get_extraction_hooks_config(),
                 )
             ) as client:
                 # Send prompt via query

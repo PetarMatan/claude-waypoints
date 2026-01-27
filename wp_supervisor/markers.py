@@ -4,17 +4,28 @@ Waypoints Supervisor - Marker Management
 
 Thin wrapper around WPState for supervisor mode. Uses a workflow ID that persists
 across multiple Claude sessions within a single Waypoints workflow run.
+
+Also manages knowledge staging for supervisor-controlled knowledge extraction.
 """
 
+import json
+import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 # Add hooks/lib to path for WPState import
 hooks_lib = Path(__file__).parent.parent / "hooks" / "lib"
 sys.path.insert(0, str(hooks_lib))
 
 from wp_state import WPState
+from wp_knowledge import (
+    StagedKnowledge,
+    StagedKnowledgeEntry,
+    KnowledgeManager,
+    extract_from_text,
+    ExtractionResult,
+)
 
 
 class SupervisorMarkers:
@@ -264,3 +275,201 @@ class SupervisorMarkers:
         """List all existing documents in the workflow directory."""
         docs = self._state.list_documents()
         return {k: str(v) for k, v in docs.items()}
+
+    # --- Knowledge Staging [REQ-13, REQ-14, REQ-15, REQ-16] ---
+
+    STAGED_KNOWLEDGE_FILE = "staged-knowledge.json"
+
+    def stage_knowledge(self, knowledge: StagedKnowledge) -> None:
+        """
+        Stage extracted knowledge for later application.
+
+        Merges with any existing staged knowledge (accumulates across phases) [REQ-15].
+        Stored in workflow state directory [REQ-13].
+
+        Args:
+            knowledge: StagedKnowledge container with entries to stage
+
+        Note:
+            On file write failure: Logs error, continues workflow normally.
+        """
+        # Load existing staged knowledge
+        existing_data = self._load_staged_knowledge_from_file()
+
+        # Merge new knowledge with existing [REQ-15]
+        for entry in knowledge.architecture:
+            existing_data["architecture"].append({
+                "title": entry.title,
+                "content": entry.content,
+                "phase": entry.phase,
+                "tag": entry.tag
+            })
+
+        for entry in knowledge.decisions:
+            existing_data["decisions"].append({
+                "title": entry.title,
+                "content": entry.content,
+                "phase": entry.phase,
+                "tag": entry.tag
+            })
+
+        for entry in knowledge.lessons_learned:
+            existing_data["lessons_learned"].append({
+                "title": entry.title,
+                "content": entry.content,
+                "phase": entry.phase,
+                "tag": entry.tag
+            })
+
+        # Save merged data
+        self._save_staged_knowledge_to_file(existing_data)
+
+    def get_staged_knowledge(self) -> StagedKnowledge:
+        """
+        Get all staged knowledge for this workflow.
+
+        Returns:
+            StagedKnowledge container. Returns empty StagedKnowledge if
+            no staged knowledge exists [EDGE-6].
+        """
+        data = self._load_staged_knowledge_from_file()
+
+        # Convert JSON data to StagedKnowledgeEntry objects
+        architecture = [
+            StagedKnowledgeEntry(
+                title=e["title"],
+                content=e["content"],
+                phase=e["phase"],
+                tag=e.get("tag")
+            )
+            for e in data.get("architecture", [])
+        ]
+
+        decisions = [
+            StagedKnowledgeEntry(
+                title=e["title"],
+                content=e["content"],
+                phase=e["phase"],
+                tag=e.get("tag")
+            )
+            for e in data.get("decisions", [])
+        ]
+
+        lessons_learned = [
+            StagedKnowledgeEntry(
+                title=e["title"],
+                content=e["content"],
+                phase=e["phase"],
+                tag=e.get("tag")
+            )
+            for e in data.get("lessons_learned", [])
+        ]
+
+        return StagedKnowledge(
+            architecture=architecture,
+            decisions=decisions,
+            lessons_learned=lessons_learned
+        )
+
+    def has_staged_knowledge(self) -> bool:
+        """
+        Check if there is any staged knowledge.
+
+        Returns:
+            True if there are staged entries, False otherwise
+        """
+        staged = self.get_staged_knowledge()
+        return not staged.is_empty()
+
+    def clear_staged_knowledge(self) -> None:
+        """
+        Delete the staged knowledge file [REQ-23, REQ-25].
+
+        Called after successful application at end of Phase 4,
+        or on workflow abort.
+        """
+        path = self._get_staged_knowledge_path()
+        if path.exists():
+            try:
+                path.unlink()
+            except IOError:
+                pass  # Ignore errors on cleanup
+
+    def _get_staged_knowledge_path(self) -> Path:
+        """Get path to staged knowledge file."""
+        return Path(self.markers_dir) / self.STAGED_KNOWLEDGE_FILE
+
+    def _load_staged_knowledge_from_file(self) -> Dict[str, Any]:
+        """
+        Load staged knowledge from JSON file.
+
+        Returns:
+            Dict with structure matching [REQ-14], or empty dict if not exists
+        """
+        path = self._get_staged_knowledge_path()
+
+        if not path.exists():
+            # Return empty structure [EDGE-6]
+            return {
+                "architecture": [],
+                "decisions": [],
+                "lessons_learned": []
+            }
+
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+                # Ensure all keys exist
+                if "architecture" not in data:
+                    data["architecture"] = []
+                if "decisions" not in data:
+                    data["decisions"] = []
+                if "lessons_learned" not in data:
+                    data["lessons_learned"] = []
+                return data
+        except (IOError, json.JSONDecodeError):
+            return {
+                "architecture": [],
+                "decisions": [],
+                "lessons_learned": []
+            }
+
+    def _save_staged_knowledge_to_file(self, data: Dict[str, Any]) -> None:
+        """
+        Save staged knowledge to JSON file.
+
+        Args:
+            data: Dict with structure matching [REQ-14]
+        """
+        path = self._get_staged_knowledge_path()
+
+        try:
+            # Ensure directory exists
+            path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except IOError:
+            pass  # Log error but continue workflow normally [ERR-2]
+
+    # --- Knowledge Application Integration ---
+
+    def apply_staged_knowledge(self, project_dir: str = ".") -> Dict[str, int]:
+        """
+        Apply staged knowledge to permanent files [REQ-17].
+
+        Only call after Phase 4 completion (workflow success).
+
+        Args:
+            project_dir: Project directory for determining project ID
+
+        Returns:
+            Summary dict: {"architecture": 2, "decisions": 1, "lessons-learned": 3}
+            Returns empty dict if no staged knowledge.
+        """
+        staged = self.get_staged_knowledge()
+        if staged.is_empty():
+            return {}
+
+        manager = KnowledgeManager(project_dir)
+        return manager.apply_staged_knowledge(staged, self.workflow_id)

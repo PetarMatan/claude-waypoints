@@ -215,6 +215,7 @@ Test names should describe behavior: `should [expected outcome] when [condition]
 2. Validation/input errors
 3. External system failures
 4. Edge cases from requirements
+5. Property-based tests for pure functions (optional - suggest to user if applicable)
 
 After tests compile and user approves:
 ```bash

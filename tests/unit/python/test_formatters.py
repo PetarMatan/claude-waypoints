@@ -3,10 +3,13 @@
 Unit tests for formatters.py
 
 These are pure function tests - no mocking needed.
+Includes property-based tests using Hypothesis.
 """
 
 import sys
 from pathlib import Path
+
+from hypothesis import given, strategies as st, assume, settings
 
 # Add hooks/lib to path
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -39,10 +42,7 @@ class TestTruncateHead:
         result = truncate_head(output, max_lines=3)
         assert result == "line1\nline2\nline3"
 
-    def test_returns_all_lines_if_less_than_max(self):
-        output = "line1\nline2"
-        result = truncate_head(output, max_lines=5)
-        assert result == "line1\nline2"
+    # test_returns_all_lines_if_less_than_max removed - covered by property test
 
     def test_handles_empty_output(self):
         result = truncate_head("", max_lines=5)
@@ -67,10 +67,7 @@ class TestTruncateTail:
         result = truncate_tail(output, max_lines=3)
         assert result == "line3\nline4\nline5"
 
-    def test_returns_all_lines_if_less_than_max(self):
-        output = "line1\nline2"
-        result = truncate_tail(output, max_lines=5)
-        assert result == "line1\nline2"
+    # test_returns_all_lines_if_less_than_max removed - covered by property test
 
     def test_handles_empty_output(self):
         result = truncate_tail("", max_lines=5)
@@ -80,6 +77,142 @@ class TestTruncateTail:
         output = "\n".join([f"line{i}" for i in range(50)])
         result = truncate_tail(output)
         assert result.count("line") == 30
+
+
+# =============================================================================
+# Property-Based Tests for Truncation Functions
+# =============================================================================
+
+class TestTruncateHeadProperties:
+    """Property-based tests for truncate_head using Hypothesis."""
+
+    @given(st.text(), st.integers(min_value=1, max_value=100))
+    def test_never_returns_more_than_max_lines(self, text, max_lines):
+        """Property: Result line count <= max_lines."""
+        # when
+        result = truncate_head(text, max_lines)
+
+        # then
+        if result:
+            line_count = result.count('\n') + 1
+            assert line_count <= max_lines
+
+    @given(st.text(), st.integers(min_value=1, max_value=100))
+    def test_result_is_prefix_of_input(self, text, max_lines):
+        """Property: Result lines are the first lines of stripped input."""
+        # given
+        stripped = text.strip()
+        assume(stripped)  # Skip empty inputs
+
+        # when
+        result = truncate_head(text, max_lines)
+
+        # then
+        assert stripped.startswith(result)
+
+    @given(st.integers(min_value=1, max_value=10))
+    def test_idempotent_for_short_input(self, line_count):
+        """Property: Input with <= max_lines returns unchanged (after strip)."""
+        # given
+        text = "\n".join([f"line{i}" for i in range(line_count)])
+        max_lines = line_count + 5
+
+        # when
+        result = truncate_head(text, max_lines)
+
+        # then
+        assert result == text
+
+    @given(st.text(), st.integers(min_value=1, max_value=100))
+    def test_preserves_line_content(self, text, max_lines):
+        """Property: All result lines exist in input."""
+        # given
+        stripped = text.strip()
+        assume(stripped)
+
+        # when
+        result = truncate_head(text, max_lines)
+
+        # then
+        input_lines = stripped.split('\n')
+        result_lines = result.split('\n')
+        for line in result_lines:
+            assert line in input_lines
+
+    @given(st.text())
+    def test_zero_max_lines_returns_empty(self, text):
+        """Property: max_lines=0 returns empty string."""
+        # when
+        result = truncate_head(text, max_lines=0)
+
+        # then
+        assert result == ""
+
+
+class TestTruncateTailProperties:
+    """Property-based tests for truncate_tail using Hypothesis."""
+
+    @given(st.text(), st.integers(min_value=1, max_value=100))
+    def test_never_returns_more_than_max_lines(self, text, max_lines):
+        """Property: Result line count <= max_lines."""
+        # when
+        result = truncate_tail(text, max_lines)
+
+        # then
+        if result:
+            line_count = result.count('\n') + 1
+            assert line_count <= max_lines
+
+    @given(st.text(), st.integers(min_value=1, max_value=100))
+    def test_result_is_suffix_of_input(self, text, max_lines):
+        """Property: Result lines are the last lines of stripped input."""
+        # given
+        stripped = text.strip()
+        assume(stripped)  # Skip empty inputs
+
+        # when
+        result = truncate_tail(text, max_lines)
+
+        # then
+        assert stripped.endswith(result)
+
+    @given(st.integers(min_value=1, max_value=10))
+    def test_idempotent_for_short_input(self, line_count):
+        """Property: Input with <= max_lines returns unchanged (after strip)."""
+        # given
+        text = "\n".join([f"line{i}" for i in range(line_count)])
+        max_lines = line_count + 5
+
+        # when
+        result = truncate_tail(text, max_lines)
+
+        # then
+        assert result == text
+
+    @given(st.text(), st.integers(min_value=1, max_value=100))
+    def test_preserves_line_content(self, text, max_lines):
+        """Property: All result lines exist in input."""
+        # given
+        stripped = text.strip()
+        assume(stripped)
+
+        # when
+        result = truncate_tail(text, max_lines)
+
+        # then
+        input_lines = stripped.split('\n')
+        result_lines = result.split('\n')
+        for line in result_lines:
+            assert line in input_lines
+
+    @given(st.text())
+    def test_zero_max_lines_returns_empty(self, text):
+        """Property: max_lines=0 returns empty string."""
+        # when
+        result = truncate_tail(text, max_lines=0)
+
+        # then
+        assert result == ""
 
 
 class TestFormatCompileError:

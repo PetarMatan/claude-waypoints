@@ -32,8 +32,8 @@ jobs:
           fi
         shell: bash
 
-      - name: Install pytest
-        run: pip install pytest
+      - name: Install pytest and hypothesis
+        run: pip install pytest hypothesis
 
       - name: Make scripts executable
         run: |

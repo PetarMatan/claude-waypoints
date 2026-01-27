@@ -126,7 +126,8 @@ class WPState:
             workflow_id: Workflow identifier (for supervisor mode, auto-generated if not provided)
             mode: Operating mode - "cli" or "supervisor"
         """
-        self.base_dir = Path.home() / ".claude" / "tmp"
+        claude_config = os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))
+        self.base_dir = Path(claude_config) / "tmp"
         self.session_id = session_id
         self.mode = mode
 

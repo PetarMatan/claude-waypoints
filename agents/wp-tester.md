@@ -109,6 +109,74 @@ Expert test engineer specializing in writing comprehensive tests for any technol
 - Concurrent operations
 - Resource cleanup
 
+### Property-Based Tests (CONSIDER FOR PURE FUNCTIONS)
+
+**What is Property-Based Testing?**
+Instead of testing specific examples, you define properties that must ALWAYS hold true. The testing framework then generates hundreds of random inputs to find edge cases you wouldn't think to test manually.
+
+**When to Consider PBT:**
+- [ ] Pure functions (no side effects, same input → same output)
+- [ ] Data transformations (parse, serialize, convert)
+- [ ] Validation logic (input validation, schema checking)
+- [ ] Mathematical operations (calculations, aggregations)
+- [ ] String manipulation (truncate, format, sanitize)
+
+**How to Identify Properties:**
+
+| Property Type | Question to Ask | Example |
+|---------------|-----------------|---------|
+| **Invariants** | What must ALWAYS be true? | "Result is never negative" |
+| **Relationships** | How do operations relate? | "encode(decode(x)) == x" |
+| **Boundaries** | What are the limits? | "Output length ≤ max_length" |
+| **Idempotence** | Is repeating safe? | "sort(sort(x)) == sort(x)" |
+
+**Decision Flow:**
+
+1. **Identify candidate**: Is this a pure function with clear properties?
+2. **Check dependency**: Is PBT library available in project?
+3. **If no library**: Ask user:
+   > "This function is a good candidate for property-based testing.
+   > Want to add it? Requires [library] ([install command])"
+4. **If user accepts**: Guide through installation, write property tests
+5. **If user declines**: Write thorough example-based tests covering edge cases
+
+**Libraries by Language:**
+
+| Language | Library | Install Command |
+|----------|---------|-----------------|
+| Python | Hypothesis | `pip install hypothesis` |
+| TypeScript | fast-check | `npm install -D fast-check` |
+| Kotlin | Kotest | Add `io.kotest:kotest-property` to build |
+| Java | jqwik | Add `net.jqwik:jqwik` to build |
+| Go | gopter | `go get github.com/leanovate/gopter` |
+
+**Example Properties (Python with Hypothesis):**
+
+```python
+from hypothesis import given, strategies as st
+
+# Invariant: Result never exceeds max_lines
+@given(st.text(), st.integers(min_value=1, max_value=100))
+def test_never_exceeds_max_lines(text, max_lines):
+    result = truncate_head(text, max_lines)
+    if result:
+        assert result.count('\n') + 1 <= max_lines
+
+# Relationship: Truncated result is prefix of original
+@given(st.text(), st.integers(min_value=1, max_value=100))
+def test_result_is_prefix(text, max_lines):
+    result = truncate_head(text, max_lines)
+    assert text.strip().startswith(result)
+```
+
+**If User Declines PBT:**
+Write comprehensive example-based tests that explicitly cover:
+- Empty input
+- Single element
+- Boundary values (0, 1, max)
+- Special characters / unicode
+- Very large inputs
+
 ## Test Quality Standards
 
 ### Test Naming Convention

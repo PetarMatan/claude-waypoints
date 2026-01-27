@@ -408,5 +408,61 @@ class TestWPActivationHook:
             assert exit_code == 0
 
 
+class TestKnowledgeIntegration:
+    """Tests for knowledge management integration in wp-activation.py"""
+
+    def test_init_loads_knowledge_context(self):
+        """Should load knowledge files and include in response when wp:init is called."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            knowledge_dir = Path(tmpdir) / ".claude" / "waypoints" / "knowledge" / "test-project"
+            knowledge_dir.mkdir(parents=True)
+            (knowledge_dir / "architecture.md").write_text("# Architecture\nService A connects to B")
+
+            project_dir = Path(tmpdir) / "test-project"
+            project_dir.mkdir()
+            (project_dir / ".waypoints-project").write_text("test-project")
+
+            env = {"HOME": tmpdir, "WP_INSTALL_DIR": str(PROJECT_ROOT)}
+            input_data = generate_bash_hook_input(
+                command="true # wp:init",
+                cwd=str(project_dir),
+                session_id="test-session"
+            )
+
+            # when
+            exit_code, stdout, stderr = run_hook("wp-activation", input_data, env)
+
+            # then
+            assert exit_code == 0
+            response = json.loads(stdout)
+            context = response.get("hookSpecificOutput", {}).get("additionalContext", "")
+            assert "Project Knowledge" in context
+            assert "Service A connects to B" in context
+
+    def test_init_shows_placeholders_when_no_knowledge_files(self):
+        """Should show placeholder text when no knowledge files exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            project_dir = Path(tmpdir) / "empty-project"
+            project_dir.mkdir()
+
+            env = {"HOME": tmpdir, "WP_INSTALL_DIR": str(PROJECT_ROOT)}
+            input_data = generate_bash_hook_input(
+                command="true # wp:init",
+                cwd=str(project_dir),
+                session_id="test-session"
+            )
+
+            # when
+            exit_code, stdout, stderr = run_hook("wp-activation", input_data, env)
+
+            # then
+            assert exit_code == 0
+            response = json.loads(stdout)
+            context = response.get("hookSpecificOutput", {}).get("additionalContext", "")
+            assert "Project Knowledge" in context
+            assert "No architecture documented yet" in context
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
