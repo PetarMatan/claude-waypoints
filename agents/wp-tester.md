@@ -28,6 +28,8 @@ Expert test engineer specializing in writing comprehensive tests for any technol
    - List tests that will break due to behavior changes
    - Note WHY they will break
    - These tests will need updates in Phase 4
+   - If existing code was modified to call new functionality, plan to add tests
+     in those existing test files verifying the new call sites
 
 4. **Run existing test suite:**
    - Verify existing tests compile/pass before your changes

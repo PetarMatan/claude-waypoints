@@ -81,12 +81,19 @@ structural skeleton of the solution WITHOUT implementing business logic.
    - Method stubs that throw NotImplementedError or return TODO markers
    - No actual business logic
 4. Ensure the code compiles/type-checks successfully
+5. If the feature requires changes to existing code, modify those files too:
+   - Add new dependencies (injection points) to existing classes
+   - Add call site stubs where new functionality will be invoked
+   - These modifications must also compile
 
 ## Guidelines
 - Focus on the PUBLIC API - what will consumers of this code use?
 - Consider separation of concerns
 - Use appropriate design patterns if beneficial
 - Keep it simple - don't over-engineer
+- If the requirements involve changes to existing code, you MUST modify existing files —
+  not just create new standalone classes. Creating a helper/wrapper is fine, but the
+  integration points (injection + call sites) must be in the existing code.
 - The Codebase Context section in requirements contains file paths and project structure.
   Prefer using these paths directly rather than re-exploring the project structure.
 
@@ -118,12 +125,17 @@ that define the expected behavior.
    - Error scenarios and exception handling
    - Boundary conditions
 3. Tests should compile but FAIL when run (Red phase)
+4. If existing code was modified in Phase 2, also add tests in existing test files
+   verifying that the modified code calls the new functionality at the right points
 
 ## Guidelines
 - Each requirement should have at least one test
 - Test names should clearly describe what they verify
 - Use arrange-act-assert pattern
 - Mock external dependencies appropriately
+- When existing code was modified in Phase 2, write tests in existing test files that
+  verify the new call sites. Standalone unit tests for new classes are necessary but
+  not sufficient — the integration points must also be tested.
 - The Codebase Context section in requirements contains file paths and project structure.
   Prefer using these paths directly rather than re-exploring the project structure.
 
@@ -226,11 +238,12 @@ Document ALL interfaces you created with concrete details.
 
 # Interfaces Created
 
-## Files Created
-| File Path | Purpose |
-|-----------|---------|
-| `path/to/file.ext` | Brief description |
-[List ALL files you created or modified]
+## Files Created or Modified
+| File Path | Action | Purpose |
+|-----------|--------|---------|
+| `path/to/new_file.ext` | Created | Brief description |
+| `path/to/existing_file.ext` | Modified | What was added/changed |
+[List ALL files you created AND modified — modifications are equally important]
 
 ## Classes/Modules
 ### `ClassName`

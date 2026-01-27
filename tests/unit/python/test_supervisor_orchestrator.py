@@ -1661,5 +1661,22 @@ class TestCodebaseContextInRequirements:
         assert "Codebase Context" in PHASE4_CONTEXT
 
 
+class TestIntegrationTaskGuidance:
+    """Tests that phase templates include guidance for modifying existing code."""
+
+    def test_phase2_context_contains_integration_guidance(self):
+        from wp_supervisor.templates import PHASE2_CONTEXT
+        assert "modify" in PHASE2_CONTEXT.lower() or "existing" in PHASE2_CONTEXT.lower()
+        assert "call site" in PHASE2_CONTEXT.lower()
+
+    def test_phase3_context_contains_existing_test_guidance(self):
+        from wp_supervisor.templates import PHASE3_CONTEXT
+        assert "existing test file" in PHASE3_CONTEXT.lower()
+
+    def test_interfaces_summary_prompt_includes_modified(self):
+        from wp_supervisor.templates import INTERFACES_SUMMARY_PROMPT
+        assert "Modified" in INTERFACES_SUMMARY_PROMPT
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

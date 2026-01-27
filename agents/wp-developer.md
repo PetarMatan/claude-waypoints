@@ -111,6 +111,9 @@ true # wp:mark-complete requirements
 - Use proper language idioms
 - Keep interfaces minimal - only what's needed for requirements
 - Methods should have TODO or throw NotImplementedError
+- If the feature requires changes to existing code, modify those existing classes too:
+  add new dependencies, add call site stubs with TODO. A new helper class alone is NOT
+  sufficient if the requirements expect it to be called from existing code.
 
 **Examples by Language**:
 
@@ -209,6 +212,9 @@ Test names should describe behavior: `should [expected outcome] when [condition]
 - Don't test implementation details, test behavior
 - Each test should verify ONE thing
 - If similar existing tests exist, analyse and consider following same principles
+- If existing code was modified in Phase 2, also add tests in existing test files
+  verifying that the modified code calls the new functionality at the right points.
+  Standalone tests for new classes are necessary but not sufficient.
 
 **Coverage Priorities**:
 1. Happy path (main success scenario)
