@@ -19,8 +19,6 @@ Commands intercepted (as comments in bash commands):
   true # wp:mark-complete implementation - Mark implementation done
   true # wp:set-phase N       - Set phase to N
 
-Note: Knowledge staging (wp:stage) has been removed from CLI mode [DEC-1].
-Knowledge extraction is now supervisor-exclusive.
 """
 
 import os
@@ -144,9 +142,6 @@ def main():
         else:
             respond(status_msg)
         return
-
-    # Note: wp:stage command has been removed [REQ-26, DEC-1]
-    # Knowledge extraction is now supervisor-exclusive
 
 
 if __name__ == '__main__':

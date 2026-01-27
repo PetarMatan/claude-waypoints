@@ -330,3 +330,27 @@ class SupervisorHooks:
                 HookMatcher(hooks=[self.build_verify]),
             ],
         }
+
+    def get_extraction_hooks_config(self) -> Dict[str, Any]:
+        """
+        Get lightweight hooks config for internal queries (summary, review, knowledge extraction).
+
+        Excludes build_verify Stop hook to avoid unnecessary compilation
+        when Claude is only generating text summaries.
+        """
+        import os
+
+        if os.environ.get("WP_DISABLE_HOOKS") == "1":
+            return {}
+
+        try:
+            from claude_agent_sdk import HookMatcher
+        except ImportError:
+            return {}
+
+        self.logger.log_event("HOOK", "Registering hooks (log_tool_use only)")
+        return {
+            "PreToolUse": [
+                HookMatcher(hooks=[self.log_tool_use]),
+            ],
+        }

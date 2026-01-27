@@ -561,11 +561,11 @@ class TestRegenerateSummary:
                     })
                     return (True, "session-123")
 
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     return "# Updated Summary"
 
                 orchestrator._run_regeneration_conversation = mock_run_conversation
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 with patch('builtins.input', return_value='Add error handling section'):
                     result = run_async(orchestrator._regenerate_summary(1))
@@ -590,7 +590,7 @@ class TestGenerateAndVerifySummary:
                 result = run_async(orchestrator._generate_and_verify_summary(4))
                 assert result == ""
 
-    def test_generate_and_verify_calls_query_for_text(self):
+    def test_generate_and_verify_calls_extract_text_response(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -598,7 +598,7 @@ class TestGenerateAndVerifySummary:
 
                 call_count = 0
 
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     nonlocal call_count
                     call_count += 1
                     if call_count == 1:
@@ -606,7 +606,7 @@ class TestGenerateAndVerifySummary:
                     else:
                         return "SUMMARY_VERIFIED\n# Initial Summary"
 
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 result = run_async(orchestrator._generate_and_verify_summary(1))
 
@@ -621,7 +621,7 @@ class TestGenerateAndVerifySummary:
 
                 call_count = 0
 
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     nonlocal call_count
                     call_count += 1
                     if call_count == 1:
@@ -629,7 +629,7 @@ class TestGenerateAndVerifySummary:
                     else:
                         return "GAPS_FOUND\n# Updated Summary with additions"
 
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 result = run_async(orchestrator._generate_and_verify_summary(1))
 
@@ -643,7 +643,7 @@ class TestGenerateAndVerifySummary:
 
                 call_count = 0
 
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     nonlocal call_count
                     call_count += 1
                     if call_count == 1:
@@ -651,7 +651,7 @@ class TestGenerateAndVerifySummary:
                     else:
                         return "SUMMARY_VERIFIED\n# Verified Summary"
 
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 result = run_async(orchestrator._generate_and_verify_summary(1))
 
@@ -665,7 +665,7 @@ class TestGenerateAndVerifySummary:
 
                 call_count = 0
 
-                async def mock_query_for_text(prompt, session_id=None, phase=None):
+                async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     nonlocal call_count
                     call_count += 1
                     if call_count == 1:
@@ -674,7 +674,7 @@ class TestGenerateAndVerifySummary:
                         # Response doesn't follow expected format
                         return "# Some other response"
 
-                orchestrator._query_for_text = mock_query_for_text
+                orchestrator._extract_text_response = mock_extract_text_response
 
                 result = run_async(orchestrator._generate_and_verify_summary(1))
 
@@ -1114,7 +1114,7 @@ class TestExtractAndStageKnowledge:
     Integration tests for _extract_and_stage_knowledge method.
 
     These tests verify the orchestrator correctly integrates:
-    - _query_for_text (mocked)
+    - _extract_text_response (mocked)
     - extract_from_text (real)
     - markers.stage_knowledge (real)
 
@@ -1139,7 +1139,7 @@ DECISIONS:
                 async def mock_query(*args, **kwargs):
                     return mock_response
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1159,7 +1159,7 @@ DECISIONS:
                 async def mock_query(*args, **kwargs):
                     return mock_response
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1185,7 +1185,7 @@ LESSONS_LEARNED:
                 async def mock_query(*args, **kwargs):
                     return mock_response
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1194,7 +1194,7 @@ LESSONS_LEARNED:
                 assert not orchestrator.markers.has_staged_knowledge()
 
     def test_continues_workflow_when_query_raises_exception(self):
-        """When _query_for_text raises exception, workflow should continue without staging."""
+        """When _extract_text_response raises exception, workflow should continue without staging."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -1203,7 +1203,7 @@ LESSONS_LEARNED:
                 async def mock_query_that_fails(*args, **kwargs):
                     raise ConnectionError("Network error")
 
-                orchestrator._query_for_text = mock_query_that_fails
+                orchestrator._extract_text_response = mock_query_that_fails
 
                 # when - should not raise
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1212,7 +1212,7 @@ LESSONS_LEARNED:
                 assert not orchestrator.markers.has_staged_knowledge()
 
     def test_logs_error_when_query_fails(self):
-        """When _query_for_text fails, error should be logged."""
+        """When _extract_text_response fails, error should be logged."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -1221,7 +1221,7 @@ LESSONS_LEARNED:
                 async def mock_query_that_fails(*args, **kwargs):
                     raise ValueError("Test error")
 
-                orchestrator._query_for_text = mock_query_that_fails
+                orchestrator._extract_text_response = mock_query_that_fails
 
                 # Capture log calls
                 log_calls = []
@@ -1251,7 +1251,7 @@ LESSONS_LEARNED:
                 async def mock_query(*args, **kwargs):
                     return mock_response
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1278,7 +1278,7 @@ LESSONS_LEARNED:
                 async def mock_query(*args, **kwargs):
                     return mock_response
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1306,7 +1306,7 @@ LESSONS_LEARNED:
                     captured_prompts.append(prompt)
                     return "NO_KNOWLEDGE_EXTRACTED"
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1332,7 +1332,7 @@ LESSONS_LEARNED:
                     captured_prompts.append(prompt)
                     return "NO_KNOWLEDGE_EXTRACTED"
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1364,7 +1364,7 @@ LESSONS_LEARNED:
                         return phase1_response
                     return phase2_response
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when - extract from two phases
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1408,7 +1408,7 @@ class TestApplyKnowledgeAtWorkflowEnd:
                     return """ARCHITECTURE:
 - Pattern: Description
 """
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
                 assert orchestrator.markers.has_staged_knowledge()
 
@@ -1430,7 +1430,7 @@ class TestApplyKnowledgeAtWorkflowEnd:
                     return """ARCHITECTURE:
 - Pattern: Description
 """
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
 
                 # Make apply fail
@@ -1589,7 +1589,7 @@ class TestStagedKnowledgeInPrompt:
                     return """ARCHITECTURE:
 - Pipeline Pattern: Services use pipeline for composability
 """
-                orchestrator._query_for_text = phase1_query
+                orchestrator._extract_text_response = phase1_query
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
 
                 # Capture prompt for phase 2
@@ -1599,7 +1599,7 @@ class TestStagedKnowledgeInPrompt:
                     captured_prompts.append(prompt)
                     return "NO_KNOWLEDGE_EXTRACTED"
 
-                orchestrator._query_for_text = phase2_query
+                orchestrator._extract_text_response = phase2_query
 
                 # when - extract for phase 2
                 run_async(orchestrator._extract_and_stage_knowledge(phase=2))
@@ -1622,7 +1622,7 @@ class TestStagedKnowledgeInPrompt:
                     captured_prompts.append(prompt)
                     return "NO_KNOWLEDGE_EXTRACTED"
 
-                orchestrator._query_for_text = mock_query
+                orchestrator._extract_text_response = mock_query
 
                 # when - extract for phase 1 (no prior staged knowledge)
                 run_async(orchestrator._extract_and_stage_knowledge(phase=1))
@@ -1630,6 +1630,35 @@ class TestStagedKnowledgeInPrompt:
                 # then
                 assert len(captured_prompts) == 1
                 assert "None yet" in captured_prompts[0]
+
+
+class TestCodebaseContextInRequirements:
+    """Tests that REQUIREMENTS_SUMMARY_PROMPT includes Codebase Context section."""
+
+    def test_requirements_prompt_contains_codebase_context_section(self):
+        from wp_supervisor.templates import REQUIREMENTS_SUMMARY_PROMPT
+        assert "## Codebase Context" in REQUIREMENTS_SUMMARY_PROMPT
+
+    def test_requirements_prompt_contains_tech_stack(self):
+        from wp_supervisor.templates import REQUIREMENTS_SUMMARY_PROMPT
+        assert "Tech Stack" in REQUIREMENTS_SUMMARY_PROMPT
+
+    def test_requirements_prompt_contains_key_files(self):
+        from wp_supervisor.templates import REQUIREMENTS_SUMMARY_PROMPT
+        assert "Key Files" in REQUIREMENTS_SUMMARY_PROMPT
+
+    def test_phase2_context_contains_reuse_guidance(self):
+        from wp_supervisor.templates import PHASE2_CONTEXT
+        assert "Codebase Context" in PHASE2_CONTEXT
+        assert "re-exploring" in PHASE2_CONTEXT
+
+    def test_phase3_context_contains_reuse_guidance(self):
+        from wp_supervisor.templates import PHASE3_CONTEXT
+        assert "Codebase Context" in PHASE3_CONTEXT
+
+    def test_phase4_context_contains_reuse_guidance(self):
+        from wp_supervisor.templates import PHASE4_CONTEXT
+        assert "Codebase Context" in PHASE4_CONTEXT
 
 
 if __name__ == '__main__':

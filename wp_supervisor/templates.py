@@ -87,6 +87,8 @@ structural skeleton of the solution WITHOUT implementing business logic.
 - Consider separation of concerns
 - Use appropriate design patterns if beneficial
 - Keep it simple - don't over-engineer
+- The Codebase Context section in requirements contains file paths and project structure.
+  Prefer using these paths directly rather than re-exploring the project structure.
 
 ## Important
 - Do NOT implement business logic
@@ -122,6 +124,8 @@ that define the expected behavior.
 - Test names should clearly describe what they verify
 - Use arrange-act-assert pattern
 - Mock external dependencies appropriately
+- The Codebase Context section in requirements contains file paths and project structure.
+  Prefer using these paths directly rather than re-exploring the project structure.
 
 ## Important
 - Do NOT implement the actual code yet
@@ -157,6 +161,8 @@ the business logic to make all tests pass.
 - Implement the simplest solution that passes tests
 - If a test seems wrong, discuss with user before changing it
 - Refactor for clarity after tests pass (if needed)
+- The Codebase Context section in requirements contains file paths and project structure.
+  Prefer using these paths directly rather than re-exploring the project structure.
 
 ## Important
 - Focus on making tests pass, not on perfect code
@@ -193,6 +199,13 @@ Create a comprehensive requirements summary based on our discussion.
 - [Decision/constraint and rationale]
 [Include technical constraints, assumptions, and key decisions made]
 
+## Codebase Context
+- **Tech Stack**: [language, framework, build tool]
+- **Build Commands**: [compile command, test command]
+- **Project Structure**: [key directories and their purpose]
+- **Key Files**: [important files discovered during exploration, with full paths]
+- **Existing Patterns**: [relevant patterns, conventions, or abstractions found in the codebase]
+
 ## Open Questions
 - [Any unresolved questions - should be empty if requirements are complete]
 
@@ -201,6 +214,7 @@ Create a comprehensive requirements summary based on our discussion.
 - Number each item for traceability
 - Be specific - avoid vague descriptions
 - If there are open questions, list them (we should resolve before proceeding)
+- Include ALL file paths you discovered during exploration in the Codebase Context section. Later phases will use these paths directly to avoid re-exploring the project structure.
 
 Output ONLY the summary in the format above.
 """

@@ -262,7 +262,7 @@ class WPOrchestrator:
             self.logger.log_event("KNOWLEDGE", "Prompt built, querying Claude...")
 
             # Send prompt silently (no console output during phases 1-3) [REQ-12]
-            response = await self._query_for_text(
+            response = await self._extract_text_response(
                 prompt,
                 session_id=session_id,
                 phase=phase
@@ -692,7 +692,7 @@ class WPOrchestrator:
 
         print(f"\n[Supervisor] Generating phase {phase} summary...")
 
-        initial_summary = await self._query_for_text(summary_prompt, session_id=session_id, phase=phase)
+        initial_summary = await self._extract_text_response(summary_prompt, session_id=session_id, phase=phase)
 
         # Step 2: Self-review
         review_prompt = ContextBuilder.get_review_prompt(phase)
@@ -701,7 +701,7 @@ class WPOrchestrator:
 
         print(f"[Supervisor] Verifying summary completeness...")
 
-        review_response = await self._query_for_text(review_prompt, session_id=session_id, phase=phase)
+        review_response = await self._extract_text_response(review_prompt, session_id=session_id, phase=phase)
 
         # Parse review response
         if review_response.startswith(self.GAPS_FOUND_SIGNAL):
@@ -938,7 +938,7 @@ class WPOrchestrator:
         print(f"\n[Supervisor] Generating final summary...")
 
         final_summary_prompt = ContextBuilder.get_regeneration_summary_prompt()
-        new_summary = await self._query_for_text(
+        new_summary = await self._extract_text_response(
             final_summary_prompt,
             session_id=conversation_session_id,
             phase=phase
@@ -951,7 +951,7 @@ class WPOrchestrator:
             print(f"[Supervisor] Regeneration failed, keeping current summary.")
             return current_summary
 
-    async def _query_for_text(
+    async def _extract_text_response(
         self,
         prompt: str,
         timeout: float = 300.0,
@@ -974,14 +974,14 @@ class WPOrchestrator:
         env_vars = self.markers.get_env_vars()
 
         async def collect_response() -> None:
-            # Use async context manager for proper streaming mode
+            # Use lightweight hooks (no build_verify) for internal queries
             async with ClaudeSDKClient(
                 options=ClaudeAgentOptions(
                     cwd=str(self.working_dir),
                     env=env_vars,
                     resume=session_id,
                     permission_mode="bypassPermissions",
-                    hooks=self.hooks.get_hooks_config(),
+                    hooks=self.hooks.get_extraction_hooks_config(),
                 )
             ) as client:
                 # Send prompt via query
