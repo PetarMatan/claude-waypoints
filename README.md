@@ -101,6 +101,9 @@ cd claude-waypoints
 ~/.claude/waypoints/uninstall.sh
 # Or if you have the repo cloned:
 ./uninstall.sh
+
+# For custom directory installations:
+~/.claude/waypoints/uninstall.sh --dir /path/to/custom/claude/dir
 ```
 
 ### Backup & Recovery

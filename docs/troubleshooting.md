@@ -264,6 +264,9 @@ If all else fails, reinstall:
 # Uninstall
 ~/.claude/waypoints/uninstall.sh
 
+# For custom directory installations:
+~/.claude/waypoints/uninstall.sh --dir /path/to/custom/claude/dir
+
 # Clean up any remaining files
 rm -rf ~/.claude/waypoints
 rm -rf ~/.claude/tmp/wp-start-*

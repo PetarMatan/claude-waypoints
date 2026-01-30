@@ -2,24 +2,95 @@
 set -e
 
 # Waypoints Workflow Uninstaller for Claude Code
-# Version: 1.0.0
+# Version: 2.1.0
+#
+# Usage:
+#   ./uninstall.sh
+#   ./uninstall.sh --dir /path/to/custom/claude/dir
+#
+# Options:
+#   --dir /path/to/dir    Uninstall from custom directory instead of ~/.claude
 
-INSTALL_DIR="${HOME}/.claude/waypoints"
-COMMANDS_DIR="${HOME}/.claude/commands"
-SETTINGS_FILE="${HOME}/.claude/settings.json"
+# --- Interface: Functions ---
+
+show_usage() {
+    cat << 'EOF'
+Waypoints Workflow Uninstaller for Claude Code
+
+Usage:
+  ./uninstall.sh [OPTIONS]
+
+Options:
+  --dir /path/to/dir    Uninstall from custom directory instead of ~/.claude
+  --help                Show this help message
+
+Examples:
+  ./uninstall.sh                      # Uninstall from ~/.claude (default)
+  ./uninstall.sh --dir ~/.claude-dev  # Uninstall from custom directory
+EOF
+    exit 0
+}
+
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dir)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --dir requires a path argument"
+                    exit 1
+                fi
+                CLAUDE_DIR="$2"
+                shift 2
+                ;;
+            --help)
+                show_usage
+                ;;
+            *)
+                echo "Error: Unknown option: $1"
+                echo "Use --help for usage information"
+                exit 1
+                ;;
+        esac
+    done
+}
+
+validate_claude_dir() {
+    if [[ ! -d "$CLAUDE_DIR" ]]; then
+        echo "Error: Directory does not exist: $CLAUDE_DIR"
+        exit 1
+    fi
+}
+
+# --- Parse arguments ---
+CLAUDE_DIR="${HOME}/.claude"
+parse_arguments "$@"
+validate_claude_dir
+
+# --- Directory paths (derived from CLAUDE_DIR) ---
+INSTALL_DIR="${CLAUDE_DIR}/waypoints"
+COMMANDS_DIR="${CLAUDE_DIR}/commands"
+SETTINGS_FILE="${CLAUDE_DIR}/settings.json"
+SESSIONS_DIR="${CLAUDE_DIR}/logs/sessions"
 
 echo "=== Waypoints Workflow Uninstaller ==="
+echo "Uninstalling from: $CLAUDE_DIR"
 echo ""
 
 # Remove Waypoints markers (both old flat files and new session-scoped directories)
 echo "Cleaning up Waypoints markers..."
-rm -f ~/.claude/tmp/wp-mode 2>/dev/null || true
-rm -f ~/.claude/tmp/wp-phase 2>/dev/null || true
-rm -f ~/.claude/tmp/wp-requirements-confirmed 2>/dev/null || true
-rm -f ~/.claude/tmp/wp-interfaces-designed 2>/dev/null || true
-rm -f ~/.claude/tmp/wp-tests-approved 2>/dev/null || true
-rm -f ~/.claude/tmp/wp-tests-passing 2>/dev/null || true
-rm -rf ~/.claude/tmp/wp-* 2>/dev/null || true
+rm -f "${CLAUDE_DIR}/tmp/wp-mode" 2>/dev/null || true
+rm -f "${CLAUDE_DIR}/tmp/wp-phase" 2>/dev/null || true
+rm -f "${CLAUDE_DIR}/tmp/wp-requirements-confirmed" 2>/dev/null || true
+rm -f "${CLAUDE_DIR}/tmp/wp-interfaces-designed" 2>/dev/null || true
+rm -f "${CLAUDE_DIR}/tmp/wp-tests-approved" 2>/dev/null || true
+rm -f "${CLAUDE_DIR}/tmp/wp-tests-passing" 2>/dev/null || true
+rm -rf "${CLAUDE_DIR}/tmp/wp-"* 2>/dev/null || true
+
+# Remove sessions log directory
+if [[ -d "$SESSIONS_DIR" ]]; then
+    echo "Removing sessions log directory..."
+    rm -rf "$SESSIONS_DIR"
+fi
 
 # Remove skills
 echo "Removing skills..."
@@ -69,5 +140,5 @@ fi
 echo ""
 echo "=== Uninstall Complete ==="
 echo ""
-echo "Waypoints Workflow has been removed."
+echo "Waypoints Workflow has been removed from: $CLAUDE_DIR"
 echo "Restart Claude Code to apply changes."

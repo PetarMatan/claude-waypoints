@@ -142,10 +142,10 @@
         "config": ["**/pyproject.toml", "**/setup.py", "**/requirements.txt"]
       },
       "commands": {
-        "compile": "python -m compileall . -q",
-        "testCompile": "python -m pytest --collect-only -q",
-        "test": "python -m pytest -q",
-        "testSingle": "python -m pytest {testFile}::{testName} -q"
+        "compile": "python3 -m compileall . -q",
+        "testCompile": "python3 -m pytest --collect-only -q",
+        "test": "python3 -m pytest -q",
+        "testSingle": "python3 -m pytest {testFile}::{testName} -q"
       },
       "todoPlaceholder": "raise NotImplementedError('TODO: Implementation pending - tests first')",
       "testFramework": "pytest"
