@@ -422,8 +422,8 @@ class TestRunPhase:
                 saved = orchestrator.markers.get_tests_list()
                 assert "# Tests" in saved
 
-    def test_run_phase4_keeps_documents_removes_state(self):
-        """Test that phase 4 removes state.json but keeps document files."""
+    def test_run_phase4_keeps_all_artifacts(self):
+        """Test that phase 4 keeps all artifacts (state.json, documents) for audit trail."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -440,15 +440,41 @@ class TestRunPhase:
 
                 run_async(orchestrator._run_phase(4))
 
-                # Directory should still exist (documents preserved)
+                # Directory should still exist
                 assert orchestrator.markers.markers_dir.exists()
-                # But state.json should be removed
+                # state.json should be preserved for audit trail
                 state_file = orchestrator.markers.markers_dir / "state.json"
-                assert not state_file.exists()
+                assert state_file.exists(), "state.json should be preserved after completion"
                 # Document files should still exist
                 assert (orchestrator.markers.markers_dir / "phase1-requirements.md").exists()
                 assert (orchestrator.markers.markers_dir / "phase2-interfaces.md").exists()
                 assert (orchestrator.markers.markers_dir / "phase3-tests.md").exists()
+
+    def test_run_phase4_marks_implementation_complete(self):
+        """Test that phase 4 completion marks implementation complete in state.json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.initialize()
+                orchestrator.markers.save_requirements_summary("# Requirements")
+                orchestrator.markers.save_interfaces_list("# Interfaces")
+                orchestrator.markers.save_tests_list("# Tests")
+
+                async def mock_run_session(*args, **kwargs):
+                    pass
+
+                orchestrator._run_phase_session = mock_run_session
+
+                run_async(orchestrator._run_phase(4))
+
+                # Verify state.json was updated with implementation complete
+                state_file = orchestrator.markers.markers_dir / "state.json"
+                import json
+                with open(state_file) as f:
+                    state = json.load(f)
+                assert state["completedPhases"]["implementation"] is True, \
+                    "Phase 4 should mark implementation as complete in state.json"
 
     def test_run_phase_edit_reloads_document(self):
         """Test that 'edit' action re-reads the document file."""
@@ -781,6 +807,59 @@ class TestConfirmPhaseCompletion:
                     result = run_async(orchestrator._confirm_phase_completion(1))
                     assert result == 'regenerate'
 
+    def test_confirm_phase1_marks_requirements_complete(self):
+        """Test that confirming phase 1 marks requirements complete in state.json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.initialize()
+
+                with patch('builtins.input', return_value='y'):
+                    run_async(orchestrator._confirm_phase_completion(1))
+
+                # Verify state.json was updated
+                state_file = orchestrator.markers.markers_dir / "state.json"
+                assert state_file.exists()
+                import json
+                with open(state_file) as f:
+                    state = json.load(f)
+                assert state["completedPhases"]["requirements"] is True
+
+    def test_confirm_phase2_marks_interfaces_complete(self):
+        """Test that confirming phase 2 marks interfaces complete in state.json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.initialize()
+
+                with patch('builtins.input', return_value='y'):
+                    run_async(orchestrator._confirm_phase_completion(2))
+
+                state_file = orchestrator.markers.markers_dir / "state.json"
+                import json
+                with open(state_file) as f:
+                    state = json.load(f)
+                assert state["completedPhases"]["interfaces"] is True
+
+    def test_confirm_phase3_marks_tests_complete(self):
+        """Test that confirming phase 3 marks tests complete in state.json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.initialize()
+
+                with patch('builtins.input', return_value='y'):
+                    run_async(orchestrator._confirm_phase_completion(3))
+
+                state_file = orchestrator.markers.markers_dir / "state.json"
+                import json
+                with open(state_file) as f:
+                    state = json.load(f)
+                assert state["completedPhases"]["tests"] is True
+
 
 class TestContextPassing:
     """Tests for context passing between phases."""
@@ -1033,12 +1112,12 @@ class TestSupervisorEndToEnd:
                 phase_order = [p for p in phases_executed if p in [1, 2, 3, 4]]
                 assert phase_order == [1, 2, 3, 4], f"Phases should execute in order, got {phase_order}"
 
-                # Verify state.json was cleaned up but documents preserved
+                # Verify all artifacts are preserved for audit trail
                 assert orchestrator.markers.markers_dir.exists(), \
                     "Documents directory should be preserved after successful completion"
                 state_file = orchestrator.markers.markers_dir / "state.json"
-                assert not state_file.exists(), \
-                    "state.json should be removed after successful completion"
+                assert state_file.exists(), \
+                    "state.json should be preserved after successful completion for audit trail"
 
     def test_workflow_saves_summaries_between_phases(self):
         """

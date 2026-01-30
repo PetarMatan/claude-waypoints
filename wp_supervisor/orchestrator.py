@@ -429,13 +429,15 @@ class WPOrchestrator:
             # Phase 4 completion
             print(f"\n[Supervisor] Implementation complete - all tests passing!")
             self.logger.log_phase_complete(phase, phase_name)
+            # Mark phase complete in state.json
+            self._mark_phase_complete(phase)
 
             # Extract knowledge from Phase 4 [REQ-7]
             await self._extract_and_stage_knowledge(phase, session_id)
 
             self._display_usage_summary()
-            # Keep documents for reference, only remove state.json
-            self.markers.cleanup(keep_documents=True)
+            # Keep all artifacts (state.json, documents, logs) for audit trail
+            # Markers directory is session-specific, so no cleanup needed
             print(f"\n[Supervisor] Documents preserved in: {self.markers.get_marker_dir()}")
 
     async def _run_phase_session(self, initial_context: str, phase: int) -> Optional[str]:
@@ -585,6 +587,17 @@ class WPOrchestrator:
             turns=turns
         )
 
+    def _mark_phase_complete(self, phase: int) -> None:
+        """Mark a phase as complete in state.json using existing marker methods."""
+        if phase == 1:
+            self.markers.mark_requirements_complete()
+        elif phase == 2:
+            self.markers.mark_interfaces_complete()
+        elif phase == 3:
+            self.markers.mark_tests_complete()
+        elif phase == 4:
+            self.markers.mark_implementation_complete()
+
     def _display_usage_summary(self) -> None:
         """Display token usage summary at end of workflow."""
         usage = self.markers.get_all_usage()
@@ -655,6 +668,8 @@ class WPOrchestrator:
             if response in ['y', 'yes', '']:
                 self.logger.log_user_confirmation(phase)
                 self.logger.log_phase_complete(phase, name)
+                # Mark phase complete in state.json
+                self._mark_phase_complete(phase)
                 return 'proceed'
             elif response == 'e':
                 print(f"\n[Supervisor] Edit the document, then press Enter to continue...")
@@ -791,12 +806,19 @@ class WPOrchestrator:
         was_completed = False
         working_indicator_shown = False
 
+        # Phase 1 is requirements only (no code), use lightweight hooks
+        # Phases 2-4 may involve code changes, use full hooks with build_verify
+        hooks_config = (
+            self.hooks.get_extraction_hooks_config() if phase == 1
+            else self.hooks.get_hooks_config()
+        )
+
         async with ClaudeSDKClient(
             options=ClaudeAgentOptions(
                 cwd=str(self.working_dir),
                 env=env_vars,
                 permission_mode="bypassPermissions",
-                hooks=self.hooks.get_hooks_config(),
+                hooks=hooks_config,
             )
         ) as client:
             # Send initial context
