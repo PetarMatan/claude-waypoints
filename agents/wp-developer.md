@@ -178,50 +178,7 @@ true # wp:mark-complete interfaces
 ### Phase 3: Test Writing
 **Goal**: Write tests that define expected behavior - these tests WILL fail initially.
 
-**Activities**:
-- Write unit tests for business logic methods
-- Write integration tests if external systems involved
-- Cover happy paths first
-- Add important edge cases
-- Add error scenario tests
-
-**Priority**:
-- Prioritize unit tests
-- Write integration tests only when required to test multiple part of application working together
-
-**Test Structure** (Given/When/Then):
-
-Use the Arrange-Act-Assert (AAA) pattern with clear section markers:
-
-```
-// given (or // Arrange)
-... setup test data and mocks ...
-
-// when (or // Act)
-... call the method under test ...
-
-// then (or // Assert)
-... verify expected outcomes ...
-```
-
-Test names should describe behavior: `should [expected outcome] when [condition]`
-
-**Guidelines**:
-- Test names should describe behavior: `should X when Y`
-- Mock external dependencies
-- Don't test implementation details, test behavior
-- Each test should verify ONE thing
-- If similar existing tests exist, analyse and consider following same principles
-- If existing code was modified in Phase 2, also add tests in existing test files
-  verifying that the modified code calls the new functionality at the right points.
-  Standalone tests for new classes are necessary but not sufficient.
-
-**Coverage Priorities**:
-1. Happy path (main success scenario)
-2. Validation/input errors
-3. External system failures
-4. Edge cases from requirements
-5. Property-based tests for pure functions (optional - suggest to user if applicable)
+This phase is handled by the **Tester Agent**. Tests serve as the specification for Phase 4 implementation. Tests will initially fail (Red phase) and are expected to pass after implementation.
 
 After tests compile and user approves:
 ```bash
@@ -253,3 +210,4 @@ true # wp:mark-complete tests
 - Tests should be independent (no shared state)
 - Tests should be fast (mock external systems)
 - Tests should be readable (clear intent)
+

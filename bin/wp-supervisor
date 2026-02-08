@@ -37,7 +37,13 @@ else
 fi
 
 # Add to PYTHONPATH so wp_supervisor module can be found
-export PYTHONPATH="${SUPERVISOR_DIR}:${PYTHONPATH:-}"
+# On Windows (MINGW/Git Bash), convert to native path and use ; separator
+if command -v cygpath &>/dev/null; then
+    SUPERVISOR_DIR_PY="$(cygpath -w "$SUPERVISOR_DIR")"
+    export PYTHONPATH="${SUPERVISOR_DIR_PY};${PYTHONPATH:-}"
+else
+    export PYTHONPATH="${SUPERVISOR_DIR}:${PYTHONPATH:-}"
+fi
 
 # Check if claude-agent-sdk is installed
 if ! python3 -c "import claude_agent_sdk" 2>/dev/null; then

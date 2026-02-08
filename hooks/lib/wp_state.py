@@ -208,11 +208,11 @@ class WPState:
             "metadata": asdict(state.metadata)
         }
 
-        # Write to temp file first, then rename (atomic on POSIX)
+        # Write to temp file first, then replace (atomic on POSIX, works on Windows)
         temp_file = self._state_file.with_suffix('.tmp')
         with open(temp_file, 'w') as f:
             json.dump(data, f, indent=2)
-        temp_file.rename(self._state_file)
+        temp_file.replace(self._state_file)
 
     def _update_state(self, **updates) -> StateData:
         """Load state, apply updates, save, and return updated state."""

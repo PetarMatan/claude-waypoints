@@ -83,25 +83,6 @@ Error occurred:
   -> Log at ERROR level, throw exception
 ```
 
-## Testing Strategy
-
-### Unit Tests (MUST HAVE)
-- Business logic methods
-- Data transformations
-- Validation logic
-- Domain model behavior
-
-### Integration Tests (WHEN NEEDED)
-- API integrations
-- Database operations
-- Message queue interactions
-
-### Edge Case Tests (MUST CONSIDER)
-- Boundary conditions (min, max values)
-- Null/empty inputs
-- Concurrent access scenarios
-- Network failures and timeouts
-
 ## Uncle Bob's Laws of TDD
 
 1. You may not write production code until you have written a failing unit test

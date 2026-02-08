@@ -162,6 +162,63 @@ class TestDetectProfile:
                 result = detect_profile(project_dir, f.name)
                 assert result == ""
 
+    def test_returns_empty_when_pattern_only_scores_are_tied(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            # Create source files matching two different profiles (no detection files)
+            src_dir = Path(project_dir, "src")
+            src_dir.mkdir()
+            (src_dir / "Main.kt").touch()
+            (src_dir / "app.py").touch()
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump({
+                    "profiles": {
+                        "kotlin-maven": {
+                            "detection": {
+                                "files": ["pom.xml"],
+                                "patterns": ["**/*.kt"]
+                            }
+                        },
+                        "python-pytest": {
+                            "detection": {
+                                "files": ["requirements.txt"],
+                                "patterns": ["**/*.py"]
+                            }
+                        }
+                    }
+                }, f)
+                f.flush()
+                result = detect_profile(project_dir, f.name)
+                assert result == ""
+
+    def test_returns_profile_when_pattern_only_score_is_unique(self):
+        with tempfile.TemporaryDirectory() as project_dir:
+            # Only Python files exist, no detection files
+            src_dir = Path(project_dir, "src")
+            src_dir.mkdir()
+            (src_dir / "app.py").touch()
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                json.dump({
+                    "profiles": {
+                        "kotlin-maven": {
+                            "detection": {
+                                "files": ["pom.xml"],
+                                "patterns": ["**/*.kt"]
+                            }
+                        },
+                        "python-pytest": {
+                            "detection": {
+                                "files": ["requirements.txt"],
+                                "patterns": ["**/*.py"]
+                            }
+                        }
+                    }
+                }, f)
+                f.flush()
+                result = detect_profile(project_dir, f.name)
+                assert result == "python-pytest"
+
     def test_handles_empty_profiles(self):
         with tempfile.TemporaryDirectory() as project_dir:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:

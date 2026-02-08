@@ -340,3 +340,4 @@ Verify that code throws expected exceptions:
 7. Make tests fast and reliable
 
 **Remember**: Good tests are executable documentation. They should clearly show what the code does and how it handles edge cases.
+

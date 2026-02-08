@@ -65,8 +65,16 @@ def detect_profile(project_dir: str, config_file: str) -> str:
             if score > 0:
                 scores[profile_name] = score
 
-        # Return highest scoring profile
+        # Return highest scoring profile, but only if unambiguous
         if scores:
+            max_score = max(scores.values())
+            # If no profile has a detection file match (score >= 10),
+            # all matches are pattern-only. If multiple profiles tie,
+            # the repo is ambiguous — return no profile rather than guessing.
+            if max_score < 10:
+                top_profiles = [p for p, s in scores.items() if s == max_score]
+                if len(top_profiles) > 1:
+                    return ''
             return max(scores, key=scores.get)
         return ''
     except Exception:
