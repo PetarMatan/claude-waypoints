@@ -10,10 +10,10 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 try:
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AgentDefinition
     from claude_agent_sdk.types import AssistantMessage, ResultMessage
 except ImportError:
     print("Error: claude-agent-sdk not installed.", file=sys.stderr)
@@ -40,6 +40,7 @@ from .templates import (
     format_workflow_complete,
     format_staged_knowledge_for_prompt,
 )
+from .subagents import SubagentBuilder
 
 
 def read_user_input(prompt: str = "") -> str:
@@ -149,10 +150,10 @@ class WPOrchestrator:
             working_dir=str(self.working_dir)
         )
 
-        # Initialize knowledge manager for loading and applying knowledge [REQ-1]
+        # Initialize knowledge manager for loading and applying knowledge
         self._knowledge_manager = KnowledgeManager(project_dir=str(self.working_dir))
 
-        # Knowledge context loaded once at workflow start [REQ-6]
+        # Knowledge context loaded once at workflow start
         self._knowledge_context: str = ""
 
         # Validate working directory
@@ -177,7 +178,7 @@ class WPOrchestrator:
             self.markers.initialize()
             self.logger.log_workflow_start(initial_task or "")
 
-            # Load knowledge context once at workflow start [REQ-1, REQ-6]
+            # Load knowledge context once at workflow start
             self._knowledge_context = self._load_knowledge_context()
 
             # Run all 4 phases
@@ -186,7 +187,7 @@ class WPOrchestrator:
             await self._run_phase(3)
             await self._run_phase(4)
 
-            # Apply staged knowledge at workflow end [REQ-17]
+            # Apply staged knowledge at workflow end
             self._apply_knowledge_at_workflow_end()
 
             # Log completion with usage summary
@@ -202,7 +203,7 @@ class WPOrchestrator:
         except KeyboardInterrupt:
             print("\n\nWorkflow interrupted by user.")
             self.logger.log_workflow_aborted("User interrupted")
-            # Cleanup staged knowledge on abort [REQ-24, REQ-25]
+            # Cleanup staged knowledge on abort
             self.markers.clear_staged_knowledge()
             self.markers.cleanup()
             print("Markers cleaned up.")
@@ -210,16 +211,16 @@ class WPOrchestrator:
             print(f"\n\nWorkflow error: {e}", file=sys.stderr)
             self.logger.log_error("Workflow failed", e)
             self.logger.log_workflow_aborted(str(e))
-            # Cleanup staged knowledge on error [REQ-24, REQ-25]
+            # Cleanup staged knowledge on error
             self.markers.clear_staged_knowledge()
             self.markers.cleanup()
             raise
 
-    # --- Knowledge Management [REQ-1, REQ-6, REQ-7, REQ-17, REQ-22] ---
+    # --- Knowledge Management ---
 
     def _load_knowledge_context(self) -> str:
         """
-        Load knowledge context at workflow start [REQ-1, REQ-6].
+        Load knowledge context at workflow start.
 
         Returns:
             Formatted project knowledge section for injection into phase contexts.
@@ -234,18 +235,18 @@ class WPOrchestrator:
         session_id: Optional[str] = None
     ) -> None:
         """
-        Extract knowledge from phase completion and stage for later application [REQ-7].
+        Extract knowledge from phase completion and stage for later application.
 
-        Sends extraction prompt to Claude in the same session [REQ-7].
-        Runs silently during phases 1-3 (no console output) [REQ-12].
-        Parses response and stages any extracted knowledge [REQ-13].
+        Sends extraction prompt to Claude in the same session.
+        Runs silently during phases 1-3 (no console output).
+        Parses response and stages any extracted knowledge.
 
         Args:
             phase: Phase number (1-4)
             session_id: Session ID for resuming conversation
 
         Note:
-            On malformed response [ERR-1]: Logs warning, skips extraction,
+            On malformed response: Logs warning, skips extraction,
             continues workflow normally.
         """
         self.logger.log_event("KNOWLEDGE", f"Starting knowledge extraction for phase {phase}")
@@ -261,7 +262,7 @@ class WPOrchestrator:
             )
             self.logger.log_event("KNOWLEDGE", "Prompt built, querying Claude...")
 
-            # Send prompt silently (no console output during phases 1-3) [REQ-12]
+            # Send prompt silently (no console output during phases 1-3)
             response = await self._extract_text_response(
                 prompt,
                 session_id=session_id,
@@ -269,16 +270,16 @@ class WPOrchestrator:
             )
             self.logger.log_event("KNOWLEDGE", f"Got response: {len(response)} chars")
 
-            # Parse response [REQ-13]
+            # Parse response
             result = extract_from_text(response)
             self.logger.log_event("KNOWLEDGE", f"Parsed: had_content={result.had_content}, is_empty={result.knowledge.is_empty() if result.knowledge else 'N/A'}")
 
-            # Handle parse errors [ERR-1]
+            # Handle parse errors
             if result.parse_error:
                 self.logger.log_error(f"Knowledge extraction parse error: {result.parse_error}")
                 return
 
-            # Stage extracted knowledge if any [REQ-13]
+            # Stage extracted knowledge if any
             if result.had_content and not result.knowledge.is_empty():
                 self.markers.stage_knowledge(result.knowledge)
                 self.logger.log_event("KNOWLEDGE", "Knowledge staged successfully")
@@ -286,7 +287,7 @@ class WPOrchestrator:
                 self.logger.log_event("KNOWLEDGE", "No knowledge to stage")
 
         except Exception as e:
-            # Log warning and continue [ERR-1]
+            # Log warning and continue
             self.logger.log_error(f"Knowledge extraction failed: {e}")
             import traceback
             self.logger.log_error(f"Traceback: {traceback.format_exc()}")
@@ -294,27 +295,27 @@ class WPOrchestrator:
 
     def _apply_knowledge_at_workflow_end(self) -> None:
         """
-        Apply staged knowledge to permanent files after Phase 4 [REQ-17].
+        Apply staged knowledge to permanent files after Phase 4.
 
-        Creates directories if needed [REQ-18].
-        Displays console message listing updated files [REQ-22].
-        Cleans up staged knowledge file after successful application [REQ-23].
+        Creates directories if needed.
+        Displays console message listing updated files.
+        Cleans up staged knowledge file after successful application.
         """
         # Check if there's staged knowledge
         if not self.markers.has_staged_knowledge():
             return
 
         try:
-            # Apply staged knowledge to permanent files [REQ-17, REQ-18]
+            # Apply staged knowledge to permanent files
             counts = self.markers.apply_staged_knowledge(str(self.working_dir))
 
-            # Display console message with updated files [REQ-22]
+            # Display console message with updated files
             if counts:
                 knowledge_manager = KnowledgeManager(str(self.working_dir))
                 summary = knowledge_manager.get_updated_files_summary(counts)
                 print(f"\n{summary}")
 
-            # Clean up staged knowledge file [REQ-23]
+            # Clean up staged knowledge file
             self.markers.clear_staged_knowledge()
 
         except Exception as e:
@@ -322,17 +323,30 @@ class WPOrchestrator:
             # Still clean up on error to avoid stale data
             self.markers.clear_staged_knowledge()
 
-    def _build_phase_context(self, phase: int, initial_task: Optional[str] = None) -> str:
+    def _build_phase_context(
+        self,
+        phase: int,
+        initial_task: Optional[str] = None,
+        delegate_exploration: bool = True
+    ) -> str:
         """
-        Build context for a specific phase, including phase-bound agents and knowledge [REQ-5].
+        Build context for a specific phase, including phase-bound agents and knowledge.
 
-        All phases receive identical knowledge context [REQ-6].
+        All phases receive identical knowledge context.
+
+        Args:
+            phase: Phase number (1-4)
+            initial_task: Initial task description (phase 1 only)
+            delegate_exploration: If True, Phase 1 context instructs Claude to delegate
+                                exploration to subagents. If False, Claude explores directly
+                                (fallback when subagent build fails). Only affects Phase 1.
         """
-        # Build base context from templates with knowledge injection [REQ-5]
+        # Build base context from templates with knowledge injection
         if phase == 1:
             context = ContextBuilder.build_phase1_context(
                 initial_task,
-                knowledge_context=self._knowledge_context
+                knowledge_context=self._knowledge_context,
+                supervisor_mode=delegate_exploration
             )
         elif phase == 2:
             context = ContextBuilder.build_phase2_context(
@@ -362,6 +376,37 @@ class WPOrchestrator:
 
         return context
 
+    def _build_exploration_subagents(
+        self,
+        task_context: str
+    ) -> Dict[str, AgentDefinition]:
+        """
+        Build exploration subagent definitions for Phase 1 parallel exploration.
+
+        Creates three specialized subagents that explore different aspects
+        of the codebase concurrently:
+        - Business Logic Explorer
+        - Dependencies/Integrations Explorer
+        - Test/Use Case Explorer
+
+        Subagents receive:
+        - Full project knowledge context
+        - Dynamic task context from user requirements
+        - Read-only tool access (Read, Grep, Glob, Bash) to prevent writes during Phase 1
+
+        Args:
+            task_context: User's requirements/task description to inject into
+                         subagent instructions
+
+        Returns:
+            Dictionary mapping subagent names to AgentDefinition instances,
+            ready to pass to ClaudeAgentOptions.agents
+        """
+        return SubagentBuilder.build_exploration_agents(
+            task_context=task_context,
+            knowledge_context=self._knowledge_context
+        )
+
     async def _run_phase(self, phase: int, initial_task: Optional[str] = None) -> None:
         """
         Run a single Waypoints phase.
@@ -375,14 +420,36 @@ class WPOrchestrator:
         self.markers.set_phase(phase)
         self.logger.log_phase_start(phase, phase_name)
 
+        # Build subagents for Phase 1 parallel exploration
+        # Subagents are built BEFORE context so we can fall back to CLI mode on failure
+        subagents: Optional[Dict[str, AgentDefinition]] = None
+        delegate_exploration = True
+        if phase == 1:
+            try:
+                # Subagent prompts contain static instructions + knowledge only.
+                # Dynamic task context (user requirements) is provided by the parent
+                # session when it invokes subagents via Task tool after gathering
+                # requirements from the user.
+                subagents = self._build_exploration_subagents(task_context="")
+            except Exception as e:
+                self.logger.log_event(
+                    "SUBAGENTS",
+                    f"Failed to build exploration subagents, "
+                    f"falling back to standard exploration: {e}"
+                )
+                subagents = None
+                delegate_exploration = False
+
         # Build and save context
-        context = self._build_phase_context(phase, initial_task)
+        # For Phase 1: delegate_exploration determines whether context instructs Claude
+        # to delegate to subagents (True) or explore directly (False/fallback)
+        context = self._build_phase_context(phase, initial_task, delegate_exploration=delegate_exploration)
         context_path = self.markers.save_phase_context(phase, context)
         if context_path:
             self.logger.log_phase_context_saved(phase, context_path)
 
-        # Run the phase session
-        session_id = await self._run_phase_session(context, phase)
+        # Run the phase session with subagents if Phase 1
+        session_id = await self._run_phase_session(context, phase, subagents=subagents)
 
         if phase < 4:
             # Generate summary and save as document
@@ -392,8 +459,8 @@ class WPOrchestrator:
                 self.logger.log_phase_summary_saved(phase, doc_path)
                 print(f"\n[Supervisor] {phase_name} document saved: {doc_path}")
 
-            # Extract knowledge after phase completion [REQ-7]
-            # Runs silently during phases 1-3 [REQ-12]
+            # Extract knowledge after phase completion
+            # Runs silently during phases 1-3
             await self._extract_and_stage_knowledge(phase, session_id)
 
             # Confirmation loop with edit/regenerate options
@@ -432,7 +499,7 @@ class WPOrchestrator:
             # Mark phase complete in state.json
             self._mark_phase_complete(phase)
 
-            # Extract knowledge from Phase 4 [REQ-7]
+            # Extract knowledge from Phase 4
             await self._extract_and_stage_knowledge(phase, session_id)
 
             self._display_usage_summary()
@@ -440,15 +507,27 @@ class WPOrchestrator:
             # Markers directory is session-specific, so no cleanup needed
             print(f"\n[Supervisor] Documents preserved in: {self.markers.get_marker_dir()}")
 
-    async def _run_phase_session(self, initial_context: str, phase: int) -> Optional[str]:
+    async def _run_phase_session(
+        self,
+        initial_context: str,
+        phase: int,
+        subagents: Optional[Dict[str, AgentDefinition]] = None
+    ) -> Optional[str]:
         """
         Run an interactive Claude session for a phase using ClaudeSDKClient.
 
         Uses ClaudeSDKClient for proper bidirectional streaming with hooks support.
 
+        For Phase 1, supports parallel exploration via SDK subagents:
+        - Subagents are defined via the `agents` parameter in ClaudeAgentOptions
+        - SDK manages parallel execution and result aggregation
+        - Parent session spawns subagents after receiving initial requirements
+
         Args:
             initial_context: Initial context/prompt for the phase
             phase: Current phase number
+            subagents: Optional dict of subagent definitions for Phase 1.
+                      Maps subagent name to AgentDefinition.
 
         Returns:
             Session ID for resuming conversation (e.g., for summary generation)
@@ -462,16 +541,26 @@ class WPOrchestrator:
         phase_complete = False
         working_indicator_shown = False
 
+        # Build ClaudeAgentOptions with subagents for Phase 1
+        agent_options = ClaudeAgentOptions(
+            cwd=str(self.working_dir),
+            env=env_vars,
+            permission_mode="bypassPermissions",
+            hooks=self.hooks.get_hooks_config(),
+        )
+
+        # Add exploration subagents for Phase 1
+        # Subagents enable parallel codebase exploration via SDK's agents parameter
+        if subagents:
+            agent_options.agents = subagents
+            self.logger.log_event(
+                "SUBAGENTS",
+                f"Configured {len(subagents)} exploration subagents: {list(subagents.keys())}"
+            )
+
         # Use async context manager for proper streaming mode
         # This connects with empty stream, allowing us to use query() for messages
-        async with ClaudeSDKClient(
-            options=ClaudeAgentOptions(
-                cwd=str(self.working_dir),
-                env=env_vars,
-                permission_mode="bypassPermissions",
-                hooks=self.hooks.get_hooks_config(),
-            )
-        ) as client:
+        async with ClaudeSDKClient(options=agent_options) as client:
             # Send initial context as first query
             await client.query(initial_context)
 

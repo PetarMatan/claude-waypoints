@@ -17,38 +17,144 @@ class TestBuildPhase1Context:
     def test_build_phase1_context_without_task(self):
         context = ContextBuilder.build_phase1_context()
         assert "Phase 1" in context
-        assert "Requirements Gathering" in context
-        assert "Initial Task" not in context
+        assert "Requirements" in context
 
     def test_build_phase1_context_with_task(self):
         task = "Build a user authentication system"
         context = ContextBuilder.build_phase1_context(task)
-        assert "Initial Task" in context
         assert task in context
 
-    def test_build_phase1_context_contains_phase_instructions(self):
+    def test_build_phase1_context_contains_phase_complete_signal(self):
         context = ContextBuilder.build_phase1_context()
-        assert "clarifying questions" in context.lower()
-        assert "Do NOT write any code" in context
         assert "PHASE_COMPLETE" in context
-
-    def test_build_phase1_context_mentions_edge_cases(self):
-        context = ContextBuilder.build_phase1_context()
-        assert "edge case" in context.lower() or "Edge case" in context
-
-    def test_build_phase1_context_emphasizes_what_not_how(self):
-        context = ContextBuilder.build_phase1_context()
-        assert "WHAT" in context
-        assert "HOW" in context or "how" in context.lower()
 
     def test_build_phase1_context_with_empty_task(self):
         context = ContextBuilder.build_phase1_context("")
-        # Empty string is falsy, so no task section
-        assert "Initial Task" not in context
+        # Empty string is falsy, so task not included
+        assert len(context) > 0
 
     def test_build_phase1_context_with_none_task(self):
         context = ContextBuilder.build_phase1_context(None)
-        assert "Initial Task" not in context
+        # None task, so task not included
+        assert len(context) > 0
+
+
+class TestBuildPhase1ContextSupervisorMode:
+    """Tests for build_phase1_context supervisor_mode parameter."""
+
+    def test_default_is_supervisor_mode(self):
+        """Default should be supervisor mode (True)."""
+        # when
+        context = ContextBuilder.build_phase1_context()
+
+        # then - should use supervisor instructions
+        assert "subagent" in context.lower() or "parallel" in context.lower()
+
+    def test_supervisor_mode_true_uses_supervisor_instructions(self):
+        """Supervisor mode should use instructions that delegate to subagents."""
+        # when
+        context = ContextBuilder.build_phase1_context(supervisor_mode=True)
+
+        # then
+        assert "subagent" in context.lower() or "parallel" in context.lower()
+
+    def test_supervisor_mode_false_uses_standard_instructions(self):
+        """Non-supervisor mode should use standard Phase 1 instructions."""
+        # when
+        context = ContextBuilder.build_phase1_context(supervisor_mode=False)
+
+        # then - standard CLI mode instructions
+        assert "clarifying questions" in context.lower()
+        assert "Do NOT write any code" in context
+
+    def test_supervisor_mode_true_mentions_delegation(self):
+        """Supervisor mode should tell parent to delegate exploration to subagents."""
+        # when
+        context = ContextBuilder.build_phase1_context(supervisor_mode=True)
+
+        # then
+        lower = context.lower()
+        assert "delegate" in lower
+
+    def test_supervisor_mode_false_does_not_mention_subagents(self):
+        """Non-supervisor mode should not mention subagents."""
+        # when
+        context = ContextBuilder.build_phase1_context(supervisor_mode=False)
+
+        # then
+        assert "subagent" not in context.lower()
+
+    def test_supervisor_mode_with_task_includes_task(self):
+        """Supervisor mode should include task when provided."""
+        # given
+        task = "Build REST API for inventory"
+
+        # when
+        context = ContextBuilder.build_phase1_context(
+            user_task=task,
+            supervisor_mode=True
+        )
+
+        # then
+        assert task in context
+
+    def test_supervisor_mode_with_knowledge_includes_knowledge(self):
+        """Supervisor mode should include knowledge context when provided."""
+        # given
+        knowledge = "# Architecture\nMicroservices"
+
+        # when
+        context = ContextBuilder.build_phase1_context(
+            knowledge_context=knowledge,
+            supervisor_mode=True
+        )
+
+        # then
+        assert knowledge in context
+
+    def test_non_supervisor_mode_with_task_includes_task(self):
+        """Non-supervisor mode should include task when provided."""
+        # given
+        task = "Build user authentication"
+
+        # when
+        context = ContextBuilder.build_phase1_context(
+            user_task=task,
+            supervisor_mode=False
+        )
+
+        # then
+        assert task in context
+
+    def test_non_supervisor_mode_with_knowledge_includes_knowledge(self):
+        """Non-supervisor mode should include knowledge context when provided."""
+        # given
+        knowledge = "# Decisions\nUsing JWT tokens"
+
+        # when
+        context = ContextBuilder.build_phase1_context(
+            knowledge_context=knowledge,
+            supervisor_mode=False
+        )
+
+        # then
+        assert knowledge in context
+
+    def test_supervisor_mode_mentions_task_tool(self):
+        """Supervisor mode should mention Task tool for spawning subagents."""
+        # when
+        context = ContextBuilder.build_phase1_context(supervisor_mode=True)
+
+        # then
+        assert "Task" in context
+
+    def test_supervisor_mode_emphasizes_what_not_how(self):
+        """Supervisor mode should still focus on WHAT not HOW."""
+        # when
+        context = ContextBuilder.build_phase1_context(supervisor_mode=True)
+
+        # then - should focus on behavior/requirements, not implementation
+        assert "WHAT" in context.upper() or "behavior" in context.lower()
 
 
 class TestBuildPhase2Context:

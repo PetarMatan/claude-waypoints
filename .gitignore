@@ -36,5 +36,8 @@ venv/
 .venv/
 .pytest_cache/
 
+# Working notes (temporary)
+MULTI_AGENT_NOTES.md
+
 # E2E test directory (uses real Claude API calls, not for CI)
 e2e/
