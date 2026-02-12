@@ -101,7 +101,21 @@ sys.modules['claude_agent_sdk.types'] = mock_types
 sys.path.insert(0, '.')
 from wp_supervisor.markers import SupervisorMarkers
 from wp_supervisor.context import ContextBuilder
-from wp_supervisor.orchestrator import read_user_input
+# [TEST-2] Import read_user_input from session.py
+from wp_supervisor.session import read_user_input
+
+
+# Ensure tests never inherit supervisor env vars from a parent workflow.
+# When pytest runs during Phase 4, the orchestrator passes WP_SUPERVISOR_MARKERS_DIR
+# to the Claude session, which leaks into subprocesses. Without this fixture,
+# tests create WPState instances that write to the REAL workflow directory,
+# corrupting state.json, workflow.log, and phase summary documents.
+@pytest.fixture(autouse=True)
+def clean_supervisor_env(monkeypatch):
+    """Remove WP_SUPERVISOR_* env vars to isolate tests from live workflows."""
+    for key in list(os.environ):
+        if key.startswith("WP_SUPERVISOR_"):
+            monkeypatch.delenv(key, raising=False)
 
 
 # Helper to run async functions in tests
@@ -1107,12 +1121,8 @@ class TestSupervisorEndToEnd:
 
                 # Mock user confirmations (always say 'y' to proceed)
                 with patch('builtins.input', return_value='y'):
-                    # Patch ClaudeSDKClient
                     with patch('wp_supervisor.orchestrator.ClaudeSDKClient', MockClient):
-                        with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                            with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                                # Run the complete workflow
-                                run_async(orchestrator.run(initial_task="Build a test feature"))
+                        run_async(orchestrator.run(initial_task="Build a test feature"))
 
                 # Verify all 4 phases were executed
                 assert 1 in phases_executed, "Phase 1 should have executed"
@@ -1158,9 +1168,7 @@ class TestSupervisorEndToEnd:
 
                 with patch('builtins.input', return_value='y'):
                     with patch('wp_supervisor.orchestrator.ClaudeSDKClient', MockClient):
-                        with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                            with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                                run_async(orchestrator.run(initial_task="Build a feature"))
+                        run_async(orchestrator.run(initial_task="Build a feature"))
 
                 # Verify documents were saved for phases 1-3
                 assert 1 in saved_documents, "Phase 1 document should be saved"
@@ -1189,9 +1197,7 @@ class TestSupervisorEndToEnd:
 
                 with patch('builtins.input', return_value='y'):
                     with patch('wp_supervisor.orchestrator.ClaudeSDKClient', MockClient):
-                        with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                            with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                                run_async(orchestrator.run(initial_task="Build a REST API for users"))
+                        run_async(orchestrator.run(initial_task="Build a REST API for users"))
 
                 # Verify initial task appears in phase 1 prompt
                 phase1_prompts = [p for p in captured_prompts if "Phase 1" in p]
@@ -2243,6 +2249,154 @@ class TestRunPhaseSessionWithSubagents:
                 # We can't easily test full session run without SDK,
                 # but we can verify the method exists and accepts the parameter
                 assert callable(orchestrator._run_phase_session)
+
+
+class TestOrchestratorSessionIntegration:
+    """
+    Tests for orchestrator integration with session.py module.
+
+    These tests verify that WPOrchestrator correctly imports and uses
+    functionality from session.py per the Phase 2 interfaces:
+    - Signal constants re-exported from session.py [TEST-3]
+    - read_user_input imported from session.py [TEST-2]
+    """
+
+    def test_orchestrator_imports_read_user_input_from_session(self):
+        """read_user_input should be imported from session.py [REQ-14, TEST-2]."""
+        # given
+        from wp_supervisor.orchestrator import read_user_input
+        from wp_supervisor.session import read_user_input as session_read_user_input
+
+        # then - both should be the same function
+        assert read_user_input is session_read_user_input
+
+    def test_orchestrator_re_exports_phase_complete_patterns(self):
+        """WPOrchestrator.PHASE_COMPLETE_PATTERNS should match session.py patterns [TEST-3]."""
+        # given
+        from wp_supervisor.orchestrator import WPOrchestrator
+        from wp_supervisor.session import PHASE_COMPLETE_PATTERNS
+
+        # then
+        assert WPOrchestrator.PHASE_COMPLETE_PATTERNS == PHASE_COMPLETE_PATTERNS
+
+    def test_orchestrator_re_exports_regeneration_complete_patterns(self):
+        """WPOrchestrator.REGENERATION_COMPLETE_PATTERNS should match session.py patterns [TEST-3]."""
+        # given
+        from wp_supervisor.orchestrator import WPOrchestrator
+        from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS
+
+        # then
+        assert WPOrchestrator.REGENERATION_COMPLETE_PATTERNS == REGENERATION_COMPLETE_PATTERNS
+
+    def test_orchestrator_re_exports_regeneration_canceled_patterns(self):
+        """WPOrchestrator.REGENERATION_CANCELED_PATTERNS should match session.py patterns [TEST-3]."""
+        # given
+        from wp_supervisor.orchestrator import WPOrchestrator
+        from wp_supervisor.session import REGENERATION_CANCELED_PATTERNS
+
+        # then
+        assert WPOrchestrator.REGENERATION_CANCELED_PATTERNS == REGENERATION_CANCELED_PATTERNS
+
+    def test_orchestrator_re_exports_signal_complete(self):
+        """WPOrchestrator.SIGNAL_COMPLETE should match session.py constant [TEST-3]."""
+        # given
+        from wp_supervisor.orchestrator import WPOrchestrator
+        from wp_supervisor.session import SIGNAL_COMPLETE
+
+        # then
+        assert WPOrchestrator.SIGNAL_COMPLETE == SIGNAL_COMPLETE
+
+    def test_orchestrator_re_exports_signal_canceled(self):
+        """WPOrchestrator.SIGNAL_CANCELED should match session.py constant [TEST-3]."""
+        # given
+        from wp_supervisor.orchestrator import WPOrchestrator
+        from wp_supervisor.session import SIGNAL_CANCELED
+
+        # then
+        assert WPOrchestrator.SIGNAL_CANCELED == SIGNAL_CANCELED
+
+    def test_orchestrator_imports_session_runner_class(self):
+        """SessionRunner should be importable from orchestrator module."""
+        # given
+        from wp_supervisor.orchestrator import SessionRunner
+        from wp_supervisor.session import SessionRunner as SessionSessionRunner
+
+        # then - both should be the same class
+        assert SessionRunner is SessionSessionRunner
+
+    def test_orchestrator_delegates_to_session_runner(self):
+        """Orchestrator should have a _session_runner that handles streaming logic."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                from wp_supervisor.session import SessionRunner
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Orchestrator should have a SessionRunner instance
+                assert hasattr(orchestrator, '_session_runner')
+                assert isinstance(orchestrator._session_runner, SessionRunner)
+
+                # SessionRunner should share the same markers and logger
+                assert orchestrator._session_runner.markers is orchestrator.markers
+                assert orchestrator._session_runner.logger is orchestrator.logger
+                assert orchestrator._session_runner.hooks is orchestrator.hooks
+
+
+class TestOrchestratorSessionRunnerUsage:
+    """
+    Tests verifying that WPOrchestrator delegates streaming to SessionRunner.
+    """
+
+    def test_orchestrator_passes_phase_complete_patterns_to_session_runner(self):
+        """_run_phase_session should pass PHASE_COMPLETE_PATTERNS to SessionRunner."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                from wp_supervisor.session import PHASE_COMPLETE_PATTERNS
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Verify orchestrator patterns match session patterns
+                assert orchestrator.PHASE_COMPLETE_PATTERNS is PHASE_COMPLETE_PATTERNS
+
+    def test_orchestrator_passes_regeneration_patterns_to_session_runner(self):
+        """_run_regeneration_conversation should pass REGENERATION_* patterns to SessionRunner."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                from wp_supervisor.session import (
+                    REGENERATION_COMPLETE_PATTERNS,
+                    REGENERATION_CANCELED_PATTERNS,
+                )
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                assert orchestrator.REGENERATION_COMPLETE_PATTERNS is REGENERATION_COMPLETE_PATTERNS
+                assert orchestrator.REGENERATION_CANCELED_PATTERNS is REGENERATION_CANCELED_PATTERNS
+
+    def test_session_runner_handles_usage_recording(self):
+        """SessionRunner should handle usage recording via _record_usage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # SessionRunner should have _record_usage method
+                assert hasattr(orchestrator._session_runner, '_record_usage')
+
+                # Verify it works
+                mock_result = MagicMock()
+                mock_result.usage = {"input_tokens": 100, "output_tokens": 50}
+                mock_result.total_cost_usd = 0.01
+                mock_result.duration_ms = 1000
+                mock_result.num_turns = 1
+
+                orchestrator._session_runner._record_usage(phase=1, result=mock_result)
+
+                usage = orchestrator.markers.get_all_usage()
+                assert usage.get("phase1", {}).get("input_tokens", 0) > 0
 
 
 if __name__ == '__main__':

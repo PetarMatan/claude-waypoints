@@ -122,129 +122,163 @@ class TestRegenerationSignalConstants:
 # =============================================================================
 
 class TestCheckRegenerationSignal:
-    """Tests for _check_regeneration_signal helper method."""
+    """Tests for _check_regeneration_signal on SessionRunner."""
+
+    def _make_runner(self, tmpdir):
+        """Create a SessionRunner with mocked dependencies."""
+        from wp_supervisor.session import SessionRunner
+        from wp_supervisor.markers import SupervisorMarkers
+        markers = SupervisorMarkers()
+        hooks = MagicMock()
+        logger = MagicMock()
+        return SessionRunner(
+            working_dir=tmpdir,
+            markers=markers,
+            hooks=hooks,
+            logger=logger
+        )
 
     def test_check_regeneration_signal_method_exists(self):
-        """_check_regeneration_signal method should exist."""
+        """_check_regeneration_signal method should exist on SessionRunner."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert hasattr(orchestrator, '_check_regeneration_signal')
-                assert callable(orchestrator._check_regeneration_signal)
+                runner = self._make_runner(tmpdir)
+                assert hasattr(runner, '_check_regeneration_signal')
+                assert callable(runner._check_regeneration_signal)
 
     def test_detects_complete_signal_plain(self):
         """Should detect plain REGENERATION_COMPLETE signal."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS, SIGNAL_COMPLETE
+                runner = self._make_runner(tmpdir)
 
-                result = orchestrator._check_regeneration_signal("REGENERATION_COMPLETE")
-                assert result == WPOrchestrator.SIGNAL_COMPLETE
+                result = runner._check_regeneration_signal(
+                    "REGENERATION_COMPLETE", REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
+                assert result == SIGNAL_COMPLETE
 
     def test_detects_complete_signal_with_dashes(self):
         """Should detect ---REGENERATION_COMPLETE--- signal."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
-                result = orchestrator._check_regeneration_signal("---REGENERATION_COMPLETE---")
+                result = runner._check_regeneration_signal(
+                    "---REGENERATION_COMPLETE---", REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result == 'complete'
 
     def test_detects_complete_signal_bold(self):
         """Should detect **REGENERATION_COMPLETE** signal."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
-                result = orchestrator._check_regeneration_signal("**REGENERATION_COMPLETE**")
+                result = runner._check_regeneration_signal(
+                    "**REGENERATION_COMPLETE**", REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result == 'complete'
 
     def test_detects_complete_signal_in_text(self):
         """Should detect REGENERATION_COMPLETE within larger text."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
                 text = "Great, I've incorporated your changes.\n\nREGENERATION_COMPLETE"
-                result = orchestrator._check_regeneration_signal(text)
+                result = runner._check_regeneration_signal(
+                    text, REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result == 'complete'
 
     def test_detects_canceled_signal_plain(self):
         """Should detect plain REGENERATION_CANCELED signal."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
-                result = orchestrator._check_regeneration_signal("REGENERATION_CANCELED")
+                result = runner._check_regeneration_signal(
+                    "REGENERATION_CANCELED", REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result == 'canceled'
 
     def test_detects_canceled_signal_with_dashes(self):
         """Should detect ---REGENERATION_CANCELED--- signal."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
-                result = orchestrator._check_regeneration_signal("---REGENERATION_CANCELED---")
+                result = runner._check_regeneration_signal(
+                    "---REGENERATION_CANCELED---", REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result == 'canceled'
 
     def test_detects_canceled_signal_bold(self):
         """Should detect **REGENERATION_CANCELED** signal."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
-                result = orchestrator._check_regeneration_signal("**REGENERATION_CANCELED**")
+                result = runner._check_regeneration_signal(
+                    "**REGENERATION_CANCELED**", REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result == 'canceled'
 
     def test_detects_canceled_signal_in_text(self):
         """Should detect REGENERATION_CANCELED within larger text."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
                 text = "Understood, keeping the original.\n\nREGENERATION_CANCELED"
-                result = orchestrator._check_regeneration_signal(text)
+                result = runner._check_regeneration_signal(
+                    text, REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result == 'canceled'
 
     def test_returns_none_for_no_signal(self):
         """Should return None when no signal is present."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
-                result = orchestrator._check_regeneration_signal("Just some regular text")
+                result = runner._check_regeneration_signal(
+                    "Just some regular text", REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result is None
 
     def test_returns_none_for_empty_text(self):
         """Should return None for empty text."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
-                result = orchestrator._check_regeneration_signal("")
+                result = runner._check_regeneration_signal(
+                    "", REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result is None
 
     def test_complete_takes_precedence_over_canceled(self):
         """If both signals present, complete should take precedence."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                runner = self._make_runner(tmpdir)
 
-                # Edge case: both signals (shouldn't happen, but test precedence)
                 text = "REGENERATION_COMPLETE\nREGENERATION_CANCELED"
-                result = orchestrator._check_regeneration_signal(text)
+                result = runner._check_regeneration_signal(
+                    text, REGENERATION_COMPLETE_PATTERNS, REGENERATION_CANCELED_PATTERNS
+                )
                 assert result == 'complete'
 
 
@@ -295,26 +329,19 @@ class TestRunRegenerationConversation:
                 from wp_supervisor.orchestrator import WPOrchestrator
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
-                # Create mock response with completion signal
-                mock_msg = MockAssistantMessage()
-                mock_msg.session_id = "test-session-123"
-                text_block = MagicMock()
-                text_block.text = "Changes incorporated. REGENERATION_COMPLETE"
-                mock_msg.content = [text_block]
+                # Mock the conversation to return completed
+                async def mock_regen_session(*args, **kwargs):
+                    return (True, "test-session-123")
 
-                # Mock client that returns completion signal
-                class CompletingClient(MockClaudeSDKClient):
-                    async def receive_response(self):
-                        yield mock_msg
+                orchestrator._session_runner.run_regeneration_session = mock_regen_session
 
-                with patch('wp_supervisor.orchestrator.ClaudeSDKClient', CompletingClient):
-                    with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                        with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                            result = run_async(orchestrator._run_regeneration_conversation(
-                                phase=1,
-                                current_summary="# Summary",
-                                initial_feedback="Add error handling"
-                            ))
+                # Mock ClaudeSDKClient at session level where it's imported
+                with patch('wp_supervisor.session.ClaudeSDKClient', MockClaudeSDKClient):
+                    result = run_async(orchestrator._run_regeneration_conversation(
+                        phase=1,
+                        current_summary="# Summary",
+                        initial_feedback="Add error handling"
+                    ))
 
                 was_completed, session_id = result
                 assert was_completed is True
@@ -326,26 +353,18 @@ class TestRunRegenerationConversation:
                 from wp_supervisor.orchestrator import WPOrchestrator
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
-                # Create mock response with cancellation signal
-                mock_msg = MockAssistantMessage()
-                mock_msg.session_id = "test-session-123"
-                text_block = MagicMock()
-                text_block.text = "Understood, keeping original. REGENERATION_CANCELED"
-                mock_msg.content = [text_block]
+                # Mock the conversation to return canceled
+                async def mock_regen_session(*args, **kwargs):
+                    return (False, None)
 
-                # Mock client that returns cancellation signal
-                class CancelingClient(MockClaudeSDKClient):
-                    async def receive_response(self):
-                        yield mock_msg
+                orchestrator._session_runner.run_regeneration_session = mock_regen_session
 
-                with patch('wp_supervisor.orchestrator.ClaudeSDKClient', CancelingClient):
-                    with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                        with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                            result = run_async(orchestrator._run_regeneration_conversation(
-                                phase=1,
-                                current_summary="# Summary",
-                                initial_feedback="nevermind"
-                            ))
+                with patch('wp_supervisor.session.ClaudeSDKClient', MockClaudeSDKClient):
+                    result = run_async(orchestrator._run_regeneration_conversation(
+                        phase=1,
+                        current_summary="# Summary",
+                        initial_feedback="nevermind"
+                    ))
 
                 was_completed, session_id = result
                 assert was_completed is False
@@ -357,27 +376,18 @@ class TestRunRegenerationConversation:
                 from wp_supervisor.orchestrator import WPOrchestrator
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
-                # First response doesn't have signal, then user types /done
-                mock_msg = MockAssistantMessage()
-                mock_msg.session_id = "test-session-123"
-                text_block = MagicMock()
-                text_block.text = "I can make those changes. What do you think?"
-                mock_msg.content = [text_block]
+                # Mock the conversation to return completed via /done
+                async def mock_regen_session(*args, **kwargs):
+                    return (True, "test-session-123")
 
-                class ConversationClient(MockClaudeSDKClient):
-                    async def receive_response(self):
-                        yield mock_msg
+                orchestrator._session_runner.run_regeneration_session = mock_regen_session
 
-                # User types /done after first exchange
-                with patch('builtins.input', return_value='/done'):
-                    with patch('wp_supervisor.orchestrator.ClaudeSDKClient', ConversationClient):
-                        with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                            with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                                result = run_async(orchestrator._run_regeneration_conversation(
-                                    phase=1,
-                                    current_summary="# Summary",
-                                    initial_feedback="Add details"
-                                ))
+                with patch('wp_supervisor.session.ClaudeSDKClient', MockClaudeSDKClient):
+                    result = run_async(orchestrator._run_regeneration_conversation(
+                        phase=1,
+                        current_summary="# Summary",
+                        initial_feedback="Add details"
+                    ))
 
                 was_completed, session_id = result
                 assert was_completed is True

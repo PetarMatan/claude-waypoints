@@ -10,11 +10,10 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 
 try:
     from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AgentDefinition
-    from claude_agent_sdk.types import AssistantMessage, ResultMessage
 except ImportError:
     print("Error: claude-agent-sdk not installed.", file=sys.stderr)
     print("Install with: pip install claude-agent-sdk", file=sys.stderr)
@@ -42,101 +41,35 @@ from .templates import (
 )
 from .subagents import SubagentBuilder
 
-
-def read_user_input(prompt: str = "") -> str:
-    """
-    Read user input, supporting both direct text and file paths.
-
-    For complex features, users can write structured requirements in a file
-    and provide the path. The file content will be read and returned.
-
-    File input methods:
-    - @/path/to/file.md  - Explicit file prefix
-    - /absolute/path.md  - Auto-detected absolute path
-    - ./relative/path.md - Auto-detected relative path
-    - ~/home/path.md     - Auto-detected home path
-
-    Args:
-        prompt: The prompt to display
-
-    Returns:
-        User input text or file contents
-    """
-    try:
-        user_input = input(prompt)
-    except (EOFError, KeyboardInterrupt):
-        return ""
-
-    # Check if input is a file reference
-    file_path = None
-
-    if user_input.startswith('@'):
-        # Explicit file reference: @/path/to/file
-        file_path = user_input[1:].strip()
-    elif user_input.startswith(('/', './', '../', '~/')):
-        # Potential file path - check if it exists
-        expanded = os.path.expanduser(user_input.strip())
-        if os.path.isfile(expanded):
-            file_path = expanded
-
-    if file_path:
-        expanded_path = os.path.expanduser(file_path)
-        try:
-            with open(expanded_path, 'r') as f:
-                content = f.read()
-            print(f"[Loaded {len(content)} chars from {file_path}]")
-            return content
-        except FileNotFoundError:
-            print(f"[File not found: {file_path}]")
-            return ""
-        except PermissionError:
-            print(f"[Permission denied: {file_path}]")
-            return ""
-        except Exception as e:
-            print(f"[Error reading file: {e}]")
-            return ""
-
-    return user_input
+# [REQ-14] Import read_user_input from session.py
+# [REQ-6, REQ-7] read_user_input moved to session.py but remains importable here
+from .session import (
+    read_user_input,
+    SessionRunner,
+    PHASE_COMPLETE_PATTERNS as _SESSION_PHASE_COMPLETE_PATTERNS,
+    REGENERATION_COMPLETE_PATTERNS as _SESSION_REGENERATION_COMPLETE_PATTERNS,
+    REGENERATION_CANCELED_PATTERNS as _SESSION_REGENERATION_CANCELED_PATTERNS,
+    SIGNAL_COMPLETE as _SESSION_SIGNAL_COMPLETE,
+    SIGNAL_CANCELED as _SESSION_SIGNAL_CANCELED,
+)
 
 
 class WPOrchestrator:
-    """
-    Orchestrates Waypoints workflow across multiple Claude sessions.
+    """Orchestrates Waypoints workflow across multiple Claude sessions."""
 
-    Each phase runs in its own session with clean context.
-    Context is passed between phases via summaries.
-    """
-
-    # Signals must be on their own line to avoid false positives
+    # [TEST-3] Re-export signal constants from session.py for backward compatibility
     PHASE_COMPLETE_SIGNAL = "---PHASE_COMPLETE---"
-    # Also accept markdown bold variant (Claude sometimes uses this)
-    PHASE_COMPLETE_PATTERNS = ["---PHASE_COMPLETE---", "**PHASE_COMPLETE**", "PHASE_COMPLETE"]
+    PHASE_COMPLETE_PATTERNS = _SESSION_PHASE_COMPLETE_PATTERNS
     SUMMARY_VERIFIED_SIGNAL = "SUMMARY_VERIFIED"
     GAPS_FOUND_SIGNAL = "GAPS_FOUND"
 
-    # Regeneration conversation signals
-    REGENERATION_COMPLETE_PATTERNS = [
-        "---REGENERATION_COMPLETE---",
-        "**REGENERATION_COMPLETE**",
-        "REGENERATION_COMPLETE"
-    ]
-    REGENERATION_CANCELED_PATTERNS = [
-        "---REGENERATION_CANCELED---",
-        "**REGENERATION_CANCELED**",
-        "REGENERATION_CANCELED"
-    ]
+    REGENERATION_COMPLETE_PATTERNS = _SESSION_REGENERATION_COMPLETE_PATTERNS
+    REGENERATION_CANCELED_PATTERNS = _SESSION_REGENERATION_CANCELED_PATTERNS
 
-    # Signal detection return values
-    SIGNAL_COMPLETE = 'complete'
-    SIGNAL_CANCELED = 'canceled'
+    SIGNAL_COMPLETE = _SESSION_SIGNAL_COMPLETE
+    SIGNAL_CANCELED = _SESSION_SIGNAL_CANCELED
 
     def __init__(self, working_dir: Optional[str] = None):
-        """
-        Initialize the Waypoints orchestrator.
-
-        Args:
-            working_dir: Project working directory (defaults to cwd)
-        """
         self.working_dir = Path(working_dir or os.getcwd()).resolve()
         self.markers = SupervisorMarkers()
         self.logger = SupervisorLogger(
@@ -149,24 +82,20 @@ class WPOrchestrator:
             logger=self.logger,
             working_dir=str(self.working_dir)
         )
-
-        # Initialize knowledge manager for loading and applying knowledge
+        self._session_runner = SessionRunner(
+            working_dir=str(self.working_dir),
+            markers=self.markers,
+            hooks=self.hooks,
+            logger=self.logger
+        )
         self._knowledge_manager = KnowledgeManager(project_dir=str(self.working_dir))
-
-        # Knowledge context loaded once at workflow start
         self._knowledge_context: str = ""
 
-        # Validate working directory
         if not self.working_dir.is_dir():
             raise ValueError(f"Working directory does not exist: {self.working_dir}")
 
     async def run(self, initial_task: Optional[str] = None) -> None:
-        """
-        Run the complete Waypoints workflow.
-
-        Args:
-            initial_task: Optional initial task description
-        """
+        """Run the complete Waypoints workflow."""
         print(format_workflow_header(
             working_dir=str(self.working_dir),
             workflow_id=self.markers.workflow_id,
@@ -174,23 +103,16 @@ class WPOrchestrator:
         ))
 
         try:
-            # Initialize markers and log start
             self.markers.initialize()
             self.logger.log_workflow_start(initial_task or "")
-
-            # Load knowledge context once at workflow start
             self._knowledge_context = self._load_knowledge_context()
 
-            # Run all 4 phases
             await self._run_phase(1, initial_task)
             await self._run_phase(2)
             await self._run_phase(3)
             await self._run_phase(4)
 
-            # Apply staged knowledge at workflow end
             self._apply_knowledge_at_workflow_end()
-
-            # Log completion with usage summary
             self.logger.log_workflow_complete(self.markers.get_usage_summary_text())
             self.logger.log_usage_summary(
                 total_tokens=self.markers.get_total_tokens(),
@@ -203,7 +125,6 @@ class WPOrchestrator:
         except KeyboardInterrupt:
             print("\n\nWorkflow interrupted by user.")
             self.logger.log_workflow_aborted("User interrupted")
-            # Cleanup staged knowledge on abort
             self.markers.clear_staged_knowledge()
             self.markers.cleanup()
             print("Markers cleaned up.")
@@ -211,75 +132,43 @@ class WPOrchestrator:
             print(f"\n\nWorkflow error: {e}", file=sys.stderr)
             self.logger.log_error("Workflow failed", e)
             self.logger.log_workflow_aborted(str(e))
-            # Cleanup staged knowledge on error
             self.markers.clear_staged_knowledge()
             self.markers.cleanup()
             raise
 
-    # --- Knowledge Management ---
-
     def _load_knowledge_context(self) -> str:
-        """
-        Load knowledge context at workflow start.
-
-        Returns:
-            Formatted project knowledge section for injection into phase contexts.
-            Returns empty string if no knowledge files exist.
-        """
-        knowledge_manager = KnowledgeManager(str(self.working_dir))
-        return knowledge_manager.load_knowledge_context()
+        """Load project knowledge for injection into phase contexts."""
+        return KnowledgeManager(str(self.working_dir)).load_knowledge_context()
 
     async def _extract_and_stage_knowledge(
         self,
         phase: int,
         session_id: Optional[str] = None
     ) -> None:
-        """
-        Extract knowledge from phase completion and stage for later application.
-
-        Sends extraction prompt to Claude in the same session.
-        Runs silently during phases 1-3 (no console output).
-        Parses response and stages any extracted knowledge.
-
-        Args:
-            phase: Phase number (1-4)
-            session_id: Session ID for resuming conversation
-
-        Note:
-            On malformed response: Logs warning, skips extraction,
-            continues workflow normally.
-        """
+        """Extract knowledge from phase and stage for later application. Fails silently."""
         self.logger.log_event("KNOWLEDGE", f"Starting knowledge extraction for phase {phase}")
         try:
-            # Get already-staged knowledge from this session to prevent duplicates
             staged = self.markers.get_staged_knowledge()
             staged_str = format_staged_knowledge_for_prompt(staged)
 
-            # Build extraction prompt with existing knowledge and staged knowledge
             prompt = KNOWLEDGE_EXTRACTION_PROMPT.format(
                 existing_knowledge=self._knowledge_context or "No existing knowledge.",
                 staged_this_session=staged_str
             )
             self.logger.log_event("KNOWLEDGE", "Prompt built, querying Claude...")
-
-            # Send prompt silently (no console output during phases 1-3)
             response = await self._extract_text_response(
                 prompt,
                 session_id=session_id,
                 phase=phase
             )
             self.logger.log_event("KNOWLEDGE", f"Got response: {len(response)} chars")
-
-            # Parse response
             result = extract_from_text(response)
             self.logger.log_event("KNOWLEDGE", f"Parsed: had_content={result.had_content}, is_empty={result.knowledge.is_empty() if result.knowledge else 'N/A'}")
 
-            # Handle parse errors
             if result.parse_error:
                 self.logger.log_error(f"Knowledge extraction parse error: {result.parse_error}")
                 return
 
-            # Stage extracted knowledge if any
             if result.had_content and not result.knowledge.is_empty():
                 self.markers.stage_knowledge(result.knowledge)
                 self.logger.log_event("KNOWLEDGE", "Knowledge staged successfully")
@@ -287,40 +176,23 @@ class WPOrchestrator:
                 self.logger.log_event("KNOWLEDGE", "No knowledge to stage")
 
         except Exception as e:
-            # Log warning and continue
             self.logger.log_error(f"Knowledge extraction failed: {e}")
             import traceback
             self.logger.log_error(f"Traceback: {traceback.format_exc()}")
-            # Don't re-raise - continue workflow normally
 
     def _apply_knowledge_at_workflow_end(self) -> None:
-        """
-        Apply staged knowledge to permanent files after Phase 4.
-
-        Creates directories if needed.
-        Displays console message listing updated files.
-        Cleans up staged knowledge file after successful application.
-        """
-        # Check if there's staged knowledge
+        """Apply staged knowledge to permanent files after Phase 4."""
         if not self.markers.has_staged_knowledge():
             return
 
         try:
-            # Apply staged knowledge to permanent files
             counts = self.markers.apply_staged_knowledge(str(self.working_dir))
-
-            # Display console message with updated files
             if counts:
-                knowledge_manager = KnowledgeManager(str(self.working_dir))
-                summary = knowledge_manager.get_updated_files_summary(counts)
+                summary = KnowledgeManager(str(self.working_dir)).get_updated_files_summary(counts)
                 print(f"\n{summary}")
-
-            # Clean up staged knowledge file
             self.markers.clear_staged_knowledge()
-
         except Exception as e:
             self.logger.log_error(f"Failed to apply staged knowledge: {e}")
-            # Still clean up on error to avoid stale data
             self.markers.clear_staged_knowledge()
 
     def _build_phase_context(
@@ -329,19 +201,7 @@ class WPOrchestrator:
         initial_task: Optional[str] = None,
         delegate_exploration: bool = True
     ) -> str:
-        """
-        Build context for a specific phase, including phase-bound agents and knowledge.
-
-        All phases receive identical knowledge context.
-
-        Args:
-            phase: Phase number (1-4)
-            initial_task: Initial task description (phase 1 only)
-            delegate_exploration: If True, Phase 1 context instructs Claude to delegate
-                                exploration to subagents. If False, Claude explores directly
-                                (fallback when subagent build fails). Only affects Phase 1.
-        """
-        # Build base context from templates with knowledge injection
+        """Build context for a phase, including agents and knowledge."""
         if phase == 1:
             context = ContextBuilder.build_phase1_context(
                 initial_task,
@@ -369,7 +229,6 @@ class WPOrchestrator:
         else:
             raise ValueError(f"Invalid phase: {phase}")
 
-        # Load and append phase-bound agents
         agent_content = self.agent_loader.load_phase_agents(phase, logger=self.logger)
         if agent_content:
             context += f"\n\n# Phase Agents\n{agent_content}"
@@ -380,56 +239,24 @@ class WPOrchestrator:
         self,
         task_context: str
     ) -> Dict[str, AgentDefinition]:
-        """
-        Build exploration subagent definitions for Phase 1 parallel exploration.
-
-        Creates three specialized subagents that explore different aspects
-        of the codebase concurrently:
-        - Business Logic Explorer
-        - Dependencies/Integrations Explorer
-        - Test/Use Case Explorer
-
-        Subagents receive:
-        - Full project knowledge context
-        - Dynamic task context from user requirements
-        - Read-only tool access (Read, Grep, Glob, Bash) to prevent writes during Phase 1
-
-        Args:
-            task_context: User's requirements/task description to inject into
-                         subagent instructions
-
-        Returns:
-            Dictionary mapping subagent names to AgentDefinition instances,
-            ready to pass to ClaudeAgentOptions.agents
-        """
+        """Build Phase 1 exploration subagent definitions."""
         return SubagentBuilder.build_exploration_agents(
             task_context=task_context,
             knowledge_context=self._knowledge_context
         )
 
     async def _run_phase(self, phase: int, initial_task: Optional[str] = None) -> None:
-        """
-        Run a single Waypoints phase.
-
-        Args:
-            phase: Phase number (1-4)
-            initial_task: Initial task description (phase 1 only)
-        """
+        """Run a single Waypoints phase."""
         phase_name = PHASE_NAMES[phase]
         print(format_phase_header(phase, phase_name))
         self.markers.set_phase(phase)
         self.logger.log_phase_start(phase, phase_name)
 
-        # Build subagents for Phase 1 parallel exploration
-        # Subagents are built BEFORE context so we can fall back to CLI mode on failure
+        # Build subagents before context so we can fall back on failure
         subagents: Optional[Dict[str, AgentDefinition]] = None
         delegate_exploration = True
         if phase == 1:
             try:
-                # Subagent prompts contain static instructions + knowledge only.
-                # Dynamic task context (user requirements) is provided by the parent
-                # session when it invokes subagents via Task tool after gathering
-                # requirements from the user.
                 subagents = self._build_exploration_subagents(task_context="")
             except Exception as e:
                 self.logger.log_event(
@@ -440,30 +267,22 @@ class WPOrchestrator:
                 subagents = None
                 delegate_exploration = False
 
-        # Build and save context
-        # For Phase 1: delegate_exploration determines whether context instructs Claude
-        # to delegate to subagents (True) or explore directly (False/fallback)
         context = self._build_phase_context(phase, initial_task, delegate_exploration=delegate_exploration)
         context_path = self.markers.save_phase_context(phase, context)
         if context_path:
             self.logger.log_phase_context_saved(phase, context_path)
 
-        # Run the phase session with subagents if Phase 1
         session_id = await self._run_phase_session(context, phase, subagents=subagents)
 
         if phase < 4:
-            # Generate summary and save as document
             summary = await self._generate_and_verify_summary(phase, session_id)
             doc_path = self.markers.save_phase_document(phase, summary)
             if doc_path:
                 self.logger.log_phase_summary_saved(phase, doc_path)
                 print(f"\n[Supervisor] {phase_name} document saved: {doc_path}")
 
-            # Extract knowledge after phase completion
-            # Runs silently during phases 1-3
             await self._extract_and_stage_knowledge(phase, session_id)
 
-            # Confirmation loop with edit/regenerate options
             while True:
                 action = await self._confirm_phase_completion(phase, doc_path, session_id)
 
@@ -473,7 +292,6 @@ class WPOrchestrator:
                     # Verify the edited document can be read
                     edited_content = self.markers.get_phase_document(phase)
                     if edited_content:
-                        # Show preview of edited content
                         preview_lines = edited_content.strip().split('\n')[:5]
                         preview = '\n'.join(preview_lines)
                         if len(edited_content.strip().split('\n')) > 5:
@@ -486,25 +304,17 @@ class WPOrchestrator:
                     else:
                         print(f"[Supervisor] Warning: Could not read document at {doc_path}")
                 elif action == 'regenerate':
-                    # Regenerate summary with user feedback
                     summary = await self._regenerate_summary(phase, session_id)
                     doc_path = self.markers.save_phase_document(phase, summary)
                     if doc_path:
                         self.logger.log_phase_summary_saved(phase, doc_path)
                         print(f"[Supervisor] Updated document saved: {doc_path}")
         else:
-            # Phase 4 completion
             print(f"\n[Supervisor] Implementation complete - all tests passing!")
             self.logger.log_phase_complete(phase, phase_name)
-            # Mark phase complete in state.json
             self._mark_phase_complete(phase)
-
-            # Extract knowledge from Phase 4
             await self._extract_and_stage_knowledge(phase, session_id)
-
             self._display_usage_summary()
-            # Keep all artifacts (state.json, documents, logs) for audit trail
-            # Markers directory is session-specific, so no cleanup needed
             print(f"\n[Supervisor] Documents preserved in: {self.markers.get_marker_dir()}")
 
     async def _run_phase_session(
@@ -513,35 +323,10 @@ class WPOrchestrator:
         phase: int,
         subagents: Optional[Dict[str, AgentDefinition]] = None
     ) -> Optional[str]:
-        """
-        Run an interactive Claude session for a phase using ClaudeSDKClient.
-
-        Uses ClaudeSDKClient for proper bidirectional streaming with hooks support.
-
-        For Phase 1, supports parallel exploration via SDK subagents:
-        - Subagents are defined via the `agents` parameter in ClaudeAgentOptions
-        - SDK manages parallel execution and result aggregation
-        - Parent session spawns subagents after receiving initial requirements
-
-        Args:
-            initial_context: Initial context/prompt for the phase
-            phase: Current phase number
-            subagents: Optional dict of subagent definitions for Phase 1.
-                      Maps subagent name to AgentDefinition.
-
-        Returns:
-            Session ID for resuming conversation (e.g., for summary generation)
-        """
+        """Run an interactive Claude session for a phase. Returns session ID."""
         env_vars = self.markers.get_env_vars()
-
-        # First message to Claude with phase context
         print(f"\n[Starting Phase {phase} session...]\n")
 
-        session_id = None
-        phase_complete = False
-        working_indicator_shown = False
-
-        # Build ClaudeAgentOptions with subagents for Phase 1
         agent_options = ClaudeAgentOptions(
             cwd=str(self.working_dir),
             env=env_vars,
@@ -549,8 +334,6 @@ class WPOrchestrator:
             hooks=self.hooks.get_hooks_config(),
         )
 
-        # Add exploration subagents for Phase 1
-        # Subagents enable parallel codebase exploration via SDK's agents parameter
         if subagents:
             agent_options.agents = subagents
             self.logger.log_event(
@@ -558,126 +341,17 @@ class WPOrchestrator:
                 f"Configured {len(subagents)} exploration subagents: {list(subagents.keys())}"
             )
 
-        # Use async context manager for proper streaming mode
-        # This connects with empty stream, allowing us to use query() for messages
         async with ClaudeSDKClient(options=agent_options) as client:
-            # Send initial context as first query
             await client.query(initial_context)
-
-            # Process initial response
-            async for message in client.receive_response():
-                # Capture session ID
-                if hasattr(message, 'session_id') and message.session_id:
-                    session_id = message.session_id
-
-                # Print AssistantMessage content (text and tool usage)
-                if isinstance(message, AssistantMessage) and message.content:
-                    last_text = ""
-                    for block in message.content:
-                        if hasattr(block, 'text'):
-                            if working_indicator_shown:
-                                print("\n", end='')  # New line after dots
-                                working_indicator_shown = False
-                            print(block.text, end='', flush=True)
-                            last_text = block.text
-                            if any(p in block.text for p in self.PHASE_COMPLETE_PATTERNS):
-                                phase_complete = True
-                        elif hasattr(block, 'name'):
-                            # Tool use - show dot as progress indicator
-                            print(".", end='', flush=True)
-                            working_indicator_shown = True
-                    # Ensure message ends with newline for readability
-                    if last_text and not last_text.endswith('\n'):
-                        print()
-
-                # Capture usage from ResultMessage
-                if isinstance(message, ResultMessage):
-                    self._record_usage(phase, message)
-
-            # If phase not complete, continue interactive loop
-            first_input = True
-            while not phase_complete:
-                # Show hint on first input prompt
-                if first_input:
-                    print("\n[Tip: For structured input, provide a file path: @/path/to/file.md]")
-                    first_input = False
-
-                user_input = read_user_input("\nYou: ").strip()
-
-                if not user_input:
-                    continue
-
-                # Log user input
-                self.logger.log_user_input(user_input)
-
-                # Check for user commands
-                if user_input.lower() in ['/done', '/complete', '/next']:
-                    self.logger.log_user_command(user_input.lower())
-                    phase_complete = True
-                    break
-
-                if user_input.lower() in ['/quit', '/exit', '/abort']:
-                    self.logger.log_user_command(user_input.lower())
-                    raise KeyboardInterrupt("User requested abort")
-
-                # Continue conversation
-                print("\n", end='', flush=True)
-                working_indicator_shown = False
-                await client.query(user_input)
-
-                async for message in client.receive_response():
-                    # Print AssistantMessage content (text and tool usage)
-                    if isinstance(message, AssistantMessage) and message.content:
-                        last_text = ""
-                        for block in message.content:
-                            if hasattr(block, 'text'):
-                                if working_indicator_shown:
-                                    print("\n", end='')  # New line after progress dots
-                                    working_indicator_shown = False
-                                print(block.text, end='', flush=True)
-                                last_text = block.text
-                                if any(p in block.text for p in self.PHASE_COMPLETE_PATTERNS):
-                                    phase_complete = True
-                            elif hasattr(block, 'name'):
-                                # Tool use - show dot as progress indicator
-                                print(".", end='', flush=True)
-                                working_indicator_shown = True
-                        # Ensure message ends with newline for readability
-                        if last_text and not last_text.endswith('\n'):
-                            print()
-
-                    # Capture usage from ResultMessage
-                    if isinstance(message, ResultMessage):
-                        self._record_usage(phase, message)
-
-        return session_id
-
-    def _record_usage(self, phase: int, result: ResultMessage) -> None:
-        """
-        Record usage data from a ResultMessage.
-
-        Args:
-            phase: Phase number (1-4)
-            result: ResultMessage from query()
-        """
-        usage = result.usage or {}
-        input_tokens = usage.get("input_tokens", 0)
-        output_tokens = usage.get("output_tokens", 0)
-        cost_usd = result.total_cost_usd or 0.0
-        duration_ms = result.duration_ms or 0
-        turns = result.num_turns or 0
-
-        self.markers.add_phase_usage(
-            phase=phase,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cost_usd=cost_usd,
-            duration_ms=duration_ms,
-            turns=turns
-        )
+            return await self._session_runner.run_phase_session(
+                client_context_manager=client,
+                initial_prompt=initial_context,
+                phase=phase,
+                signal_patterns=self.PHASE_COMPLETE_PATTERNS,
+                subagents=subagents
+            )
 
     def _mark_phase_complete(self, phase: int) -> None:
-        """Mark a phase as complete in state.json using existing marker methods."""
         if phase == 1:
             self.markers.mark_requirements_complete()
         elif phase == 2:
@@ -688,7 +362,6 @@ class WPOrchestrator:
             self.markers.mark_implementation_complete()
 
     def _display_usage_summary(self) -> None:
-        """Display token usage summary at end of workflow."""
         usage = self.markers.get_all_usage()
 
         print("\n" + "=" * 60)
@@ -736,17 +409,7 @@ class WPOrchestrator:
         doc_path: str = "",
         session_id: Optional[str] = None
     ) -> str:
-        """
-        Ask user to confirm phase completion with edit/regenerate options.
-
-        Args:
-            phase: Phase number
-            doc_path: Path to the phase document
-            session_id: Session ID for regeneration queries
-
-        Returns:
-            Action to take: 'proceed', 'edit', or 'regenerate'
-        """
+        """Ask user to confirm phase completion. Returns 'proceed', 'edit', or 'regenerate'."""
         name = PHASE_NAMES.get(phase, f"Phase {phase}")
 
         print(format_phase_complete_banner(phase, name, doc_path))
@@ -775,21 +438,7 @@ class WPOrchestrator:
                 print("  Ctrl+C - Abort workflow")
 
     async def _generate_and_verify_summary(self, phase: int, session_id: Optional[str] = None) -> str:
-        """
-        Generate a summary for the phase with self-review verification.
-
-        This is a two-step process:
-        1. Generate initial summary
-        2. Ask Claude to self-review and fill any gaps
-
-        Args:
-            phase: Phase number to summarize
-            session_id: Session ID to resume (uses same context as phase session)
-
-        Returns:
-            Verified summary text
-        """
-        # Step 1: Generate initial summary
+        """Generate summary with self-review verification."""
         summary_prompt = ContextBuilder.get_summary_prompt(phase)
         if not summary_prompt:
             return ""
@@ -798,7 +447,6 @@ class WPOrchestrator:
 
         initial_summary = await self._extract_text_response(summary_prompt, session_id=session_id, phase=phase)
 
-        # Step 2: Self-review
         review_prompt = ContextBuilder.get_review_prompt(phase)
         if not review_prompt:
             return initial_summary
@@ -807,19 +455,15 @@ class WPOrchestrator:
 
         review_response = await self._extract_text_response(review_prompt, session_id=session_id, phase=phase)
 
-        # Parse review response
         if review_response.startswith(self.GAPS_FOUND_SIGNAL):
-            # Extract updated summary (everything after the signal line)
             lines = review_response.split('\n', 1)
             if len(lines) > 1:
                 updated_summary = lines[1].strip()
                 print(f"[Supervisor] Summary updated with missing items.")
                 return updated_summary
             else:
-                # Fallback to initial if parsing fails
                 return initial_summary
         elif review_response.startswith(self.SUMMARY_VERIFIED_SIGNAL):
-            # Extract verified summary
             lines = review_response.split('\n', 1)
             if len(lines) > 1:
                 print(f"[Supervisor] Summary verified complete.")
@@ -827,37 +471,8 @@ class WPOrchestrator:
             else:
                 return initial_summary
         else:
-            # If response doesn't follow format, use as-is
-            # (Claude might have just output the summary directly)
             print(f"[Supervisor] Summary captured.")
             return review_response if review_response else initial_summary
-
-    def _check_regeneration_signal(self, text: str) -> Optional[str]:
-        """
-        Check if text contains regeneration completion or cancellation signals.
-
-        Args:
-            text: Text to check for signals
-
-        Returns:
-            SIGNAL_COMPLETE if REGENERATION_COMPLETE found
-            SIGNAL_CANCELED if REGENERATION_CANCELED found
-            None if no signal found
-        """
-        if not text:
-            return None
-
-        # Check for completion first (takes precedence)
-        for pattern in self.REGENERATION_COMPLETE_PATTERNS:
-            if pattern in text:
-                return self.SIGNAL_COMPLETE
-
-        # Check for cancellation
-        for pattern in self.REGENERATION_CANCELED_PATTERNS:
-            if pattern in text:
-                return self.SIGNAL_CANCELED
-
-        return None
 
     async def _run_regeneration_conversation(
         self,
@@ -865,38 +480,14 @@ class WPOrchestrator:
         current_summary: str,
         initial_feedback: str
     ) -> tuple:
-        """
-        Run interactive conversation for summary regeneration.
-
-        Streams Claude's responses to user, handles multiple back-and-forth
-        exchanges, detects completion/cancellation signals.
-
-        Args:
-            phase: Phase number (for usage tracking)
-            current_summary: The current summary being reviewed
-            initial_feedback: User's initial feedback
-
-        Returns:
-            Tuple of (was_completed, session_id)
-            - was_completed: True if REGENERATION_COMPLETE, False if REGENERATION_CANCELED
-            - session_id: Session ID for follow-up summary generation (None if canceled)
-        """
+        """Run interactive regeneration conversation. Returns (was_completed, session_id)."""
         env_vars = self.markers.get_env_vars()
-
-        # Build conversation context
         context = ContextBuilder.build_regeneration_context(
             phase=phase,
             current_summary=current_summary,
             initial_feedback=initial_feedback
         )
 
-        session_id = None
-        conversation_complete = False
-        was_completed = False
-        working_indicator_shown = False
-
-        # Phase 1 is requirements only (no code), use lightweight hooks
-        # Phases 2-4 may involve code changes, use full hooks with build_verify
         hooks_config = (
             self.hooks.get_extraction_hooks_config() if phase == 1
             else self.hooks.get_hooks_config()
@@ -910,118 +501,25 @@ class WPOrchestrator:
                 hooks=hooks_config,
             )
         ) as client:
-            # Send initial context
             await client.query(context)
-
-            # Process initial response
-            async for message in client.receive_response():
-                # Capture session ID
-                if hasattr(message, 'session_id') and message.session_id:
-                    session_id = message.session_id
-
-                if isinstance(message, AssistantMessage) and message.content:
-                    for block in message.content:
-                        if hasattr(block, 'text'):
-                            if working_indicator_shown:
-                                print("\n", end='')
-                                working_indicator_shown = False
-                            print(block.text, end='', flush=True)
-
-                            # Check for signals
-                            signal = self._check_regeneration_signal(block.text)
-                            if signal == self.SIGNAL_COMPLETE:
-                                conversation_complete = True
-                                was_completed = True
-                            elif signal == self.SIGNAL_CANCELED:
-                                conversation_complete = True
-                                was_completed = False
-                        elif hasattr(block, 'name'):
-                            # Tool use - show dot as progress indicator
-                            print(".", end='', flush=True)
-                            working_indicator_shown = True
-
-                if isinstance(message, ResultMessage):
-                    self._record_usage(phase, message)
-
-            # Ensure newline after response
-            print()
-
-            # Interactive loop until conversation completes
-            while not conversation_complete:
-                user_input = read_user_input("\nYou: ").strip()
-
-                if not user_input:
-                    continue
-
-                self.logger.log_user_input(user_input)
-
-                # Check for /done command
-                if user_input.lower() == '/done':
-                    self.logger.log_user_command('/done')
-                    was_completed = True
-                    break
-
-                # Continue conversation
-                print("\n", end='', flush=True)
-                working_indicator_shown = False
-                await client.query(user_input)
-
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage) and message.content:
-                        for block in message.content:
-                            if hasattr(block, 'text'):
-                                if working_indicator_shown:
-                                    print("\n", end='')
-                                    working_indicator_shown = False
-                                print(block.text, end='', flush=True)
-
-                                # Check for signals
-                                signal = self._check_regeneration_signal(block.text)
-                                if signal == self.SIGNAL_COMPLETE:
-                                    conversation_complete = True
-                                    was_completed = True
-                                elif signal == self.SIGNAL_CANCELED:
-                                    conversation_complete = True
-                                    was_completed = False
-                            elif hasattr(block, 'name'):
-                                print(".", end='', flush=True)
-                                working_indicator_shown = True
-
-                    if isinstance(message, ResultMessage):
-                        self._record_usage(phase, message)
-
-                # Ensure newline after response
-                print()
-
-        return (was_completed, session_id if was_completed else None)
+            return await self._session_runner.run_regeneration_session(
+                client_context_manager=client,
+                initial_prompt=context,
+                phase=phase,
+                complete_patterns=self.REGENERATION_COMPLETE_PATTERNS,
+                canceled_patterns=self.REGENERATION_CANCELED_PATTERNS
+            )
 
     async def _regenerate_summary(
         self,
         phase: int,
         session_id: Optional[str] = None
     ) -> str:
-        """
-        Regenerate summary through interactive conversation with user.
+        """Regenerate summary via interactive conversation. Returns original if canceled."""
+        _ = session_id  # Kept for API compatibility
 
-        Starts a fresh session (not resuming phase session) with:
-        - Current summary as context
-        - User's initial feedback
-        - Interactive dialogue until user is satisfied or cancels
-
-        Args:
-            phase: Phase number
-            session_id: Deprecated - kept for API compatibility
-
-        Returns:
-            Regenerated summary text, or original if canceled
-        """
-        # Silence unused parameter warning - kept for API compatibility
-        _ = session_id
-
-        # Get current summary for reference
         current_summary = self.markers.get_phase_document(phase)
 
-        # Get user feedback
         print("\n[Supervisor] What changes would you like to make?")
         print("             (Describe what to add, remove, or modify)")
         feedback = read_user_input("\nYour feedback: ").strip()
@@ -1034,7 +532,6 @@ class WPOrchestrator:
 
         print(f"\n[Supervisor] Starting revision discussion...\n")
 
-        # Run interactive conversation
         was_completed, conversation_session_id = await self._run_regeneration_conversation(
             phase=phase,
             current_summary=current_summary,
@@ -1045,7 +542,6 @@ class WPOrchestrator:
             print(f"\n[Supervisor] Keeping original summary.")
             return current_summary
 
-        # Generate final summary using the conversation context
         print(f"\n[Supervisor] Generating final summary...")
 
         final_summary_prompt = ContextBuilder.get_regeneration_summary_prompt()
@@ -1069,64 +565,32 @@ class WPOrchestrator:
         session_id: Optional[str] = None,
         phase: Optional[int] = None
     ) -> str:
-        """
-        Send a query and collect the text response using ClaudeSDKClient.
-
-        Args:
-            prompt: The prompt to send
-            timeout: Maximum time to wait in seconds (default 5 minutes)
-            session_id: Optional session ID to resume conversation
-            phase: Optional phase number for usage tracking
-
-        Returns:
-            Collected text response
-        """
-        text_parts: List[str] = []
+        """Send a query and collect the text response."""
         env_vars = self.markers.get_env_vars()
 
-        async def collect_response() -> None:
-            # Use lightweight hooks (no build_verify) for internal queries
-            async with ClaudeSDKClient(
-                options=ClaudeAgentOptions(
-                    cwd=str(self.working_dir),
-                    env=env_vars,
-                    resume=session_id,
-                    permission_mode="bypassPermissions",
-                    hooks=self.hooks.get_extraction_hooks_config(),
-                )
-            ) as client:
-                # Send prompt via query
-                await client.query(prompt)
-
-                # Collect response
-                async for message in client.receive_response():
-                    if isinstance(message, AssistantMessage) and message.content:
-                        for block in message.content:
-                            if hasattr(block, 'text'):
-                                text_parts.append(block.text)
-
-                    # Capture usage from ResultMessage
-                    if isinstance(message, ResultMessage) and phase:
-                        self._record_usage(phase, message)
-
-        try:
-            await asyncio.wait_for(collect_response(), timeout=timeout)
-        except asyncio.TimeoutError:
-            print(f"\n[Supervisor] Query timed out after {timeout}s", file=sys.stderr)
-
-        return ''.join(text_parts)
+        async with ClaudeSDKClient(
+            options=ClaudeAgentOptions(
+                cwd=str(self.working_dir),
+                env=env_vars,
+                resume=session_id,
+                permission_mode="bypassPermissions",
+                hooks=self.hooks.get_extraction_hooks_config(),
+            )
+        ) as client:
+            await client.query(prompt)
+            return await self._session_runner.extract_text(
+                client_context_manager=client,
+                prompt=prompt,
+                phase=phase,
+                session_id=session_id,
+                timeout=timeout
+            )
 
 
 async def run_supervisor(
     working_dir: Optional[str] = None,
     task: Optional[str] = None,
 ) -> None:
-    """
-    Run the Waypoints supervisor.
-
-    Args:
-        working_dir: Project working directory
-        task: Initial task description
-    """
+    """Entry point for the Waypoints supervisor."""
     orchestrator = WPOrchestrator(working_dir=working_dir)
     await orchestrator.run(initial_task=task)

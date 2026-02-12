@@ -9,8 +9,9 @@ from previous phases and project knowledge context.
 from typing import Optional
 
 from .templates import (
-    PHASE1_CONTEXT,
+    PHASE1_SUPERVISOR_FALLBACK_CONTEXT,
     PHASE1_TASK_SECTION,
+    PHASE1_SUPERVISOR_INSTRUCTIONS,
     PHASE2_CONTEXT,
     PHASE3_CONTEXT,
     PHASE4_CONTEXT,
@@ -25,7 +26,6 @@ from .templates import (
     REGENERATION_FINAL_SUMMARY_PROMPT,
     KNOWLEDGE_EXTRACTION_PROMPT,
 )
-from .subagents import PHASE1_SUPERVISOR_INSTRUCTIONS
 
 
 class ContextBuilder:
@@ -70,8 +70,8 @@ class ContextBuilder:
             if task_section:
                 context = f"{context}\n\n## Initial Task\n{user_task}\n"
         else:
-            # Fallback to standard Phase 1 context (CLI mode behavior)
-            context = PHASE1_CONTEXT.format(task_section=task_section)
+            # Supervisor fallback when subagent building fails
+            context = PHASE1_SUPERVISOR_FALLBACK_CONTEXT.format(task_section=task_section)
 
         # Inject knowledge context if provided
         if knowledge_context:
