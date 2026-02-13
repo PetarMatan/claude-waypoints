@@ -366,6 +366,14 @@ You MUST wait for the user to answer ALL your questions before signaling complet
 Only emit the signal AFTER you have received and processed the user's responses and
 have no remaining questions or ambiguities.
 
+## Output Style
+- Be concise. The user sees everything you print — minimize noise.
+- When spawning subagents, do NOT echo the full task prompts or repeat the requirements.
+  Just say a single short line like "Exploring codebase in parallel..." and spawn them.
+- Keep synthesis to structured bullet points, not verbose paragraphs.
+- Skip narrating what you're about to do — just do it.
+- For follow-up exploration, don't explain what you're looking for — just look and report findings.
+
 ## Important
 - Delegate bulk exploration to subagents — do NOT replicate their work
 - You MAY do targeted follow-up exploration for gaps the subagents missed
