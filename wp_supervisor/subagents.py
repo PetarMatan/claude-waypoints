@@ -31,7 +31,8 @@ BUSINESS_LOGIC_EXPLORER = "business-logic-explorer"
 DEPENDENCIES_EXPLORER = "dependencies-explorer"
 TEST_USECASE_EXPLORER = "test-usecase-explorer"
 
-# Read-only tools — phase guards may not propagate to subagents
+# Exploration tools for subagents. Bash is included for commands like
+# git log or directory listing; write prevention is instruction-based, not tool-enforced.
 EXPLORATION_TOOLS = ["Read", "Grep", "Glob", "Bash"]
 
 
