@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AgentDefinition mock** - Replaced MagicMock with proper dataclass to prevent cross-test pollution
 
 ### Changed
+- **Phase 1 subagents now use Haiku model** - Reduces Phase 1 cost by ~75% (from ~$7 to ~$2) with no quality loss for exploration tasks
 - Split PHASE1_CONTEXT into PHASE1_SUPERVISOR_FALLBACK_CONTEXT for CLI/supervisor template separation
 - Added refactoring-aware guidance to Phase 3 template for delegation/integration tests
 - Removed backward-compatibility re-exports from WPOrchestrator

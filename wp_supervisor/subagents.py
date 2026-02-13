@@ -109,7 +109,8 @@ class SubagentBuilder:
         return AgentDefinition(
             description=BUSINESS_LOGIC_DESCRIPTION,
             prompt=prompt,
-            tools=EXPLORATION_TOOLS
+            tools=EXPLORATION_TOOLS,
+            model="haiku"
         )
 
     @staticmethod
@@ -124,7 +125,8 @@ class SubagentBuilder:
         return AgentDefinition(
             description=DEPENDENCIES_DESCRIPTION,
             prompt=prompt,
-            tools=EXPLORATION_TOOLS
+            tools=EXPLORATION_TOOLS,
+            model="haiku"
         )
 
     @staticmethod
@@ -139,7 +141,8 @@ class SubagentBuilder:
         return AgentDefinition(
             description=TEST_USECASE_DESCRIPTION,
             prompt=prompt,
-            tools=EXPLORATION_TOOLS
+            tools=EXPLORATION_TOOLS,
+            model="haiku"
         )
 
     @staticmethod
@@ -154,5 +157,6 @@ class SubagentBuilder:
         return AgentDefinition(
             description=ARCHITECTURE_DESCRIPTION,
             prompt=prompt,
-            tools=EXPLORATION_TOOLS
+            tools=EXPLORATION_TOOLS,
+            model="haiku"
         )
