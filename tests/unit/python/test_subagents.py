@@ -6,7 +6,7 @@ Tests cover:
 - [REQ-1] Three specialized subagents for Phase 1 parallel exploration
 - [REQ-2] Subagents built as AgentDefinition for SDK's agents parameter
 - [REQ-3] Subagents have full tool access (not restricted)
-- [REQ-7] Subagent instructions are hybrid: static base + dynamic task context
+- [REQ-7] Subagent instructions are hybrid: static base + dynamic knowledge context
 - [REQ-8] Each subagent has clear instructions about its specific concern
 - [REQ-9] Subagents receive full project knowledge context
 - [REQ-10] Parent session context instructs delegation to subagents
@@ -92,25 +92,13 @@ class TestSubagentInstructions:
         """Business logic instructions should have knowledge context placeholder."""
         assert "{knowledge_context}" in BUSINESS_LOGIC_INSTRUCTIONS
 
-    def test_business_logic_instructions_has_task_placeholder(self):
-        """Business logic instructions should have task context placeholder."""
-        assert "{task_context}" in BUSINESS_LOGIC_INSTRUCTIONS
-
     def test_dependencies_instructions_has_knowledge_placeholder(self):
         """Dependencies instructions should have knowledge context placeholder."""
         assert "{knowledge_context}" in DEPENDENCIES_INSTRUCTIONS
 
-    def test_dependencies_instructions_has_task_placeholder(self):
-        """Dependencies instructions should have task context placeholder."""
-        assert "{task_context}" in DEPENDENCIES_INSTRUCTIONS
-
     def test_test_usecase_instructions_has_knowledge_placeholder(self):
         """Test/use case instructions should have knowledge context placeholder."""
         assert "{knowledge_context}" in TEST_USECASE_INSTRUCTIONS
-
-    def test_test_usecase_instructions_has_task_placeholder(self):
-        """Test/use case instructions should have task context placeholder."""
-        assert "{task_context}" in TEST_USECASE_INSTRUCTIONS
 
     def test_business_logic_instructions_describes_role(self):
         """Business logic instructions should describe the explorer's role."""
@@ -166,7 +154,6 @@ class TestSubagentBuilderBuildExplorationAgents:
         """Should return exactly three exploration agents."""
         # when
         agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build user authentication",
             knowledge_context="# Architecture\nService-based"
         )
 
@@ -176,9 +163,7 @@ class TestSubagentBuilderBuildExplorationAgents:
     def test_build_exploration_agents_returns_dict(self):
         """Should return a dictionary mapping names to AgentDefinition."""
         # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build user authentication"
-        )
+        agents = SubagentBuilder.build_exploration_agents()
 
         # then
         assert isinstance(agents, dict)
@@ -186,9 +171,7 @@ class TestSubagentBuilderBuildExplorationAgents:
     def test_build_exploration_agents_contains_business_logic_key(self):
         """Should contain business-logic-explorer key."""
         # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build feature"
-        )
+        agents = SubagentBuilder.build_exploration_agents()
 
         # then
         assert BUSINESS_LOGIC_EXPLORER in agents
@@ -196,9 +179,7 @@ class TestSubagentBuilderBuildExplorationAgents:
     def test_build_exploration_agents_contains_dependencies_key(self):
         """Should contain dependencies-explorer key."""
         # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build feature"
-        )
+        agents = SubagentBuilder.build_exploration_agents()
 
         # then
         assert DEPENDENCIES_EXPLORER in agents
@@ -206,24 +187,10 @@ class TestSubagentBuilderBuildExplorationAgents:
     def test_build_exploration_agents_contains_test_usecase_key(self):
         """Should contain test-usecase-explorer key."""
         # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build feature"
-        )
+        agents = SubagentBuilder.build_exploration_agents()
 
         # then
         assert TEST_USECASE_EXPLORER in agents
-
-    def test_build_exploration_agents_injects_task_context(self):
-        """Should inject task context into all agent prompts."""
-        # given
-        task = "Implement OAuth2 login with Google"
-
-        # when
-        agents = SubagentBuilder.build_exploration_agents(task_context=task)
-
-        # then
-        for name, agent in agents.items():
-            assert task in agent.prompt, f"{name} should have task context in prompt"
 
     def test_build_exploration_agents_injects_knowledge_context(self):
         """Should inject knowledge context into all agent prompts."""
@@ -232,7 +199,6 @@ class TestSubagentBuilderBuildExplorationAgents:
 
         # when
         agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build feature",
             knowledge_context=knowledge
         )
 
@@ -244,7 +210,6 @@ class TestSubagentBuilderBuildExplorationAgents:
         """Should work with empty knowledge context."""
         # when
         agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build feature",
             knowledge_context=""
         )
 
@@ -257,9 +222,7 @@ class TestSubagentBuilderBuildExplorationAgents:
     def test_build_exploration_agents_read_only_tools(self):
         """Subagents should have read-only tool access to prevent file writes."""
         # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build feature"
-        )
+        agents = SubagentBuilder.build_exploration_agents()
 
         # then
         for name, agent in agents.items():
@@ -270,9 +233,7 @@ class TestSubagentBuilderBuildExplorationAgents:
     def test_build_exploration_agents_have_descriptions(self):
         """All agents should have descriptions for Claude's tool selection."""
         # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context="Build feature"
-        )
+        agents = SubagentBuilder.build_exploration_agents()
 
         # then
         for name, agent in agents.items():
@@ -286,9 +247,7 @@ class TestSubagentBuilderBuildBusinessLogicAgent:
     def test_returns_agent_definition(self):
         """Should return an AgentDefinition instance."""
         # when
-        agent = SubagentBuilder.build_business_logic_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_business_logic_agent()
 
         # then
         assert hasattr(agent, 'description')
@@ -297,9 +256,7 @@ class TestSubagentBuilderBuildBusinessLogicAgent:
     def test_has_description(self):
         """Should have a description for Claude's tool selection."""
         # when
-        agent = SubagentBuilder.build_business_logic_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_business_logic_agent()
 
         # then
         assert len(agent.description) > 0
@@ -307,24 +264,11 @@ class TestSubagentBuilderBuildBusinessLogicAgent:
     def test_description_mentions_patterns_or_logic(self):
         """Description should mention patterns, implementation, or logic."""
         # when
-        agent = SubagentBuilder.build_business_logic_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_business_logic_agent()
 
         # then
         desc = agent.description.lower()
         assert "pattern" in desc or "implementation" in desc or "logic" in desc
-
-    def test_injects_task_context(self):
-        """Should inject task context into prompt."""
-        # given
-        task = "Add rate limiting to API endpoints"
-
-        # when
-        agent = SubagentBuilder.build_business_logic_agent(task_context=task)
-
-        # then
-        assert task in agent.prompt
 
     def test_injects_knowledge_context(self):
         """Should inject knowledge context into prompt."""
@@ -333,7 +277,6 @@ class TestSubagentBuilderBuildBusinessLogicAgent:
 
         # when
         agent = SubagentBuilder.build_business_logic_agent(
-            task_context="Build feature",
             knowledge_context=knowledge
         )
 
@@ -343,9 +286,7 @@ class TestSubagentBuilderBuildBusinessLogicAgent:
     def test_has_read_only_tools(self):
         """Should have read-only tools to prevent file writes during exploration."""
         # when
-        agent = SubagentBuilder.build_business_logic_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_business_logic_agent()
 
         # then
         assert agent.tools == EXPLORATION_TOOLS
@@ -357,9 +298,7 @@ class TestSubagentBuilderBuildDependenciesAgent:
     def test_returns_agent_definition(self):
         """Should return an AgentDefinition instance."""
         # when
-        agent = SubagentBuilder.build_dependencies_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_dependencies_agent()
 
         # then
         assert hasattr(agent, 'description')
@@ -368,9 +307,7 @@ class TestSubagentBuilderBuildDependenciesAgent:
     def test_has_description(self):
         """Should have a description for Claude's tool selection."""
         # when
-        agent = SubagentBuilder.build_dependencies_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_dependencies_agent()
 
         # then
         assert len(agent.description) > 0
@@ -378,24 +315,11 @@ class TestSubagentBuilderBuildDependenciesAgent:
     def test_description_mentions_dependencies_or_integration(self):
         """Description should mention dependencies or integrations."""
         # when
-        agent = SubagentBuilder.build_dependencies_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_dependencies_agent()
 
         # then
         desc = agent.description.lower()
         assert "dependencies" in desc or "integration" in desc
-
-    def test_injects_task_context(self):
-        """Should inject task context into prompt."""
-        # given
-        task = "Integrate with Stripe payment API"
-
-        # when
-        agent = SubagentBuilder.build_dependencies_agent(task_context=task)
-
-        # then
-        assert task in agent.prompt
 
     def test_injects_knowledge_context(self):
         """Should inject knowledge context into prompt."""
@@ -404,7 +328,6 @@ class TestSubagentBuilderBuildDependenciesAgent:
 
         # when
         agent = SubagentBuilder.build_dependencies_agent(
-            task_context="Build feature",
             knowledge_context=knowledge
         )
 
@@ -414,9 +337,7 @@ class TestSubagentBuilderBuildDependenciesAgent:
     def test_has_read_only_tools(self):
         """Should have read-only tools to prevent file writes during exploration."""
         # when
-        agent = SubagentBuilder.build_dependencies_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_dependencies_agent()
 
         # then
         assert agent.tools == EXPLORATION_TOOLS
@@ -428,9 +349,7 @@ class TestSubagentBuilderBuildTestUsecaseAgent:
     def test_returns_agent_definition(self):
         """Should return an AgentDefinition instance."""
         # when
-        agent = SubagentBuilder.build_test_usecase_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_test_usecase_agent()
 
         # then
         assert hasattr(agent, 'description')
@@ -439,9 +358,7 @@ class TestSubagentBuilderBuildTestUsecaseAgent:
     def test_has_description(self):
         """Should have a description for Claude's tool selection."""
         # when
-        agent = SubagentBuilder.build_test_usecase_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_test_usecase_agent()
 
         # then
         assert len(agent.description) > 0
@@ -449,24 +366,11 @@ class TestSubagentBuilderBuildTestUsecaseAgent:
     def test_description_mentions_tests(self):
         """Description should mention tests."""
         # when
-        agent = SubagentBuilder.build_test_usecase_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_test_usecase_agent()
 
         # then
         desc = agent.description.lower()
         assert "test" in desc
-
-    def test_injects_task_context(self):
-        """Should inject task context into prompt."""
-        # given
-        task = "Add unit tests for user service"
-
-        # when
-        agent = SubagentBuilder.build_test_usecase_agent(task_context=task)
-
-        # then
-        assert task in agent.prompt
 
     def test_injects_knowledge_context(self):
         """Should inject knowledge context into prompt."""
@@ -475,7 +379,6 @@ class TestSubagentBuilderBuildTestUsecaseAgent:
 
         # when
         agent = SubagentBuilder.build_test_usecase_agent(
-            task_context="Build feature",
             knowledge_context=knowledge
         )
 
@@ -485,9 +388,7 @@ class TestSubagentBuilderBuildTestUsecaseAgent:
     def test_has_read_only_tools(self):
         """Should have read-only tools to prevent file writes during exploration."""
         # when
-        agent = SubagentBuilder.build_test_usecase_agent(
-            task_context="Build feature"
-        )
+        agent = SubagentBuilder.build_test_usecase_agent()
 
         # then
         assert agent.tools == EXPLORATION_TOOLS
@@ -538,11 +439,10 @@ class TestPhase1SupervisorInstructions:
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
-    def test_empty_task_context_handled(self):
-        """Should handle empty task context gracefully."""
+    def test_empty_knowledge_context_handled(self):
+        """Should handle empty knowledge context gracefully."""
         # when
         agents = SubagentBuilder.build_exploration_agents(
-            task_context="",
             knowledge_context=""
         )
 
@@ -551,62 +451,7 @@ class TestEdgeCases:
         # Should still have valid prompts
         for agent in agents.values():
             assert len(agent.prompt) > 0
-
-    def test_very_long_task_context_handled(self):
-        """Should handle very long task context."""
-        # given
-        long_task = "Build a complex feature with " + "many requirements " * 1000
-
-        # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context=long_task
-        )
-
-        # then
-        for agent in agents.values():
-            assert long_task in agent.prompt
-
-    def test_special_characters_in_task_context(self):
-        """Should handle special characters in task context."""
-        # given
-        task_with_specials = "Build API with {templates} and $variables and `code`"
-
-        # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context=task_with_specials
-        )
-
-        # then
-        for agent in agents.values():
-            assert task_with_specials in agent.prompt
-
-    def test_unicode_in_task_context(self):
-        """Should handle unicode in task context."""
-        # given
-        unicode_task = "Build feature for internationalization: 日本語, 中文, 한국어"
-
-        # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context=unicode_task
-        )
-
-        # then
-        for agent in agents.values():
-            assert unicode_task in agent.prompt
-
-    def test_newlines_in_task_context_preserved(self):
-        """Should preserve newlines in task context."""
-        # given
-        multiline_task = "Feature requirements:\n1. First item\n2. Second item\n3. Third item"
-
-        # when
-        agents = SubagentBuilder.build_exploration_agents(
-            task_context=multiline_task
-        )
-
-        # then
-        for agent in agents.values():
-            assert multiline_task in agent.prompt
+            assert "{knowledge_context}" not in agent.prompt
 
 
 class TestSubagentBuilderConsistency:
@@ -615,16 +460,13 @@ class TestSubagentBuilderConsistency:
     def test_individual_and_bulk_builders_produce_same_business_logic_agent(self):
         """Individual and bulk builders should produce equivalent business logic agent."""
         # given
-        task = "Build feature"
         knowledge = "# Architecture\nTest"
 
         # when
         bulk_agents = SubagentBuilder.build_exploration_agents(
-            task_context=task,
             knowledge_context=knowledge
         )
         individual_agent = SubagentBuilder.build_business_logic_agent(
-            task_context=task,
             knowledge_context=knowledge
         )
 
@@ -637,16 +479,13 @@ class TestSubagentBuilderConsistency:
     def test_individual_and_bulk_builders_produce_same_dependencies_agent(self):
         """Individual and bulk builders should produce equivalent dependencies agent."""
         # given
-        task = "Build feature"
         knowledge = "# Architecture\nTest"
 
         # when
         bulk_agents = SubagentBuilder.build_exploration_agents(
-            task_context=task,
             knowledge_context=knowledge
         )
         individual_agent = SubagentBuilder.build_dependencies_agent(
-            task_context=task,
             knowledge_context=knowledge
         )
 
@@ -659,16 +498,13 @@ class TestSubagentBuilderConsistency:
     def test_individual_and_bulk_builders_produce_same_test_usecase_agent(self):
         """Individual and bulk builders should produce equivalent test/usecase agent."""
         # given
-        task = "Build feature"
         knowledge = "# Architecture\nTest"
 
         # when
         bulk_agents = SubagentBuilder.build_exploration_agents(
-            task_context=task,
             knowledge_context=knowledge
         )
         individual_agent = SubagentBuilder.build_test_usecase_agent(
-            task_context=task,
             knowledge_context=knowledge
         )
 

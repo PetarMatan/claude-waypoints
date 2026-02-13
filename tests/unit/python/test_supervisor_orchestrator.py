@@ -1787,9 +1787,7 @@ class TestBuildExplorationSubagents:
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
                 # when
-                agents = orchestrator._build_exploration_subagents(
-                    task_context="Build user authentication"
-                )
+                agents = orchestrator._build_exploration_subagents()
 
                 # then
                 assert len(agents) == 3
@@ -1803,9 +1801,7 @@ class TestBuildExplorationSubagents:
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
                 # when
-                agents = orchestrator._build_exploration_subagents(
-                    task_context="Build feature"
-                )
+                agents = orchestrator._build_exploration_subagents()
 
                 # then
                 assert isinstance(agents, dict)
@@ -1820,34 +1816,14 @@ class TestBuildExplorationSubagents:
                 orchestrator._knowledge_context = "# Architecture\nEvent-driven system"
 
                 # when
-                agents = orchestrator._build_exploration_subagents(
-                    task_context="Build feature"
-                )
+                agents = orchestrator._build_exploration_subagents()
 
                 # then
                 for agent in agents.values():
                     assert "Event-driven system" in agent.prompt
 
-    def test_build_exploration_subagents_includes_task_context(self):
-        """Should include task context in all subagent prompts."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                task = "Implement OAuth2 with Google"
-
-                # when
-                agents = orchestrator._build_exploration_subagents(
-                    task_context=task
-                )
-
-                # then
-                for agent in agents.values():
-                    assert task in agent.prompt
-
-    def test_build_exploration_subagents_with_empty_task(self):
-        """Should handle empty task context."""
+    def test_build_exploration_subagents_with_no_args(self):
+        """Should build subagents when called with no arguments."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -1855,9 +1831,7 @@ class TestBuildExplorationSubagents:
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
                 # when - should not raise
-                agents = orchestrator._build_exploration_subagents(
-                    task_context=""
-                )
+                agents = orchestrator._build_exploration_subagents()
 
                 # then
                 assert len(agents) == 3
@@ -1877,9 +1851,9 @@ class TestSubagentIntegrationWithPhaseSession:
                 build_subagents_called = []
 
                 original_build = orchestrator._build_exploration_subagents
-                def capture_build(task_context):
-                    build_subagents_called.append(task_context)
-                    return original_build(task_context)
+                def capture_build():
+                    build_subagents_called.append(True)
+                    return original_build()
 
                 orchestrator._build_exploration_subagents = capture_build
 
@@ -2037,7 +2011,7 @@ class TestSubagentErrorHandling:
 
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
-                def failing_build(task_context):
+                def failing_build():
                     raise RuntimeError("Subagent build failed")
 
                 orchestrator._build_exploration_subagents = failing_build
@@ -2064,83 +2038,6 @@ class TestSubagentErrorHandling:
                 # then - session was called without subagents (fallback)
                 assert len(captured_subagents) == 1
                 assert captured_subagents[0] is None
-
-    def test_phase1_builds_subagents_with_empty_task_context(self):
-        """Phase 1 should build subagents with empty task context.
-
-        Dynamic requirements are provided by the parent session when it
-        invokes subagents via Task tool after gathering requirements from user.
-        """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-
-                captured_task_context = []
-
-                def capture_build(task_context):
-                    captured_task_context.append(task_context)
-                    return {"test": MagicMock()}
-
-                orchestrator._build_exploration_subagents = capture_build
-
-                async def mock_session(*args, **kwargs):
-                    return None
-
-                async def mock_summary(*args, **kwargs):
-                    return "# Summary"
-
-                async def mock_confirm(*args, **kwargs):
-                    return 'proceed'
-
-                orchestrator._run_phase_session = mock_session
-                orchestrator._generate_and_verify_summary = mock_summary
-                orchestrator._confirm_phase_completion = mock_confirm
-
-                # when
-                run_async(orchestrator._run_phase(1, initial_task="Build REST API"))
-
-                # then - task_context should be empty (requirements come dynamically)
-                assert len(captured_task_context) == 1
-                assert captured_task_context[0] == ""
-
-    def test_phase1_handles_none_initial_task(self):
-        """Phase 1 should build subagents with empty task context even when initial_task is None."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-
-                captured_task_context = []
-
-                def capture_build(task_context):
-                    captured_task_context.append(task_context)
-                    return {"test": MagicMock()}
-
-                orchestrator._build_exploration_subagents = capture_build
-
-                async def mock_session(*args, **kwargs):
-                    return None
-
-                async def mock_summary(*args, **kwargs):
-                    return "# Summary"
-
-                async def mock_confirm(*args, **kwargs):
-                    return 'proceed'
-
-                orchestrator._run_phase_session = mock_session
-                orchestrator._generate_and_verify_summary = mock_summary
-                orchestrator._confirm_phase_completion = mock_confirm
-
-                # when
-                run_async(orchestrator._run_phase(1, initial_task=None))
-
-                # then
-                assert len(captured_task_context) == 1
-                assert captured_task_context[0] == ""
-
 
 class TestPhase1SupervisorModeContext:
     """Tests for Phase 1 context in supervisor mode."""

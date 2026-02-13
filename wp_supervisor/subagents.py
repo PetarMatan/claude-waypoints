@@ -63,39 +63,36 @@ class SubagentBuilder:
     """Builds AgentDefinition instances for Phase 1 parallel exploration."""
 
     @staticmethod
+    def _format_knowledge_section(knowledge_context: str) -> str:
+        """Format knowledge context into a prompt section."""
+        if knowledge_context:
+            return f"## Project Knowledge\n{knowledge_context}"
+        return ""
+
+    @staticmethod
     def build_exploration_agents(
-        task_context: str,
         knowledge_context: str = ""
     ) -> Dict[str, AgentDefinition]:
         """Build all three exploration subagents with injected context."""
         return {
             BUSINESS_LOGIC_EXPLORER: SubagentBuilder.build_business_logic_agent(
-                task_context=task_context,
                 knowledge_context=knowledge_context
             ),
             DEPENDENCIES_EXPLORER: SubagentBuilder.build_dependencies_agent(
-                task_context=task_context,
                 knowledge_context=knowledge_context
             ),
             TEST_USECASE_EXPLORER: SubagentBuilder.build_test_usecase_agent(
-                task_context=task_context,
                 knowledge_context=knowledge_context
             ),
         }
 
     @staticmethod
     def build_business_logic_agent(
-        task_context: str,
         knowledge_context: str = ""
     ) -> AgentDefinition:
         """Build the Business Logic Explorer subagent."""
-        knowledge_section = ""
-        if knowledge_context:
-            knowledge_section = f"## Project Knowledge\n{knowledge_context}"
-
         prompt = BUSINESS_LOGIC_INSTRUCTIONS.format(
-            task_context=task_context,
-            knowledge_context=knowledge_section
+            knowledge_context=SubagentBuilder._format_knowledge_section(knowledge_context)
         )
 
         return AgentDefinition(
@@ -106,17 +103,11 @@ class SubagentBuilder:
 
     @staticmethod
     def build_dependencies_agent(
-        task_context: str,
         knowledge_context: str = ""
     ) -> AgentDefinition:
         """Build the Dependencies/Integrations Explorer subagent."""
-        knowledge_section = ""
-        if knowledge_context:
-            knowledge_section = f"## Project Knowledge\n{knowledge_context}"
-
         prompt = DEPENDENCIES_INSTRUCTIONS.format(
-            task_context=task_context,
-            knowledge_context=knowledge_section
+            knowledge_context=SubagentBuilder._format_knowledge_section(knowledge_context)
         )
 
         return AgentDefinition(
@@ -127,17 +118,11 @@ class SubagentBuilder:
 
     @staticmethod
     def build_test_usecase_agent(
-        task_context: str,
         knowledge_context: str = ""
     ) -> AgentDefinition:
         """Build the Test/Use Case Explorer subagent."""
-        knowledge_section = ""
-        if knowledge_context:
-            knowledge_section = f"## Project Knowledge\n{knowledge_context}"
-
         prompt = TEST_USECASE_INSTRUCTIONS.format(
-            task_context=task_context,
-            knowledge_context=knowledge_section
+            knowledge_context=SubagentBuilder._format_knowledge_section(knowledge_context)
         )
 
         return AgentDefinition(

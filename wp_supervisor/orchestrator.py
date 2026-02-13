@@ -235,13 +235,9 @@ class WPOrchestrator:
 
         return context
 
-    def _build_exploration_subagents(
-        self,
-        task_context: str
-    ) -> Dict[str, AgentDefinition]:
+    def _build_exploration_subagents(self) -> Dict[str, AgentDefinition]:
         """Build Phase 1 exploration subagent definitions."""
         return SubagentBuilder.build_exploration_agents(
-            task_context=task_context,
             knowledge_context=self._knowledge_context
         )
 
@@ -257,7 +253,7 @@ class WPOrchestrator:
         delegate_exploration = True
         if phase == 1:
             try:
-                subagents = self._build_exploration_subagents(task_context="")
+                subagents = self._build_exploration_subagents()
             except Exception as e:
                 self.logger.log_event(
                     "SUBAGENTS",

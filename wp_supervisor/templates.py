@@ -62,9 +62,6 @@ Provide a concise summary of:
 - Identify potential reuse opportunities
 
 {knowledge_context}
-
-## User Requirements Context
-{task_context}
 """
 
 DEPENDENCIES_INSTRUCTIONS = """# Dependencies & Integrations Explorer
@@ -93,9 +90,6 @@ Provide a concise summary of:
 - Document integration patterns
 
 {knowledge_context}
-
-## User Requirements Context
-{task_context}
 """
 
 TEST_USECASE_INSTRUCTIONS = """# Test & Use Case Explorer
@@ -124,9 +118,6 @@ Provide a concise summary of:
 - Document any testing constraints or requirements
 
 {knowledge_context}
-
-## User Requirements Context
-{task_context}
 """
 
 
