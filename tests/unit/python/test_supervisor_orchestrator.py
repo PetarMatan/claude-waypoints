@@ -312,19 +312,16 @@ class TestOrchestratorSignals:
     """Tests for orchestrator signal constants."""
 
     def test_phase_complete_signal_exists(self):
-        from wp_supervisor.orchestrator import WPOrchestrator
-        assert hasattr(WPOrchestrator, 'PHASE_COMPLETE_SIGNAL')
-        assert WPOrchestrator.PHASE_COMPLETE_SIGNAL == "---PHASE_COMPLETE---"
+        from wp_supervisor.orchestrator import PHASE_COMPLETE_SIGNAL
+        assert PHASE_COMPLETE_SIGNAL == "---PHASE_COMPLETE---"
 
     def test_summary_verified_signal_exists(self):
-        from wp_supervisor.orchestrator import WPOrchestrator
-        assert hasattr(WPOrchestrator, 'SUMMARY_VERIFIED_SIGNAL')
-        assert WPOrchestrator.SUMMARY_VERIFIED_SIGNAL == "SUMMARY_VERIFIED"
+        from wp_supervisor.orchestrator import SUMMARY_VERIFIED_SIGNAL
+        assert SUMMARY_VERIFIED_SIGNAL == "SUMMARY_VERIFIED"
 
     def test_gaps_found_signal_exists(self):
-        from wp_supervisor.orchestrator import WPOrchestrator
-        assert hasattr(WPOrchestrator, 'GAPS_FOUND_SIGNAL')
-        assert WPOrchestrator.GAPS_FOUND_SIGNAL == "GAPS_FOUND"
+        from wp_supervisor.orchestrator import GAPS_FOUND_SIGNAL
+        assert GAPS_FOUND_SIGNAL == "GAPS_FOUND"
 
     def test_phase_names_dict_exists(self):
         from wp_supervisor.templates import PHASE_NAMES
@@ -2152,65 +2149,20 @@ class TestOrchestratorSessionIntegration:
     """
     Tests for orchestrator integration with session.py module.
 
-    These tests verify that WPOrchestrator correctly imports and uses
-    functionality from session.py per the Phase 2 interfaces:
-    - Signal constants re-exported from session.py [TEST-3]
-    - read_user_input imported from session.py [TEST-2]
+    Verifies that WPOrchestrator correctly imports and uses
+    functionality from session.py:
+    - read_user_input imported from session.py
+    - SessionRunner imported from session.py
     """
 
     def test_orchestrator_imports_read_user_input_from_session(self):
-        """read_user_input should be imported from session.py [REQ-14, TEST-2]."""
+        """read_user_input should be imported from session.py."""
         # given
         from wp_supervisor.orchestrator import read_user_input
         from wp_supervisor.session import read_user_input as session_read_user_input
 
         # then - both should be the same function
         assert read_user_input is session_read_user_input
-
-    def test_orchestrator_re_exports_phase_complete_patterns(self):
-        """WPOrchestrator.PHASE_COMPLETE_PATTERNS should match session.py patterns [TEST-3]."""
-        # given
-        from wp_supervisor.orchestrator import WPOrchestrator
-        from wp_supervisor.session import PHASE_COMPLETE_PATTERNS
-
-        # then
-        assert WPOrchestrator.PHASE_COMPLETE_PATTERNS == PHASE_COMPLETE_PATTERNS
-
-    def test_orchestrator_re_exports_regeneration_complete_patterns(self):
-        """WPOrchestrator.REGENERATION_COMPLETE_PATTERNS should match session.py patterns [TEST-3]."""
-        # given
-        from wp_supervisor.orchestrator import WPOrchestrator
-        from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS
-
-        # then
-        assert WPOrchestrator.REGENERATION_COMPLETE_PATTERNS == REGENERATION_COMPLETE_PATTERNS
-
-    def test_orchestrator_re_exports_regeneration_canceled_patterns(self):
-        """WPOrchestrator.REGENERATION_CANCELED_PATTERNS should match session.py patterns [TEST-3]."""
-        # given
-        from wp_supervisor.orchestrator import WPOrchestrator
-        from wp_supervisor.session import REGENERATION_CANCELED_PATTERNS
-
-        # then
-        assert WPOrchestrator.REGENERATION_CANCELED_PATTERNS == REGENERATION_CANCELED_PATTERNS
-
-    def test_orchestrator_re_exports_signal_complete(self):
-        """WPOrchestrator.SIGNAL_COMPLETE should match session.py constant [TEST-3]."""
-        # given
-        from wp_supervisor.orchestrator import WPOrchestrator
-        from wp_supervisor.session import SIGNAL_COMPLETE
-
-        # then
-        assert WPOrchestrator.SIGNAL_COMPLETE == SIGNAL_COMPLETE
-
-    def test_orchestrator_re_exports_signal_canceled(self):
-        """WPOrchestrator.SIGNAL_CANCELED should match session.py constant [TEST-3]."""
-        # given
-        from wp_supervisor.orchestrator import WPOrchestrator
-        from wp_supervisor.session import SIGNAL_CANCELED
-
-        # then
-        assert WPOrchestrator.SIGNAL_CANCELED == SIGNAL_CANCELED
 
     def test_orchestrator_imports_session_runner_class(self):
         """SessionRunner should be importable from orchestrator module."""
@@ -2245,32 +2197,24 @@ class TestOrchestratorSessionRunnerUsage:
     Tests verifying that WPOrchestrator delegates streaming to SessionRunner.
     """
 
-    def test_orchestrator_passes_phase_complete_patterns_to_session_runner(self):
-        """_run_phase_session should pass PHASE_COMPLETE_PATTERNS to SessionRunner."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                from wp_supervisor.session import PHASE_COMPLETE_PATTERNS
+    def test_phase_complete_patterns_importable_from_session(self):
+        """PHASE_COMPLETE_PATTERNS should be importable from session module."""
+        from wp_supervisor.session import PHASE_COMPLETE_PATTERNS
 
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
+        assert isinstance(PHASE_COMPLETE_PATTERNS, list)
+        assert len(PHASE_COMPLETE_PATTERNS) > 0
 
-                # Verify orchestrator patterns match session patterns
-                assert orchestrator.PHASE_COMPLETE_PATTERNS is PHASE_COMPLETE_PATTERNS
+    def test_regeneration_patterns_importable_from_session(self):
+        """REGENERATION_*_PATTERNS should be importable from session module."""
+        from wp_supervisor.session import (
+            REGENERATION_COMPLETE_PATTERNS,
+            REGENERATION_CANCELED_PATTERNS,
+        )
 
-    def test_orchestrator_passes_regeneration_patterns_to_session_runner(self):
-        """_run_regeneration_conversation should pass REGENERATION_* patterns to SessionRunner."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                from wp_supervisor.session import (
-                    REGENERATION_COMPLETE_PATTERNS,
-                    REGENERATION_CANCELED_PATTERNS,
-                )
-
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-
-                assert orchestrator.REGENERATION_COMPLETE_PATTERNS is REGENERATION_COMPLETE_PATTERNS
-                assert orchestrator.REGENERATION_CANCELED_PATTERNS is REGENERATION_CANCELED_PATTERNS
+        assert isinstance(REGENERATION_COMPLETE_PATTERNS, list)
+        assert isinstance(REGENERATION_CANCELED_PATTERNS, list)
+        assert len(REGENERATION_COMPLETE_PATTERNS) > 0
+        assert len(REGENERATION_CANCELED_PATTERNS) > 0
 
     def test_session_runner_handles_usage_recording(self):
         """SessionRunner should handle usage recording via _record_usage."""

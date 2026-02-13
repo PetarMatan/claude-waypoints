@@ -41,33 +41,24 @@ from .templates import (
 )
 from .subagents import SubagentBuilder
 
-# [REQ-14] Import read_user_input from session.py
-# [REQ-6, REQ-7] read_user_input moved to session.py but remains importable here
 from .session import (
     read_user_input,
     SessionRunner,
-    PHASE_COMPLETE_PATTERNS as _SESSION_PHASE_COMPLETE_PATTERNS,
-    REGENERATION_COMPLETE_PATTERNS as _SESSION_REGENERATION_COMPLETE_PATTERNS,
-    REGENERATION_CANCELED_PATTERNS as _SESSION_REGENERATION_CANCELED_PATTERNS,
-    SIGNAL_COMPLETE as _SESSION_SIGNAL_COMPLETE,
-    SIGNAL_CANCELED as _SESSION_SIGNAL_CANCELED,
+    PHASE_COMPLETE_PATTERNS,
+    REGENERATION_COMPLETE_PATTERNS,
+    REGENERATION_CANCELED_PATTERNS,
+    SIGNAL_COMPLETE,
+    SIGNAL_CANCELED,
 )
+
+# Orchestrator-specific signal constants
+PHASE_COMPLETE_SIGNAL = "---PHASE_COMPLETE---"
+SUMMARY_VERIFIED_SIGNAL = "SUMMARY_VERIFIED"
+GAPS_FOUND_SIGNAL = "GAPS_FOUND"
 
 
 class WPOrchestrator:
     """Orchestrates Waypoints workflow across multiple Claude sessions."""
-
-    # [TEST-3] Re-export signal constants from session.py for backward compatibility
-    PHASE_COMPLETE_SIGNAL = "---PHASE_COMPLETE---"
-    PHASE_COMPLETE_PATTERNS = _SESSION_PHASE_COMPLETE_PATTERNS
-    SUMMARY_VERIFIED_SIGNAL = "SUMMARY_VERIFIED"
-    GAPS_FOUND_SIGNAL = "GAPS_FOUND"
-
-    REGENERATION_COMPLETE_PATTERNS = _SESSION_REGENERATION_COMPLETE_PATTERNS
-    REGENERATION_CANCELED_PATTERNS = _SESSION_REGENERATION_CANCELED_PATTERNS
-
-    SIGNAL_COMPLETE = _SESSION_SIGNAL_COMPLETE
-    SIGNAL_CANCELED = _SESSION_SIGNAL_CANCELED
 
     def __init__(self, working_dir: Optional[str] = None):
         self.working_dir = Path(working_dir or os.getcwd()).resolve()
@@ -343,7 +334,7 @@ class WPOrchestrator:
                 client_context_manager=client,
                 initial_prompt=initial_context,
                 phase=phase,
-                signal_patterns=self.PHASE_COMPLETE_PATTERNS,
+                signal_patterns=PHASE_COMPLETE_PATTERNS,
             )
 
     def _mark_phase_complete(self, phase: int) -> None:
@@ -450,7 +441,7 @@ class WPOrchestrator:
 
         review_response = await self._extract_text_response(review_prompt, session_id=session_id, phase=phase)
 
-        if review_response.startswith(self.GAPS_FOUND_SIGNAL):
+        if review_response.startswith(GAPS_FOUND_SIGNAL):
             lines = review_response.split('\n', 1)
             if len(lines) > 1:
                 updated_summary = lines[1].strip()
@@ -458,7 +449,7 @@ class WPOrchestrator:
                 return updated_summary
             else:
                 return initial_summary
-        elif review_response.startswith(self.SUMMARY_VERIFIED_SIGNAL):
+        elif review_response.startswith(SUMMARY_VERIFIED_SIGNAL):
             lines = review_response.split('\n', 1)
             if len(lines) > 1:
                 print(f"[Supervisor] Summary verified complete.")
@@ -501,8 +492,8 @@ class WPOrchestrator:
                 client_context_manager=client,
                 initial_prompt=context,
                 phase=phase,
-                complete_patterns=self.REGENERATION_COMPLETE_PATTERNS,
-                canceled_patterns=self.REGENERATION_CANCELED_PATTERNS
+                complete_patterns=REGENERATION_COMPLETE_PATTERNS,
+                canceled_patterns=REGENERATION_CANCELED_PATTERNS
             )
 
     async def _regenerate_summary(

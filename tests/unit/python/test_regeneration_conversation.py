@@ -91,30 +91,28 @@ class TestRegenerationSignalConstants:
     """Tests for regeneration signal constants."""
 
     def test_regeneration_complete_patterns_exists(self):
-        """REGENERATION_COMPLETE_PATTERNS constant should exist."""
-        from wp_supervisor.orchestrator import WPOrchestrator
-        assert hasattr(WPOrchestrator, 'REGENERATION_COMPLETE_PATTERNS')
+        """REGENERATION_COMPLETE_PATTERNS constant should exist in session module."""
+        from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS
+        assert REGENERATION_COMPLETE_PATTERNS is not None
 
     def test_regeneration_complete_patterns_contains_variants(self):
         """REGENERATION_COMPLETE_PATTERNS should contain multiple format variants."""
-        from wp_supervisor.orchestrator import WPOrchestrator
-        patterns = WPOrchestrator.REGENERATION_COMPLETE_PATTERNS
-        assert "REGENERATION_COMPLETE" in patterns
-        assert "---REGENERATION_COMPLETE---" in patterns
-        assert "**REGENERATION_COMPLETE**" in patterns
+        from wp_supervisor.session import REGENERATION_COMPLETE_PATTERNS
+        assert "REGENERATION_COMPLETE" in REGENERATION_COMPLETE_PATTERNS
+        assert "---REGENERATION_COMPLETE---" in REGENERATION_COMPLETE_PATTERNS
+        assert "**REGENERATION_COMPLETE**" in REGENERATION_COMPLETE_PATTERNS
 
     def test_regeneration_canceled_patterns_exists(self):
-        """REGENERATION_CANCELED_PATTERNS constant should exist."""
-        from wp_supervisor.orchestrator import WPOrchestrator
-        assert hasattr(WPOrchestrator, 'REGENERATION_CANCELED_PATTERNS')
+        """REGENERATION_CANCELED_PATTERNS constant should exist in session module."""
+        from wp_supervisor.session import REGENERATION_CANCELED_PATTERNS
+        assert REGENERATION_CANCELED_PATTERNS is not None
 
     def test_regeneration_canceled_patterns_contains_variants(self):
         """REGENERATION_CANCELED_PATTERNS should contain multiple format variants."""
-        from wp_supervisor.orchestrator import WPOrchestrator
-        patterns = WPOrchestrator.REGENERATION_CANCELED_PATTERNS
-        assert "REGENERATION_CANCELED" in patterns
-        assert "---REGENERATION_CANCELED---" in patterns
-        assert "**REGENERATION_CANCELED**" in patterns
+        from wp_supervisor.session import REGENERATION_CANCELED_PATTERNS
+        assert "REGENERATION_CANCELED" in REGENERATION_CANCELED_PATTERNS
+        assert "---REGENERATION_CANCELED---" in REGENERATION_CANCELED_PATTERNS
+        assert "**REGENERATION_CANCELED**" in REGENERATION_CANCELED_PATTERNS
 
 
 # =============================================================================
