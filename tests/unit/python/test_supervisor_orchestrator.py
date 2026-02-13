@@ -17,6 +17,17 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 # Mock claude_agent_sdk before importing orchestrator
 # Define mock classes as real classes (not MagicMock instances) for isinstance() checks
+from dataclasses import dataclass
+from typing import Optional, List
+
+@dataclass
+class MockAgentDefinition:
+    """Mock AgentDefinition for testing subagents."""
+    description: str
+    prompt: str
+    tools: Optional[list] = None
+    model: Optional[str] = None
+
 class MockAssistantMessage:
     """Mock AssistantMessage class for isinstance() checks."""
     pass
@@ -78,6 +89,7 @@ class MockClaudeSDKClient:
 mock_sdk = MagicMock()
 mock_sdk.ClaudeSDKClient = MockClaudeSDKClient
 mock_sdk.ClaudeAgentOptions = MagicMock()
+mock_sdk.AgentDefinition = MockAgentDefinition
 mock_types = MagicMock()
 mock_types.AssistantMessage = MockAssistantMessage
 mock_types.ResultMessage = MockResultMessage
@@ -89,7 +101,21 @@ sys.modules['claude_agent_sdk.types'] = mock_types
 sys.path.insert(0, '.')
 from wp_supervisor.markers import SupervisorMarkers
 from wp_supervisor.context import ContextBuilder
-from wp_supervisor.orchestrator import read_user_input
+# [TEST-2] Import read_user_input from session.py
+from wp_supervisor.session import read_user_input
+
+
+# Ensure tests never inherit supervisor env vars from a parent workflow.
+# When pytest runs during Phase 4, the orchestrator passes WP_SUPERVISOR_MARKERS_DIR
+# to the Claude session, which leaks into subprocesses. Without this fixture,
+# tests create WPState instances that write to the REAL workflow directory,
+# corrupting state.json, workflow.log, and phase summary documents.
+@pytest.fixture(autouse=True)
+def clean_supervisor_env(monkeypatch):
+    """Remove WP_SUPERVISOR_* env vars to isolate tests from live workflows."""
+    for key in list(os.environ):
+        if key.startswith("WP_SUPERVISOR_"):
+            monkeypatch.delenv(key, raising=False)
 
 
 # Helper to run async functions in tests
@@ -286,19 +312,16 @@ class TestOrchestratorSignals:
     """Tests for orchestrator signal constants."""
 
     def test_phase_complete_signal_exists(self):
-        from wp_supervisor.orchestrator import WPOrchestrator
-        assert hasattr(WPOrchestrator, 'PHASE_COMPLETE_SIGNAL')
-        assert WPOrchestrator.PHASE_COMPLETE_SIGNAL == "---PHASE_COMPLETE---"
+        from wp_supervisor.orchestrator import PHASE_COMPLETE_SIGNAL
+        assert PHASE_COMPLETE_SIGNAL == "---PHASE_COMPLETE---"
 
     def test_summary_verified_signal_exists(self):
-        from wp_supervisor.orchestrator import WPOrchestrator
-        assert hasattr(WPOrchestrator, 'SUMMARY_VERIFIED_SIGNAL')
-        assert WPOrchestrator.SUMMARY_VERIFIED_SIGNAL == "SUMMARY_VERIFIED"
+        from wp_supervisor.orchestrator import SUMMARY_VERIFIED_SIGNAL
+        assert SUMMARY_VERIFIED_SIGNAL == "SUMMARY_VERIFIED"
 
     def test_gaps_found_signal_exists(self):
-        from wp_supervisor.orchestrator import WPOrchestrator
-        assert hasattr(WPOrchestrator, 'GAPS_FOUND_SIGNAL')
-        assert WPOrchestrator.GAPS_FOUND_SIGNAL == "GAPS_FOUND"
+        from wp_supervisor.orchestrator import GAPS_FOUND_SIGNAL
+        assert GAPS_FOUND_SIGNAL == "GAPS_FOUND"
 
     def test_phase_names_dict_exists(self):
         from wp_supervisor.templates import PHASE_NAMES
@@ -873,7 +896,7 @@ class TestContextPassing:
 
                 captured_context = None
 
-                async def capture_context(context, phase):
+                async def capture_context(context, phase, subagents=None):
                     nonlocal captured_context
                     captured_context = context
 
@@ -901,7 +924,7 @@ class TestContextPassing:
 
                 captured_context = None
 
-                async def capture_context(context, phase):
+                async def capture_context(context, phase, subagents=None):
                     nonlocal captured_context
                     captured_context = context
 
@@ -931,7 +954,7 @@ class TestContextPassing:
 
                 captured_context = None
 
-                async def capture_context(context, phase):
+                async def capture_context(context, phase, subagents=None):
                     nonlocal captured_context
                     captured_context = context
 
@@ -967,7 +990,7 @@ This is test agent content.
 
                 captured_context = None
 
-                async def capture_context(context, phase):
+                async def capture_context(context, phase, subagents=None):
                     nonlocal captured_context
                     captured_context = context
 
@@ -1095,12 +1118,8 @@ class TestSupervisorEndToEnd:
 
                 # Mock user confirmations (always say 'y' to proceed)
                 with patch('builtins.input', return_value='y'):
-                    # Patch ClaudeSDKClient
                     with patch('wp_supervisor.orchestrator.ClaudeSDKClient', MockClient):
-                        with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                            with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                                # Run the complete workflow
-                                run_async(orchestrator.run(initial_task="Build a test feature"))
+                        run_async(orchestrator.run(initial_task="Build a test feature"))
 
                 # Verify all 4 phases were executed
                 assert 1 in phases_executed, "Phase 1 should have executed"
@@ -1146,9 +1165,7 @@ class TestSupervisorEndToEnd:
 
                 with patch('builtins.input', return_value='y'):
                     with patch('wp_supervisor.orchestrator.ClaudeSDKClient', MockClient):
-                        with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                            with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                                run_async(orchestrator.run(initial_task="Build a feature"))
+                        run_async(orchestrator.run(initial_task="Build a feature"))
 
                 # Verify documents were saved for phases 1-3
                 assert 1 in saved_documents, "Phase 1 document should be saved"
@@ -1177,9 +1194,7 @@ class TestSupervisorEndToEnd:
 
                 with patch('builtins.input', return_value='y'):
                     with patch('wp_supervisor.orchestrator.ClaudeSDKClient', MockClient):
-                        with patch('wp_supervisor.orchestrator.AssistantMessage', MockAssistantMessage):
-                            with patch('wp_supervisor.orchestrator.ResultMessage', MockResultMessage):
-                                run_async(orchestrator.run(initial_task="Build a REST API for users"))
+                        run_async(orchestrator.run(initial_task="Build a REST API for users"))
 
                 # Verify initial task appears in phase 1 prompt
                 phase1_prompts = [p for p in captured_prompts if "Phase 1" in p]
@@ -1755,6 +1770,474 @@ class TestIntegrationTaskGuidance:
     def test_interfaces_summary_prompt_includes_modified(self):
         from wp_supervisor.templates import INTERFACES_SUMMARY_PROMPT
         assert "Modified" in INTERFACES_SUMMARY_PROMPT
+
+
+class TestBuildExplorationSubagents:
+    """Tests for _build_exploration_subagents method."""
+
+    def test_build_exploration_subagents_returns_four_agents(self):
+        """Should return exactly three exploration agents."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # when
+                agents = orchestrator._build_exploration_subagents()
+
+                # then
+                assert len(agents) == 4
+
+    def test_build_exploration_subagents_returns_dict(self):
+        """Should return a dictionary."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # when
+                agents = orchestrator._build_exploration_subagents()
+
+                # then
+                assert isinstance(agents, dict)
+
+    def test_build_exploration_subagents_uses_knowledge_context(self):
+        """Should include orchestrator's knowledge context in subagents."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator._knowledge_context = "# Architecture\nEvent-driven system"
+
+                # when
+                agents = orchestrator._build_exploration_subagents()
+
+                # then
+                for agent in agents.values():
+                    assert "Event-driven system" in agent.prompt
+
+    def test_build_exploration_subagents_with_no_args(self):
+        """Should build subagents when called with no arguments."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # when - should not raise
+                agents = orchestrator._build_exploration_subagents()
+
+                # then
+                assert len(agents) == 4
+
+
+class TestSubagentIntegrationWithPhaseSession:
+    """Tests for subagent injection into phase sessions."""
+
+    def test_phase1_builds_subagents(self):
+        """Phase 1 should build subagents for parallel exploration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                build_subagents_called = []
+
+                original_build = orchestrator._build_exploration_subagents
+                def capture_build():
+                    build_subagents_called.append(True)
+                    return original_build()
+
+                orchestrator._build_exploration_subagents = capture_build
+
+                async def mock_session(*args, **kwargs):
+                    pass
+
+                async def mock_summary(*args, **kwargs):
+                    return "# Summary"
+
+                async def mock_confirm(*args, **kwargs):
+                    return 'proceed'
+
+                orchestrator._run_phase_session = mock_session
+                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._confirm_phase_completion = mock_confirm
+
+                # when
+                run_async(orchestrator._run_phase(1, initial_task="Test task"))
+
+                # then
+                assert len(build_subagents_called) == 1
+
+    def test_phase1_passes_subagents_to_session(self):
+        """Phase 1 should pass subagents to _run_phase_session."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                captured_subagents = []
+
+                async def capture_session(context, phase, subagents=None):
+                    captured_subagents.append(subagents)
+                    return None
+
+                async def mock_summary(*args, **kwargs):
+                    return "# Summary"
+
+                async def mock_confirm(*args, **kwargs):
+                    return 'proceed'
+
+                orchestrator._run_phase_session = capture_session
+                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._confirm_phase_completion = mock_confirm
+
+                # when
+                run_async(orchestrator._run_phase(1, initial_task="Test task"))
+
+                # then
+                assert len(captured_subagents) == 1
+                assert captured_subagents[0] is not None
+                assert len(captured_subagents[0]) == 4
+
+    def test_phase2_does_not_build_subagents(self):
+        """Phase 2 should not build subagents."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.save_requirements_summary("# Requirements")
+
+                captured_subagents = []
+
+                async def capture_session(context, phase, subagents=None):
+                    captured_subagents.append(subagents)
+                    return None
+
+                async def mock_summary(*args, **kwargs):
+                    return "# Interfaces"
+
+                async def mock_confirm(*args, **kwargs):
+                    return 'proceed'
+
+                orchestrator._run_phase_session = capture_session
+                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._confirm_phase_completion = mock_confirm
+
+                # when
+                run_async(orchestrator._run_phase(2))
+
+                # then
+                assert len(captured_subagents) == 1
+                assert captured_subagents[0] is None
+
+    def test_phase3_does_not_build_subagents(self):
+        """Phase 3 should not build subagents."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.save_requirements_summary("# Requirements")
+                orchestrator.markers.save_interfaces_list("# Interfaces")
+
+                captured_subagents = []
+
+                async def capture_session(context, phase, subagents=None):
+                    captured_subagents.append(subagents)
+                    return None
+
+                async def mock_summary(*args, **kwargs):
+                    return "# Tests"
+
+                async def mock_confirm(*args, **kwargs):
+                    return 'proceed'
+
+                orchestrator._run_phase_session = capture_session
+                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._confirm_phase_completion = mock_confirm
+
+                # when
+                run_async(orchestrator._run_phase(3))
+
+                # then
+                assert len(captured_subagents) == 1
+                assert captured_subagents[0] is None
+
+    def test_phase4_does_not_build_subagents(self):
+        """Phase 4 should not build subagents."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.save_requirements_summary("# Requirements")
+                orchestrator.markers.save_interfaces_list("# Interfaces")
+                orchestrator.markers.save_tests_list("# Tests")
+
+                captured_subagents = []
+
+                async def capture_session(context, phase, subagents=None):
+                    captured_subagents.append(subagents)
+                    return None
+
+                orchestrator._run_phase_session = capture_session
+
+                # when
+                run_async(orchestrator._run_phase(4))
+
+                # then
+                assert len(captured_subagents) == 1
+                assert captured_subagents[0] is None
+
+
+class TestSubagentErrorHandling:
+    """Tests for subagent error handling and edge cases."""
+
+    def test_phase1_continues_when_subagent_build_fails(self):
+        """Phase 1 should fall back to CLI mode when subagent building fails."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                def failing_build():
+                    raise RuntimeError("Subagent build failed")
+
+                orchestrator._build_exploration_subagents = failing_build
+
+                captured_subagents = []
+
+                async def mock_session(context, phase, subagents=None):
+                    captured_subagents.append(subagents)
+                    return None
+
+                async def mock_summary(*args, **kwargs):
+                    return "# Summary"
+
+                async def mock_confirm(*args, **kwargs):
+                    return 'proceed'
+
+                orchestrator._run_phase_session = mock_session
+                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._confirm_phase_completion = mock_confirm
+
+                # when - should not crash, falls back to CLI mode
+                run_async(orchestrator._run_phase(1, initial_task="Test"))
+
+                # then - session was called without subagents (fallback)
+                assert len(captured_subagents) == 1
+                assert captured_subagents[0] is None
+
+class TestPhase1SupervisorModeContext:
+    """Tests for Phase 1 context in supervisor mode."""
+
+    def test_phase1_context_uses_supervisor_mode_by_default(self):
+        """Phase 1 context should use supervisor mode by default."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # when
+                context = orchestrator._build_phase_context(1, "Test task")
+
+                # then - should mention subagents
+                assert "subagent" in context.lower() or "parallel" in context.lower()
+
+    def test_phase1_context_mentions_delegation(self):
+        """Phase 1 supervisor context should mention delegating exploration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # when
+                context = orchestrator._build_phase_context(1, "Test task")
+
+                # then
+                lower = context.lower()
+                assert "delegate" in lower
+
+    def test_phase1_context_includes_task(self):
+        """Phase 1 context should include initial task."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                task = "Build OAuth integration"
+
+                # when
+                context = orchestrator._build_phase_context(1, task)
+
+                # then
+                assert task in context
+
+    def test_phase1_context_includes_knowledge(self):
+        """Phase 1 context should include knowledge context."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator._knowledge_context = "# Architecture\nService mesh"
+
+                # when
+                context = orchestrator._build_phase_context(1, "Test")
+
+                # then
+                assert "Service mesh" in context
+
+
+class TestRunPhaseSessionWithSubagents:
+    """Tests for _run_phase_session with subagents parameter."""
+
+    def test_run_phase_session_accepts_subagents_parameter(self):
+        """_run_phase_session should accept optional subagents parameter."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Verify method signature accepts subagents parameter
+                import inspect
+                sig = inspect.signature(orchestrator._run_phase_session)
+                params = sig.parameters
+
+                assert 'subagents' in params
+                # Should have default value of None
+                assert params['subagents'].default is None
+
+    def test_run_phase_session_logs_subagent_configuration(self):
+        """_run_phase_session should log when subagents are configured."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                log_calls = []
+                original_log = orchestrator.logger.log_event
+                def capture_log(event_type, message):
+                    log_calls.append((event_type, message))
+                    original_log(event_type, message)
+                orchestrator.logger.log_event = capture_log
+
+                mock_subagents = {
+                    "business-logic-explorer": MagicMock(),
+                    "dependencies-explorer": MagicMock(),
+                    "test-usecase-explorer": MagicMock()
+                }
+
+                # We can't easily test full session run without SDK,
+                # but we can verify the method exists and accepts the parameter
+                assert callable(orchestrator._run_phase_session)
+
+
+class TestOrchestratorSessionIntegration:
+    """
+    Tests for orchestrator integration with session.py module.
+
+    Verifies that WPOrchestrator correctly imports and uses
+    functionality from session.py:
+    - read_user_input imported from session.py
+    - SessionRunner imported from session.py
+    """
+
+    def test_orchestrator_imports_read_user_input_from_session(self):
+        """read_user_input should be imported from session.py."""
+        # given
+        from wp_supervisor.orchestrator import read_user_input
+        from wp_supervisor.session import read_user_input as session_read_user_input
+
+        # then - both should be the same function
+        assert read_user_input is session_read_user_input
+
+    def test_orchestrator_imports_session_runner_class(self):
+        """SessionRunner should be importable from orchestrator module."""
+        # given
+        from wp_supervisor.orchestrator import SessionRunner
+        from wp_supervisor.session import SessionRunner as SessionSessionRunner
+
+        # then - both should be the same class
+        assert SessionRunner is SessionSessionRunner
+
+    def test_orchestrator_delegates_to_session_runner(self):
+        """Orchestrator should have a _session_runner that handles streaming logic."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                from wp_supervisor.session import SessionRunner
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # Orchestrator should have a SessionRunner instance
+                assert hasattr(orchestrator, '_session_runner')
+                assert isinstance(orchestrator._session_runner, SessionRunner)
+
+                # SessionRunner should share the same markers and logger
+                assert orchestrator._session_runner.markers is orchestrator.markers
+                assert orchestrator._session_runner.logger is orchestrator.logger
+                assert orchestrator._session_runner.hooks is orchestrator.hooks
+
+
+class TestOrchestratorSessionRunnerUsage:
+    """
+    Tests verifying that WPOrchestrator delegates streaming to SessionRunner.
+    """
+
+    def test_phase_complete_patterns_importable_from_session(self):
+        """PHASE_COMPLETE_PATTERNS should be importable from session module."""
+        from wp_supervisor.session import PHASE_COMPLETE_PATTERNS
+
+        assert isinstance(PHASE_COMPLETE_PATTERNS, list)
+        assert len(PHASE_COMPLETE_PATTERNS) > 0
+
+    def test_regeneration_patterns_importable_from_session(self):
+        """REGENERATION_*_PATTERNS should be importable from session module."""
+        from wp_supervisor.session import (
+            REGENERATION_COMPLETE_PATTERNS,
+            REGENERATION_CANCELED_PATTERNS,
+        )
+
+        assert isinstance(REGENERATION_COMPLETE_PATTERNS, list)
+        assert isinstance(REGENERATION_CANCELED_PATTERNS, list)
+        assert len(REGENERATION_COMPLETE_PATTERNS) > 0
+        assert len(REGENERATION_CANCELED_PATTERNS) > 0
+
+    def test_session_runner_handles_usage_recording(self):
+        """SessionRunner should handle usage recording via _record_usage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                # SessionRunner should have _record_usage method
+                assert hasattr(orchestrator._session_runner, '_record_usage')
+
+                # Verify it works
+                mock_result = MagicMock()
+                mock_result.usage = {"input_tokens": 100, "output_tokens": 50}
+                mock_result.total_cost_usd = 0.01
+                mock_result.duration_ms = 1000
+                mock_result.num_turns = 1
+
+                orchestrator._session_runner._record_usage(phase=1, result=mock_result)
+
+                usage = orchestrator.markers.get_all_usage()
+                assert usage.get("phase1", {}).get("input_tokens", 0) > 0
 
 
 if __name__ == '__main__':

@@ -14,12 +14,21 @@ from wp_supervisor import templates
 class TestPhaseContextTemplates:
     """Tests for phase context templates."""
 
-    def test_phase1_context_exists(self):
-        assert hasattr(templates, 'PHASE1_CONTEXT')
-        assert len(templates.PHASE1_CONTEXT) > 0
+    def test_phase1_supervisor_fallback_context_exists(self):
+        assert hasattr(templates, 'PHASE1_SUPERVISOR_FALLBACK_CONTEXT')
+        assert len(templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT) > 0
 
-    def test_phase1_context_has_placeholder(self):
-        assert "{task_section}" in templates.PHASE1_CONTEXT
+    def test_phase1_supervisor_fallback_context_has_placeholder(self):
+        assert "{task_section}" in templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT
+
+    def test_phase1_supervisor_fallback_has_phase_complete_signal(self):
+        """Supervisor fallback context should have ---PHASE_COMPLETE--- signal."""
+        assert "PHASE_COMPLETE" in templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT
+
+    def test_phase1_supervisor_fallback_has_guardrail(self):
+        """Supervisor fallback context should warn against premature PHASE_COMPLETE."""
+        assert "CRITICAL" in templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT
+        assert "clarifying questions" in templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT
 
     def test_phase1_task_section_exists(self):
         assert hasattr(templates, 'PHASE1_TASK_SECTION')
@@ -234,10 +243,10 @@ class TestTemplateConsistency:
         for prompt in prompts:
             assert "format" in prompt.lower() or "Format" in prompt
 
-    def test_all_phase_contexts_mention_phase_complete(self):
-        """All phase contexts should mention PHASE_COMPLETE signal."""
+    def test_all_supervisor_phase_contexts_mention_phase_complete(self):
+        """All supervisor phase contexts should mention PHASE_COMPLETE signal."""
         contexts = [
-            templates.PHASE1_CONTEXT,
+            templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT,
             templates.PHASE2_CONTEXT,
             templates.PHASE3_CONTEXT,
             templates.PHASE4_CONTEXT,
@@ -248,7 +257,7 @@ class TestTemplateConsistency:
     def test_all_phase_contexts_have_your_task_section(self):
         """All phase contexts should have 'Your Task' section."""
         contexts = [
-            templates.PHASE1_CONTEXT,
+            templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT,
             templates.PHASE2_CONTEXT,
             templates.PHASE3_CONTEXT,
             templates.PHASE4_CONTEXT,

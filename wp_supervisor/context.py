@@ -3,14 +3,15 @@
 Waypoints Supervisor - Context Builder
 
 Builds context prompts for each Waypoints phase, including summaries
-from previous phases and project knowledge context [REQ-5, REQ-6].
+from previous phases and project knowledge context.
 """
 
 from typing import Optional
 
 from .templates import (
-    PHASE1_CONTEXT,
+    PHASE1_SUPERVISOR_FALLBACK_CONTEXT,
     PHASE1_TASK_SECTION,
+    PHASE1_SUPERVISOR_INSTRUCTIONS,
     PHASE2_CONTEXT,
     PHASE3_CONTEXT,
     PHASE4_CONTEXT,
@@ -31,31 +32,48 @@ class ContextBuilder:
     """
     Builds context/prompts for each Waypoints phase.
 
-    All phases receive identical knowledge context [REQ-6], which is loaded
+    All phases receive identical knowledge context, which is loaded
     once at workflow start and passed to each build_phase*_context() method.
     """
 
     @staticmethod
     def build_phase1_context(
         user_task: Optional[str] = None,
-        knowledge_context: str = ""
+        knowledge_context: str = "",
+        supervisor_mode: bool = True
     ) -> str:
         """
         Build context for Phase 1: Requirements Gathering.
 
+        In supervisor mode, uses special instructions that delegate exploration
+        to subagents rather than exploring directly.
+
         Args:
             user_task: Optional initial task description from user
-            knowledge_context: Project knowledge section to inject [REQ-5]
+            knowledge_context: Project knowledge section to inject
+            supervisor_mode: If True, use supervisor instructions with subagent
+                           delegation. Default True since this is the supervisor
+                           module.
+
+        Returns:
+            Context string for Phase 1 session
         """
         # Build task section if user provided task
         task_section = ""
         if user_task:
             task_section = PHASE1_TASK_SECTION.format(user_task=user_task)
 
-        # Build base context
-        context = PHASE1_CONTEXT.format(task_section=task_section)
+        # Use supervisor instructions in supervisor mode
+        # These instructions tell Claude to delegate exploration to subagents
+        if supervisor_mode:
+            context = PHASE1_SUPERVISOR_INSTRUCTIONS
+            if task_section:
+                context = f"{context}\n\n## Initial Task\n{user_task}\n"
+        else:
+            # Supervisor fallback when subagent building fails
+            context = PHASE1_SUPERVISOR_FALLBACK_CONTEXT.format(task_section=task_section)
 
-        # Inject knowledge context if provided [REQ-5]
+        # Inject knowledge context if provided
         if knowledge_context:
             context = f"{context}\n\n{knowledge_context}"
 
@@ -71,11 +89,11 @@ class ContextBuilder:
 
         Args:
             requirements_summary: Summary from Phase 1
-            knowledge_context: Project knowledge section to inject [REQ-5]
+            knowledge_context: Project knowledge section to inject
         """
         context = PHASE2_CONTEXT.format(requirements_summary=requirements_summary)
 
-        # Inject knowledge context if provided [REQ-5]
+        # Inject knowledge context if provided
         if knowledge_context:
             context = f"{context}\n\n{knowledge_context}"
 
@@ -93,14 +111,14 @@ class ContextBuilder:
         Args:
             requirements_summary: Summary from Phase 1
             interfaces_list: Interfaces created in Phase 2
-            knowledge_context: Project knowledge section to inject [REQ-5]
+            knowledge_context: Project knowledge section to inject
         """
         context = PHASE3_CONTEXT.format(
             requirements_summary=requirements_summary,
             interfaces_list=interfaces_list
         )
 
-        # Inject knowledge context if provided [REQ-5]
+        # Inject knowledge context if provided
         if knowledge_context:
             context = f"{context}\n\n{knowledge_context}"
 
@@ -120,7 +138,7 @@ class ContextBuilder:
             requirements_summary: Summary from Phase 1
             interfaces_list: Interfaces created in Phase 2
             tests_list: Tests created in Phase 3
-            knowledge_context: Project knowledge section to inject [REQ-5]
+            knowledge_context: Project knowledge section to inject
         """
         context = PHASE4_CONTEXT.format(
             requirements_summary=requirements_summary,
@@ -128,7 +146,7 @@ class ContextBuilder:
             tests_list=tests_list
         )
 
-        # Inject knowledge context if provided [REQ-5]
+        # Inject knowledge context if provided
         if knowledge_context:
             context = f"{context}\n\n{knowledge_context}"
 
@@ -195,11 +213,11 @@ class ContextBuilder:
         staged_this_session: str = ""
     ) -> str:
         """
-        Get the knowledge extraction prompt for a phase [REQ-7, REQ-8, REQ-9, REQ-11].
+        Get the knowledge extraction prompt for a phase.
 
         Args:
             phase: Phase number (1-4)
-            existing_knowledge: Current project knowledge to avoid duplicates [REQ-11]
+            existing_knowledge: Current project knowledge to avoid duplicates
             staged_this_session: Already staged knowledge from this session to avoid duplicates
 
         Returns:
@@ -207,7 +225,7 @@ class ContextBuilder:
             ARCHITECTURE:, DECISIONS:, LESSONS_LEARNED: sections with entries,
             or NO_KNOWLEDGE_EXTRACTED if nothing notable.
         """
-        # Format the extraction prompt with existing knowledge [REQ-11]
+        # Format the extraction prompt with existing knowledge
         existing = existing_knowledge if existing_knowledge else "(No existing project knowledge)"
         staged = staged_this_session if staged_this_session else "None yet"
         return KNOWLEDGE_EXTRACTION_PROMPT.format(
