@@ -104,6 +104,60 @@ class SessionRunner:
         self.hooks = hooks
         self.logger = logger
 
+    async def _process_stream(
+        self,
+        client: "ClaudeSDKClient",
+        phase: int,
+        signal_checker: Optional[SignalChecker] = None
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Process a message stream: print text, show work indicators, detect signals.
+
+        Unified streaming loop used by both phase and regeneration sessions.
+
+        Args:
+            client: The SDK client to receive messages from
+            phase: Current phase number for usage recording
+            signal_checker: Optional callback that checks text for signals.
+                           Returns signal string if detected, None otherwise.
+
+        Returns:
+            (session_id, detected_signal) tuple. session_id is from the first
+            message that provides one. detected_signal is the first non-None
+            return from signal_checker.
+        """
+        session_id: Optional[str] = None
+        detected_signal: Optional[str] = None
+        working_indicator_shown = False
+
+        async for message in client.receive_response():
+            if hasattr(message, 'session_id') and message.session_id:
+                session_id = message.session_id
+
+            if hasattr(message, 'content') and message.content:
+                last_text = ""
+                for block in message.content:
+                    if hasattr(block, 'text'):
+                        if working_indicator_shown:
+                            print("\n", end='')
+                            working_indicator_shown = False
+                        print(block.text, end='', flush=True)
+                        last_text = block.text
+                        if signal_checker:
+                            result = signal_checker(block.text)
+                            if result:
+                                detected_signal = result
+                    elif hasattr(block, 'name'):
+                        print(".", end='', flush=True)
+                        working_indicator_shown = True
+                if last_text and not last_text.endswith('\n'):
+                    print()
+
+            if hasattr(message, 'usage'):
+                self._record_usage(phase, message)
+
+        return session_id, detected_signal
+
     async def run_phase_session(
         self,
         client_context_manager: "ClaudeSDKClient",
@@ -118,33 +172,13 @@ class SessionRunner:
         Streams output (text blocks + dots for tool use), detects phase completion
         signals, and runs a user input loop with /done, /complete, /next, /quit commands.
         """
-        session_id: Optional[str] = None
-        phase_complete = False
-        working_indicator_shown = False
+        def phase_checker(text: str) -> Optional[str]:
+            return SIGNAL_COMPLETE if self._check_signal(text, signal_patterns) else None
 
-        async for message in client_context_manager.receive_response():
-            if hasattr(message, 'session_id'):
-                session_id = message.session_id
-
-            if hasattr(message, 'content') and message.content:
-                last_text = ""
-                for block in message.content:
-                    if hasattr(block, 'text'):
-                        if working_indicator_shown:
-                            print("\n", end='')
-                            working_indicator_shown = False
-                        print(block.text, end='', flush=True)
-                        last_text = block.text
-                        if self._check_signal(block.text, signal_patterns):
-                            phase_complete = True
-                    elif hasattr(block, 'name'):
-                        print(".", end='', flush=True)
-                        working_indicator_shown = True
-                if last_text and not last_text.endswith('\n'):
-                    print()
-
-            if hasattr(message, 'usage'):
-                self._record_usage(phase, message)
+        session_id, signal = await self._process_stream(
+            client_context_manager, phase, phase_checker
+        )
+        phase_complete = signal is not None
 
         first_input = True
         while not phase_complete:
@@ -169,29 +203,13 @@ class SessionRunner:
                 raise KeyboardInterrupt("User requested abort")
 
             print("\n", end='', flush=True)
-            working_indicator_shown = False
             await client_context_manager.query(user_input)
 
-            async for message in client_context_manager.receive_response():
-                if hasattr(message, 'content') and message.content:
-                    last_text = ""
-                    for block in message.content:
-                        if hasattr(block, 'text'):
-                            if working_indicator_shown:
-                                print("\n", end='')
-                                working_indicator_shown = False
-                            print(block.text, end='', flush=True)
-                            last_text = block.text
-                            if self._check_signal(block.text, signal_patterns):
-                                phase_complete = True
-                        elif hasattr(block, 'name'):
-                            print(".", end='', flush=True)
-                            working_indicator_shown = True
-                    if last_text and not last_text.endswith('\n'):
-                        print()
-
-                if hasattr(message, 'usage'):
-                    self._record_usage(phase, message)
+            _, signal = await self._process_stream(
+                client_context_manager, phase, phase_checker
+            )
+            if signal:
+                phase_complete = True
 
         return session_id
 
@@ -209,39 +227,14 @@ class SessionRunner:
         Returns (was_completed, session_id). Detects both completion and
         cancellation signals. User can type /done to force completion.
         """
-        session_id: Optional[str] = None
-        conversation_complete = False
-        was_completed = False
-        working_indicator_shown = False
+        def regen_checker(text: str) -> Optional[str]:
+            return self._check_regeneration_signal(text, complete_patterns, canceled_patterns)
 
-        async for message in client_context_manager.receive_response():
-            if hasattr(message, 'session_id') and message.session_id:
-                session_id = message.session_id
-
-            if hasattr(message, 'content') and message.content:
-                for block in message.content:
-                    if hasattr(block, 'text'):
-                        if working_indicator_shown:
-                            print("\n", end='')
-                            working_indicator_shown = False
-                        print(block.text, end='', flush=True)
-                        signal = self._check_regeneration_signal(
-                            block.text, complete_patterns, canceled_patterns
-                        )
-                        if signal == SIGNAL_COMPLETE:
-                            conversation_complete = True
-                            was_completed = True
-                        elif signal == SIGNAL_CANCELED:
-                            conversation_complete = True
-                            was_completed = False
-                    elif hasattr(block, 'name'):
-                        print(".", end='', flush=True)
-                        working_indicator_shown = True
-
-            if hasattr(message, 'usage'):
-                self._record_usage(phase, message)
-
-        print()
+        session_id, signal = await self._process_stream(
+            client_context_manager, phase, regen_checker
+        )
+        conversation_complete = signal is not None
+        was_completed = signal == SIGNAL_COMPLETE
 
         while not conversation_complete:
             user_input = read_user_input("\nYou: ").strip()
@@ -257,35 +250,14 @@ class SessionRunner:
                 break
 
             print("\n", end='', flush=True)
-            working_indicator_shown = False
             await client_context_manager.query(user_input)
 
-            async for message in client_context_manager.receive_response():
-                if hasattr(message, 'content') and message.content:
-                    for block in message.content:
-                        if hasattr(block, 'text'):
-                            if working_indicator_shown:
-                                print("\n", end='')
-                                working_indicator_shown = False
-                            print(block.text, end='', flush=True)
-
-                            signal = self._check_regeneration_signal(
-                                block.text, complete_patterns, canceled_patterns
-                            )
-                            if signal == SIGNAL_COMPLETE:
-                                conversation_complete = True
-                                was_completed = True
-                            elif signal == SIGNAL_CANCELED:
-                                conversation_complete = True
-                                was_completed = False
-                        elif hasattr(block, 'name'):
-                            print(".", end='', flush=True)
-                            working_indicator_shown = True
-
-                if hasattr(message, 'usage'):
-                    self._record_usage(phase, message)
-
-            print()
+            _, signal = await self._process_stream(
+                client_context_manager, phase, regen_checker
+            )
+            if signal:
+                conversation_complete = True
+                was_completed = signal == SIGNAL_COMPLETE
 
         return (was_completed, session_id if was_completed else None)
 

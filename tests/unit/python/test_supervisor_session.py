@@ -278,6 +278,13 @@ class TestSessionRunnerMethods:
             assert hasattr(runner, '_check_regeneration_signal')
             assert callable(runner._check_regeneration_signal)
 
+    def test_process_stream_method_exists(self):
+        """_process_stream helper method should exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            assert hasattr(runner, '_process_stream')
+            assert callable(runner._process_stream)
+
     def test_record_usage_method_exists(self):
         """_record_usage helper method should exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -845,6 +852,206 @@ class TestRecordUsageBehavior:
             assert kwargs['cost_usd'] == 0.0
             assert kwargs['duration_ms'] == 0
             assert kwargs['turns'] == 0
+
+
+class TestProcessStreamBehavior:
+    """Tests for _process_stream unified streaming method."""
+
+    def _create_runner(self, tmpdir: str):
+        """Create a SessionRunner instance for testing."""
+        with patch.object(Path, 'home', return_value=Path(tmpdir)):
+            from wp_supervisor.markers import SupervisorMarkers
+            from wp_supervisor.hooks import SupervisorHooks
+            from wp_supervisor.logger import SupervisorLogger
+
+            markers = SupervisorMarkers()
+            logger = SupervisorLogger(
+                workflow_dir=markers.markers_dir,
+                workflow_id=markers.workflow_id
+            )
+            hooks = SupervisorHooks(
+                markers=markers,
+                logger=logger,
+                working_dir=tmpdir
+            )
+
+            return SessionRunner(
+                working_dir=tmpdir,
+                markers=markers,
+                hooks=hooks,
+                logger=logger
+            )
+
+    def test_process_stream_returns_session_id(self):
+        """_process_stream should capture and return session_id from messages."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "stream-session-123"
+            text_block = MagicMock()
+            text_block.text = "Hello"
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            # when
+            session_id, signal = run_async(runner._process_stream(
+                mock_client, phase=1
+            ))
+
+            # then
+            assert session_id == "stream-session-123"
+            assert signal is None
+
+    def test_process_stream_detects_signal_via_checker(self):
+        """_process_stream should detect signal using the provided checker callback."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Done! ---PHASE_COMPLETE---"
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            def checker(text):
+                if "PHASE_COMPLETE" in text:
+                    return SIGNAL_COMPLETE
+                return None
+
+            # when
+            session_id, signal = run_async(runner._process_stream(
+                mock_client, phase=1, signal_checker=checker
+            ))
+
+            # then
+            assert signal == SIGNAL_COMPLETE
+
+    def test_process_stream_returns_none_signal_without_checker(self):
+        """_process_stream should return None signal when no checker is provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Some text with ---PHASE_COMPLETE---"
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            # when - no signal_checker
+            _, signal = run_async(runner._process_stream(
+                mock_client, phase=1
+            ))
+
+            # then
+            assert signal is None
+
+    def test_process_stream_records_usage(self):
+        """_process_stream should record usage from result messages."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockResultMessage()
+            msg.usage = {"input_tokens": 200, "output_tokens": 100}
+            msg.total_cost_usd = 0.02
+            msg.duration_ms = 2000
+            msg.num_turns = 2
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            record_calls = []
+            def capture_record(phase, result):
+                record_calls.append((phase, result))
+            runner._record_usage = capture_record
+
+            # when
+            run_async(runner._process_stream(mock_client, phase=3))
+
+            # then
+            assert len(record_calls) == 1
+            assert record_calls[0][0] == 3
+
+    def test_process_stream_skips_falsy_session_id(self):
+        """_process_stream should not capture None or empty session_id."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = None
+            text_block = MagicMock()
+            text_block.text = "Response"
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            # when
+            session_id, _ = run_async(runner._process_stream(
+                mock_client, phase=1
+            ))
+
+            # then
+            assert session_id is None
+
+    def test_process_stream_handles_multiple_messages(self):
+        """_process_stream should process all messages in the stream."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given - two text messages, signal in second
+            mock_client = AsyncMock()
+            msg1 = MockAssistantMessage()
+            msg1.session_id = "sess-1"
+            block1 = MagicMock()
+            block1.text = "First message"
+            msg1.content = [block1]
+
+            msg2 = MockAssistantMessage()
+            msg2.session_id = None
+            block2 = MagicMock()
+            block2.text = "Second with DONE"
+            msg2.content = [block2]
+
+            async def mock_receive():
+                yield msg1
+                yield msg2
+            mock_client.receive_response = mock_receive
+
+            def checker(text):
+                return "found" if "DONE" in text else None
+
+            # when
+            session_id, signal = run_async(runner._process_stream(
+                mock_client, phase=1, signal_checker=checker
+            ))
+
+            # then
+            assert session_id == "sess-1"  # from first message
+            assert signal == "found"  # from second message
 
 
 class TestRunPhaseSessionBehavior:
