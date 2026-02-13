@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.0] - TBD
 
 ### Added
+- **Phase 1 Parallel Exploration via Subagents** (Supervisor mode)
+  - Phase 1 now spawns specialized exploration agents that investigate the codebase in parallel
+  - Three core subagents: business-logic-explorer, dependencies-explorer, test-usecase-explorer
+  - Read-only exploration with tools restricted to [Read, Grep, Glob, Bash]
+  - Static prompts + dynamic requirements passed via Task tool invocation
+  - Graceful fallback to parent-session exploration if subagent build fails
+  - Parent session can do targeted follow-up for cross-cutting concerns
 - **Architecture Explorer subagent** for Phase 1 exploration
   - Fourth parallel exploration subagent focused on system architecture, end-to-end flows, integration points, and framework behavior
   - Addresses exploration gaps identified in production usage analysis
@@ -15,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Identifies all integration points where new code must hook in
   - Documents framework-specific behaviors and concurrency patterns
   - Complements existing business-logic, dependencies, and test-usecase explorers
+
+### Fixed
+- **Phase 1 premature completion** - Claude no longer emits `---PHASE_COMPLETE---` in the same turn as clarifying questions
+- **SessionRunner wiring** - Removed duplicated streaming logic by wiring session.py into orchestrator
+- **Env var leak in tests** - WP_SUPERVISOR_MARKERS_DIR no longer leaks into pytest subprocesses
+- **Regeneration tests** - Updated 15 tests after SessionRunner refactoring
+- **AgentDefinition mock** - Replaced MagicMock with proper dataclass to prevent cross-test pollution
+
+### Changed
+- Split PHASE1_CONTEXT into PHASE1_SUPERVISOR_FALLBACK_CONTEXT for CLI/supervisor template separation
+- Added refactoring-aware guidance to Phase 3 template for delegation/integration tests
+- Removed backward-compatibility re-exports from WPOrchestrator
+- Removed unused task_context and subagents parameters
+- Fixed fragile relative sys.path in templates.py
 
 ## [1.2.0] - 2026-02-08
 
