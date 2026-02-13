@@ -348,7 +348,6 @@ class WPOrchestrator:
                 initial_prompt=initial_context,
                 phase=phase,
                 signal_patterns=self.PHASE_COMPLETE_PATTERNS,
-                subagents=subagents
             )
 
     def _mark_phase_complete(self, phase: int) -> None:

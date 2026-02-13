@@ -325,40 +325,6 @@ class TestRunPhaseSessionSignature:
 
                 assert inspect.iscoroutinefunction(runner.run_phase_session)
 
-    def test_run_phase_session_accepts_subagents_parameter(self):
-        """run_phase_session should accept optional subagents parameter [REQ-3i]."""
-        import inspect
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.markers import SupervisorMarkers
-                from wp_supervisor.hooks import SupervisorHooks
-                from wp_supervisor.logger import SupervisorLogger
-
-                markers = SupervisorMarkers()
-                logger = SupervisorLogger(
-                    workflow_dir=markers.markers_dir,
-                    workflow_id=markers.workflow_id
-                )
-                hooks = SupervisorHooks(
-                    markers=markers,
-                    logger=logger,
-                    working_dir=tmpdir
-                )
-
-                runner = SessionRunner(
-                    working_dir=tmpdir,
-                    markers=markers,
-                    hooks=hooks,
-                    logger=logger
-                )
-
-                sig = inspect.signature(runner.run_phase_session)
-                params = sig.parameters
-
-                assert 'subagents' in params
-                assert params['subagents'].default is None
-
-
 class TestRunRegenerationSessionSignature:
     """Tests for run_regeneration_session method signature [REQ-4]."""
 
@@ -1839,97 +1805,6 @@ class TestUserCommandsInPhaseSession:
                         phase=1,
                         signal_patterns=PHASE_COMPLETE_PATTERNS
                     ))
-
-
-class TestSubagentSupport:
-    """Tests for subagent support in run_phase_session [REQ-3i]."""
-
-    def _create_runner(self, tmpdir: str):
-        """Create a SessionRunner instance for testing."""
-        with patch.object(Path, 'home', return_value=Path(tmpdir)):
-            from wp_supervisor.markers import SupervisorMarkers
-            from wp_supervisor.hooks import SupervisorHooks
-            from wp_supervisor.logger import SupervisorLogger
-
-            markers = SupervisorMarkers()
-            logger = SupervisorLogger(
-                workflow_dir=markers.markers_dir,
-                workflow_id=markers.workflow_id
-            )
-            hooks = SupervisorHooks(
-                markers=markers,
-                logger=logger,
-                working_dir=tmpdir
-            )
-
-            return SessionRunner(
-                working_dir=tmpdir,
-                markers=markers,
-                hooks=hooks,
-                logger=logger
-            )
-
-    def test_run_phase_session_accepts_subagents(self):
-        """run_phase_session should accept subagents parameter [REQ-3i]."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            runner = self._create_runner(tmpdir)
-
-            # given - mock client and subagents
-            mock_client = AsyncMock()
-            mock_message = MockAssistantMessage()
-            mock_message.session_id = "test"
-            text_block = MagicMock()
-            text_block.text = "Done! ---PHASE_COMPLETE---"
-            mock_message.content = [text_block]
-
-            async def mock_receive():
-                yield mock_message
-            mock_client.receive_response = mock_receive
-
-            mock_subagents = {
-                "explorer-1": MagicMock(),
-                "explorer-2": MagicMock()
-            }
-
-            # when - should not raise
-            result = run_async(runner.run_phase_session(
-                client_context_manager=mock_client,
-                initial_prompt="Test",
-                phase=1,
-                signal_patterns=PHASE_COMPLETE_PATTERNS,
-                subagents=mock_subagents
-            ))
-
-            # then - should complete successfully
-            assert result == "test"
-
-    def test_run_phase_session_works_without_subagents(self):
-        """run_phase_session should work when subagents is None [REQ-3i]."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            runner = self._create_runner(tmpdir)
-
-            # given - mock client
-            mock_client = AsyncMock()
-            mock_message = MockAssistantMessage()
-            mock_message.session_id = "test"
-            text_block = MagicMock()
-            text_block.text = "Done! ---PHASE_COMPLETE---"
-            mock_message.content = [text_block]
-
-            async def mock_receive():
-                yield mock_message
-            mock_client.receive_response = mock_receive
-
-            # when - subagents defaults to None
-            result = run_async(runner.run_phase_session(
-                client_context_manager=mock_client,
-                initial_prompt="Test",
-                phase=1,
-                signal_patterns=PHASE_COMPLETE_PATTERNS
-            ))
-
-            # then - should complete successfully
-            assert result == "test"
 
 
 if __name__ == '__main__':

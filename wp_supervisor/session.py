@@ -164,7 +164,6 @@ class SessionRunner:
         initial_prompt: str,
         phase: int,
         signal_patterns: SignalPatterns,
-        subagents: Optional[Dict[str, "AgentDefinition"]] = None
     ) -> Optional[str]:
         """
         Run an interactive Claude session for a phase. Returns session_id.
