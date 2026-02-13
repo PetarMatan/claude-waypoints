@@ -41,3 +41,6 @@ MULTI_AGENT_NOTES.md
 
 # E2E test directory (uses real Claude API calls, not for CI)
 e2e/
+
+# Analysis documents (internal use)
+WAYPOINTS_FAILURE_ANALYSIS.md

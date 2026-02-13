@@ -13,6 +13,7 @@ from .templates import (
     BUSINESS_LOGIC_INSTRUCTIONS,
     DEPENDENCIES_INSTRUCTIONS,
     TEST_USECASE_INSTRUCTIONS,
+    ARCHITECTURE_INSTRUCTIONS,
 )
 
 try:
@@ -30,6 +31,7 @@ except ImportError:
 BUSINESS_LOGIC_EXPLORER = "business-logic-explorer"
 DEPENDENCIES_EXPLORER = "dependencies-explorer"
 TEST_USECASE_EXPLORER = "test-usecase-explorer"
+ARCHITECTURE_EXPLORER = "architecture-explorer"
 
 # Exploration tools for subagents. Bash is included for commands like
 # git log or directory listing; write prevention is instruction-based, not tool-enforced.
@@ -55,6 +57,11 @@ TEST_USECASE_DESCRIPTION = (
     "Use for understanding how similar functionality is tested."
 )
 
+ARCHITECTURE_DESCRIPTION = (
+    "Maps system architecture, end-to-end flows, integration points, and framework behavior. "
+    "Use for understanding how data/events flow through the system and where to hook in new code."
+)
+
 
 # =============================================================================
 # SUBAGENT BUILDER
@@ -74,7 +81,7 @@ class SubagentBuilder:
     def build_exploration_agents(
         knowledge_context: str = ""
     ) -> Dict[str, AgentDefinition]:
-        """Build all three exploration subagents with injected context."""
+        """Build all four exploration subagents with injected context."""
         return {
             BUSINESS_LOGIC_EXPLORER: SubagentBuilder.build_business_logic_agent(
                 knowledge_context=knowledge_context
@@ -83,6 +90,9 @@ class SubagentBuilder:
                 knowledge_context=knowledge_context
             ),
             TEST_USECASE_EXPLORER: SubagentBuilder.build_test_usecase_agent(
+                knowledge_context=knowledge_context
+            ),
+            ARCHITECTURE_EXPLORER: SubagentBuilder.build_architecture_agent(
                 knowledge_context=knowledge_context
             ),
         }
@@ -128,6 +138,21 @@ class SubagentBuilder:
 
         return AgentDefinition(
             description=TEST_USECASE_DESCRIPTION,
+            prompt=prompt,
+            tools=EXPLORATION_TOOLS
+        )
+
+    @staticmethod
+    def build_architecture_agent(
+        knowledge_context: str = ""
+    ) -> AgentDefinition:
+        """Build the Architecture & Flow Explorer subagent."""
+        prompt = ARCHITECTURE_INSTRUCTIONS.format(
+            knowledge_context=SubagentBuilder._format_knowledge_section(knowledge_context)
+        )
+
+        return AgentDefinition(
+            description=ARCHITECTURE_DESCRIPTION,
             prompt=prompt,
             tools=EXPLORATION_TOOLS
         )

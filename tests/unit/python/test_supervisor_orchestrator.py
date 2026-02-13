@@ -1775,7 +1775,7 @@ class TestIntegrationTaskGuidance:
 class TestBuildExplorationSubagents:
     """Tests for _build_exploration_subagents method."""
 
-    def test_build_exploration_subagents_returns_three_agents(self):
+    def test_build_exploration_subagents_returns_four_agents(self):
         """Should return exactly three exploration agents."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
@@ -1787,7 +1787,7 @@ class TestBuildExplorationSubagents:
                 agents = orchestrator._build_exploration_subagents()
 
                 # then
-                assert len(agents) == 3
+                assert len(agents) == 4
 
     def test_build_exploration_subagents_returns_dict(self):
         """Should return a dictionary."""
@@ -1831,7 +1831,7 @@ class TestBuildExplorationSubagents:
                 agents = orchestrator._build_exploration_subagents()
 
                 # then
-                assert len(agents) == 3
+                assert len(agents) == 4
 
 
 class TestSubagentIntegrationWithPhaseSession:
@@ -1903,7 +1903,7 @@ class TestSubagentIntegrationWithPhaseSession:
                 # then
                 assert len(captured_subagents) == 1
                 assert captured_subagents[0] is not None
-                assert len(captured_subagents[0]) == 3
+                assert len(captured_subagents[0]) == 4
 
     def test_phase2_does_not_build_subagents(self):
         """Phase 2 should not build subagents."""

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - TBD
+
+### Added
+- **Architecture Explorer subagent** for Phase 1 exploration
+  - Fourth parallel exploration subagent focused on system architecture, end-to-end flows, integration points, and framework behavior
+  - Addresses exploration gaps identified in production usage analysis
+  - Traces complete data/event flows through the system
+  - Identifies all integration points where new code must hook in
+  - Documents framework-specific behaviors and concurrency patterns
+  - Complements existing business-logic, dependencies, and test-usecase explorers
+
 ## [1.2.0] - 2026-02-08
 
 ### Added
