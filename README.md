@@ -84,9 +84,15 @@ Each phase runs in a **fresh Claude session** with clean context. Summaries are 
 
 ### Installation
 
-**Quick install (recommended):**
+**Quick install (recommended - latest stable):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PetarMatan/claude-waypoints/main/install.sh | bash
+```
+
+**Install specific version (for stability):**
+```bash
+# Example: Install v1.3.1
+curl -fsSL https://raw.githubusercontent.com/PetarMatan/claude-waypoints/v1.3.1/install.sh | bash
 ```
 
 **Or clone and install manually:**
