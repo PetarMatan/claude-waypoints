@@ -60,6 +60,7 @@ Provide a concise summary of:
 - Be thorough but concise
 - Note any patterns that should be followed
 - Identify potential reuse opportunities
+- Do NOT create any files — report findings in your response only
 
 {knowledge_context}
 """
@@ -88,6 +89,7 @@ Provide a concise summary of:
 - Note version constraints or compatibility concerns
 - Identify configuration that might need changes
 - Document integration patterns
+- Do NOT create any files — report findings in your response only
 
 {knowledge_context}
 """
@@ -116,6 +118,7 @@ Provide a concise summary of:
 - Note testing patterns that should be followed
 - Identify test utilities that could be reused
 - Document any testing constraints or requirements
+- Do NOT create any files — report findings in your response only
 
 {knowledge_context}
 """
@@ -245,6 +248,7 @@ Notable Behaviors:
 - PROVIDE FILE PATHS - exact locations for everything reported
 - BE CONCISE - focus on what's relevant to the user's requirements
 - NOTE FRAMEWORK QUIRKS - anything non-obvious that could cause bugs
+- Do NOT create any files — report findings in your response only
 
 ## Critical Success Factors
 ✅ Complete flow traced from trigger to completion
@@ -402,6 +406,11 @@ structural skeleton of the solution WITHOUT implementing business logic.
    - Add new dependencies (injection points) to existing classes
    - Add call site stubs where new functionality will be invoked
    - These modifications must also compile
+6. Trace data flows end-to-end for each requirement:
+   - For every method that produces output (returns data, enqueues, emits),
+     identify the consumer and add a stub for it
+   - If new code needs to deliver data back to existing code,
+     add the receiving stub in the existing file — not just the sending side
 
 ## Guidelines
 - Focus on the PUBLIC API - what will consumers of this code use?
@@ -689,6 +698,7 @@ Review the interfaces summary you just created for completeness.
 4. [ ] ALL data types/models are listed
 5. [ ] Signatures match EXACTLY what's in the code
 6. [ ] File paths are correct and would be found in the project
+7. [ ] Data flows are bidirectional — every method that produces output has a designed consumer
 
 ## Your Task
 Compare your summary against the actual code you wrote.
@@ -949,3 +959,63 @@ def format_workflow_complete() -> str:
     """Format the workflow completion message."""
     separator = '=' * 60
     return f"\n{separator}\nWaypoints Workflow Complete!\n{separator}\n"
+
+
+# =============================================================================
+# REVIEWER AGENT PROMPT TEMPLATE
+# =============================================================================
+
+REVIEWER_PROMPT_TEMPLATE = """You are an architectural code reviewer validating implementation quality and requirements compliance.
+
+## Core Philosophy
+**Pragmatism over dogmatism.** SOLID and DRY principles are guidelines, not rules to follow religiously.
+The goal is maintainable, reusable code that solves real problems — not perfectly engineered code
+that's over-complicated. Sometimes the simple solution that breaks a principle is better than the
+"correct" architecture. Evaluate trade-offs, not principles.
+
+## Requirements
+{requirements_summary}
+{interfaces_section}
+## Changed Files
+{files_section}
+
+## Review Process
+
+### First Pass — Responsibility Analysis (MANDATORY)
+Before evaluating anything else:
+1. List every class/function and what it actually does
+2. Compare against what it SHOULD do based on the requirements and interfaces
+3. Flag mismatches — but assess whether each violation is pragmatic or problematic
+
+### Second Pass — Core Review Questions
+1. **Requirements Compliance**: Does the implementation match all requirements? Are edge cases handled?
+2. **Single Responsibility**: Does each class have too many reasons to change? (Not "exactly one" — too many is the problem)
+3. **Testability**: Can each component be tested in isolation without gymnastics?
+4. **Maintainability**: Will changes be easy to make? Will they be localized or ripple through the codebase?
+5. **Error Handling**: Are errors propagated properly or hidden? Can callers understand what went wrong?
+6. **Clarity**: Is it clear what this code does without extensive tracing?
+
+### When to Flag Issues
+- The implementation doesn't match the requirements
+- Required functionality is missing
+- Edge cases from requirements are not handled
+- The violation causes real maintainability issues
+- It prevents code reuse in logical contexts
+- It mixes unrelated concerns in a way that makes sense to separate
+- There are obvious scalability or performance concerns (but don't speculate about hypothetical load)
+
+### When NOT to Flag
+- A small utility class with 2-3 light responsibilities
+- Some code duplication if refactoring would create unnecessary abstractions
+- Classes that know about their immediate dependencies
+- The violation simplifies the code meaningfully
+- The scope is small enough that it doesn't matter
+
+## Output
+If everything looks good, respond with "No issues found."
+
+Otherwise, list each issue concisely as a numbered or bulleted list.
+Explain the principle being violated and WHY it matters in this context.
+Suggest alternatives only if they provide meaningful improvement.
+Do not suggest over-engineered solutions.
+"""

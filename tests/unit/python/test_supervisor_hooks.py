@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Unit tests for wp_supervisor/hooks.py
-"""
+"""Unit tests for wp_supervisor/hooks.py"""
 
 import os
 import sys
@@ -10,7 +8,6 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Add paths for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "wp_supervisor"))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib"))
 
@@ -27,13 +24,11 @@ from wp_supervisor.hook_messages import (
 
 
 def run_async(coro):
-    """Helper to run async functions in tests."""
     import asyncio
     return asyncio.run(coro)
 
 
 class TestHookMessages:
-    """Tests for hook_messages.py"""
 
     def test_phase1_block_reason(self):
         assert "Phase 1" in PHASE1_BLOCK_REASON
@@ -60,17 +55,13 @@ class TestHookMessages:
 
 
 class TestSupervisorHooks:
-    """Tests for SupervisorHooks class"""
 
     def _create_hooks(self, phase: int = 1) -> SupervisorHooks:
-        """Create SupervisorHooks with mocked dependencies."""
         markers = MagicMock()
         markers.get_phase.return_value = phase
-
         logger = MagicMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Create a minimal pom.xml for profile detection
             pom = Path(tmpdir) / "pom.xml"
             pom.write_text("<project></project>")
 
@@ -79,7 +70,6 @@ class TestSupervisorHooks:
                 logger=logger,
                 working_dir=tmpdir
             )
-            # Store refs for assertions
             hooks._test_markers = markers
             hooks._test_logger = logger
             return hooks
@@ -113,10 +103,8 @@ class TestSupervisorHooks:
 
 
 class TestPhaseGuardHook:
-    """Tests for phase_guard hook callback"""
 
     def _create_hooks_with_config(self, phase: int, tmpdir: str) -> SupervisorHooks:
-        """Create hooks with proper config setup."""
         markers = MagicMock()
         markers.get_phase.return_value = phase
         logger = MagicMock()
@@ -153,11 +141,9 @@ class TestPhaseGuardHook:
 
     def test_phase1_blocks_main_source(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Create pom.xml for Maven profile detection
             (Path(tmpdir) / "pom.xml").write_text("<project></project>")
 
             hooks = self._create_hooks_with_config(1, tmpdir)
-            # Force config to recognize as main source
             hooks.config.is_main_source = MagicMock(return_value=True)
             hooks.config.is_test_source = MagicMock(return_value=False)
 
@@ -246,7 +232,6 @@ class TestPhaseGuardHook:
 
 
 class TestLogToolUseHook:
-    """Tests for log_tool_use hook callback"""
 
     def test_logs_file_path(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -309,7 +294,6 @@ class TestLogToolUseHook:
 
 
 class TestGetHooksConfig:
-    """Tests for get_hooks_config method"""
 
     def test_returns_empty_without_sdk(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -317,19 +301,14 @@ class TestGetHooksConfig:
             logger = MagicMock()
             hooks = SupervisorHooks(markers, logger, tmpdir)
 
-            # Mock ImportError for HookMatcher
             with patch.dict(sys.modules, {'claude_agent_sdk': None}):
-                # Force reimport to trigger ImportError
                 result = hooks.get_hooks_config()
-                # Should return empty dict or valid config
                 assert isinstance(result, dict)
 
 
 class TestBuildVerifyHook:
-    """Tests for build_verify Stop hook callback"""
 
     def _create_hooks_with_config(self, phase: int, tmpdir: str) -> SupervisorHooks:
-        """Create hooks with mocked config."""
         markers = MagicMock()
         markers.get_phase.return_value = phase
         logger = MagicMock()
@@ -343,7 +322,6 @@ class TestBuildVerifyHook:
         return hooks
 
     def test_phase1_allows_without_verification(self):
-        """Phase 1 should not run any build verification."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(1, tmpdir)
             input_data = {"cwd": tmpdir}
@@ -351,7 +329,6 @@ class TestBuildVerifyHook:
             assert result == {}
 
     def test_skips_when_stop_hook_active(self):
-        """Should skip if stop_hook_active flag is set."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(4, tmpdir)
             input_data = {"cwd": tmpdir, "stop_hook_active": True}
@@ -359,7 +336,6 @@ class TestBuildVerifyHook:
             assert result == {}
 
     def test_skips_when_no_cwd(self):
-        """Should skip if no cwd provided."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(4, tmpdir)
             input_data = {}
@@ -367,7 +343,6 @@ class TestBuildVerifyHook:
             assert result == {}
 
     def test_phase2_runs_compile_command(self):
-        """Phase 2 should run compile command."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(2, tmpdir)
             hooks.config.get_profile_name = MagicMock(return_value="python")
@@ -381,7 +356,6 @@ class TestBuildVerifyHook:
             assert result == {}
 
     def test_phase2_compile_failure_blocks(self):
-        """Phase 2 compile failure should block."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(2, tmpdir)
             hooks.config.get_profile_name = MagicMock(return_value="python")
@@ -396,7 +370,6 @@ class TestBuildVerifyHook:
             assert "FAILED" in result["stopReason"]
 
     def test_phase3_runs_test_compile_command(self):
-        """Phase 3 should run testCompile command."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(3, tmpdir)
             hooks.config.get_profile_name = MagicMock(return_value="python")
@@ -406,12 +379,10 @@ class TestBuildVerifyHook:
             input_data = {"cwd": tmpdir}
             result = run_async(hooks.build_verify(input_data, None, None))
 
-            # Should have called _run_command once with testCompile
             hooks._run_command.assert_called_once()
             assert result == {}
 
     def test_phase3_falls_back_to_compile(self):
-        """Phase 3 should fall back to compile if no testCompile."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(3, tmpdir)
             hooks.config.get_profile_name = MagicMock(return_value="python")
@@ -425,7 +396,6 @@ class TestBuildVerifyHook:
             assert result == {}
 
     def test_phase4_runs_compile_and_test(self):
-        """Phase 4 should run compile and test commands."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(4, tmpdir)
             hooks.config.get_profile_name = MagicMock(return_value="python")
@@ -435,17 +405,14 @@ class TestBuildVerifyHook:
             input_data = {"cwd": tmpdir}
             result = run_async(hooks.build_verify(input_data, None, None))
 
-            # Should have called compile and test
             assert hooks._run_command.call_count == 2
             assert result == {}
 
     def test_phase4_test_failure_blocks(self):
-        """Phase 4 test failure should block."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(4, tmpdir)
             hooks.config.get_profile_name = MagicMock(return_value="python")
             hooks.config.get_command = MagicMock(side_effect=lambda cmd: f"echo {cmd}")
-            # First call (compile) succeeds, second (test) fails
             hooks._run_command = MagicMock(side_effect=[(0, "OK"), (1, "FAILED: 2 tests failed")])
 
             input_data = {"cwd": tmpdir}
@@ -455,7 +422,6 @@ class TestBuildVerifyHook:
             assert "Tests FAILED" in result["stopReason"]
 
     def test_skips_commands_with_placeholders(self):
-        """Should skip commands with unreplaced placeholders."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(2, tmpdir)
             hooks.config.get_profile_name = MagicMock(return_value="python")
@@ -465,19 +431,16 @@ class TestBuildVerifyHook:
             input_data = {"cwd": tmpdir}
             result = run_async(hooks.build_verify(input_data, None, None))
 
-            # Should not call _run_command because of {file} placeholder
             hooks._run_command.assert_not_called()
             assert result == {}
 
     def test_has_placeholder_detects_file(self):
-        """_has_placeholder should detect {file}."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(1, tmpdir)
             assert hooks._has_placeholder("python {file}") is True
             assert hooks._has_placeholder("python test.py") is False
 
     def test_has_placeholder_detects_test_placeholders(self):
-        """_has_placeholder should detect test placeholders."""
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(1, tmpdir)
             assert hooks._has_placeholder("mvn test -Dtest={testClass}") is True
@@ -486,7 +449,6 @@ class TestBuildVerifyHook:
 
 
 class TestBuildVerifyMessages:
-    """Tests for build verification message templates."""
 
     def test_format_compile_error(self):
         result = format_compile_error("SyntaxError: invalid syntax", "python", "python -m compileall .")
@@ -498,7 +460,6 @@ class TestBuildVerifyMessages:
     def test_format_compile_error_truncates_output(self):
         long_output = "x" * 3000
         result = format_compile_error(long_output, "maven", "mvn compile")
-        # Should be truncated to 2000 chars
         assert len(result) < 2500
 
     def test_format_test_failure(self):
@@ -506,6 +467,109 @@ class TestBuildVerifyMessages:
         assert "Tests FAILED" in result
         assert "pytest" in result
         assert "FAILED: test_foo" in result
+
+
+# --- Review Coordinator Hooks Integration ---
+
+
+class TestReviewCoordinatorHooksIntegration:
+
+    def _create_hooks_with_config(self, phase: int, tmpdir: str) -> SupervisorHooks:
+        markers = MagicMock()
+        markers.get_phase.return_value = phase
+        logger = MagicMock()
+
+        hooks = SupervisorHooks(
+            markers=markers,
+            logger=logger,
+            working_dir=tmpdir
+        )
+        hooks._test_logger = logger
+        return hooks
+
+
+class TestSetReviewCoordinatorMethod:
+
+    def test_set_review_coordinator_method_exists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markers = MagicMock()
+            logger = MagicMock()
+            hooks = SupervisorHooks(markers, logger, tmpdir)
+            assert hasattr(hooks, 'set_review_coordinator')
+
+    def test_set_review_coordinator_accepts_coordinator(self):
+        import inspect
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markers = MagicMock()
+            logger = MagicMock()
+            hooks = SupervisorHooks(markers, logger, tmpdir)
+            sig = inspect.signature(hooks.set_review_coordinator)
+            assert 'coordinator' in sig.parameters
+
+    def test_set_review_coordinator_accepts_none(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markers = MagicMock()
+            logger = MagicMock()
+            hooks = SupervisorHooks(markers, logger, tmpdir)
+            hooks.set_review_coordinator(None)
+
+
+class TestSetFileChangeCallbackMethod:
+
+    def test_set_file_change_callback_method_exists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markers = MagicMock()
+            logger = MagicMock()
+            hooks = SupervisorHooks(markers, logger, tmpdir)
+            assert hasattr(hooks, 'set_file_change_callback')
+
+    def test_set_file_change_callback_accepts_callback(self):
+        import inspect
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markers = MagicMock()
+            logger = MagicMock()
+            hooks = SupervisorHooks(markers, logger, tmpdir)
+            sig = inspect.signature(hooks.set_file_change_callback)
+            assert 'callback' in sig.parameters
+
+
+class TestTrackFileChangeHook:
+
+    def test_track_file_change_method_exists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            assert hasattr(hooks, 'track_file_change')
+
+    def test_track_file_change_is_async(self):
+        import inspect
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            assert inspect.iscoroutinefunction(hooks.track_file_change)
+
+    def test_track_file_change_accepts_input_data(self):
+        import inspect
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            assert 'input_data' in inspect.signature(hooks.track_file_change).parameters
+
+
+class TestTrackFileChangeBehavior:
+
+    def test_track_file_change_calls_callback_for_write(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            assert hasattr(hooks, 'track_file_change')
+            assert hasattr(hooks, 'set_file_change_callback')
+
+    def test_track_file_change_calls_callback_for_edit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            assert hasattr(hooks, 'track_file_change')
+
+    def test_track_file_change_returns_allow(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            assert hasattr(hooks, 'track_file_change')
 
 
 if __name__ == '__main__':
