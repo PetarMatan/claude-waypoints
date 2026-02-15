@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""
-Waypoints Supervisor - Hook Callbacks
-
-Provides hook callback functions for SDK-spawned Claude sessions.
-Reuses logic from hooks/lib/ (WPConfig for pattern matching).
-"""
+"""Hook callbacks for SDK-spawned Claude sessions."""
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
 # Add hooks/lib to path for imports
 _hooks_lib = Path(__file__).parent.parent / "hooks" / "lib"
@@ -26,16 +21,13 @@ from .hook_messages import (
 if TYPE_CHECKING:
     from .logger import SupervisorLogger
     from .markers import SupervisorMarkers
+    from .review_coordinator import ReviewCoordinator
+
+FileChangeCallback = Callable[[str, str], None]  # (file_path, tool_name) -> None
 
 
 class SupervisorHooks:
-    """
-    Hook callbacks for supervisor-spawned Claude sessions.
-
-    Replicates CLI hook behavior:
-    - Phase guard: blocks writes that don't match current phase
-    - Logging: logs tool uses to workflow.log
-    """
+    """Hook callbacks for supervisor-spawned Claude sessions."""
 
     def __init__(
         self,
@@ -47,15 +39,21 @@ class SupervisorHooks:
         self.logger = logger
         self.config = WPConfig(working_dir)
 
-    # --- Response Helpers ---
+        self._review_coordinator: Optional["ReviewCoordinator"] = None
+        self._on_file_change: Optional[FileChangeCallback] = None
+
+    def set_review_coordinator(self, coordinator: Optional["ReviewCoordinator"]) -> None:
+        """Set the review coordinator for Phase 4 file tracking."""
+        self._review_coordinator = coordinator
+
+    def set_file_change_callback(self, callback: Optional[FileChangeCallback]) -> None:
+        self._on_file_change = callback
 
     def _get_file_path(self, input_data: Dict[str, Any]) -> Optional[str]:
-        """Extract file path from tool input."""
         tool_input = input_data.get("tool_input", {})
         return tool_input.get("file_path") if isinstance(tool_input, dict) else None
 
     def _deny(self, hook_event_name: str, reason: str) -> Dict[str, Any]:
-        """Create a deny response."""
         return {
             "hookSpecificOutput": {
                 "hookEventName": hook_event_name,
@@ -65,10 +63,7 @@ class SupervisorHooks:
         }
 
     def _allow(self) -> Dict[str, Any]:
-        """Create an allow response (empty dict)."""
         return {}
-
-    # --- Hook Callbacks ---
 
     async def phase_guard(
         self,
@@ -76,17 +71,7 @@ class SupervisorHooks:
         tool_use_id: Optional[str],
         context: Any
     ) -> Dict[str, Any]:
-        """
-        Phase guard - blocks file edits that don't match current phase.
-
-        Phase rules:
-        - Phase 1: Block all source edits
-        - Phase 2: Block test edits
-        - Phase 3: Block main source edits (allow tests)
-        - Phase 4: Allow all
-
-        Note: Uses run_in_executor for blocking I/O to avoid blocking event loop.
-        """
+        """Phase guard - blocks file edits that don't match current phase."""
         import asyncio
 
         try:
@@ -98,7 +83,6 @@ class SupervisorHooks:
             if not file_path:
                 return self._allow()
 
-            # Run blocking I/O in executor to avoid blocking event loop
             loop = asyncio.get_running_loop()
 
             phase = await loop.run_in_executor(None, self.markers.get_phase)
@@ -119,7 +103,6 @@ class SupervisorHooks:
 
             if should_block:
                 log_reason = get_log_reason(phase)
-                # Log in executor too
                 await loop.run_in_executor(
                     None,
                     self.logger.log_wp,
@@ -133,7 +116,7 @@ class SupervisorHooks:
                 self.logger.log_event("HOOK_ERROR", f"phase_guard exception: {e}")
             except:
                 pass
-            return self._allow()  # Allow on error to not break workflow
+            return self._allow()
 
     async def log_tool_use(
         self,
@@ -141,11 +124,7 @@ class SupervisorHooks:
         tool_use_id: Optional[str],
         context: Any
     ) -> Dict[str, Any]:
-        """
-        Logging hook - logs tool uses to workflow.log.
-
-        Note: Uses run_in_executor for blocking I/O to avoid blocking event loop.
-        """
+        """Logging hook - logs tool uses to workflow.log."""
         import asyncio
 
         try:
@@ -184,14 +163,64 @@ class SupervisorHooks:
 
             return self._allow()
         except Exception as e:
-            # Log error but don't break workflow
             try:
                 self.logger.log_event("HOOK_ERROR", f"log_tool_use exception: {e}")
             except:
                 pass
             return self._allow()
 
-    # --- Build Verification Hook ---
+    async def track_file_change(
+        self,
+        input_data: Dict[str, Any],
+        tool_use_id: Optional[str],
+        context: Any
+    ) -> Dict[str, Any]:
+        """PostToolUse hook for tracking file changes during Phase 4."""
+        import asyncio
+
+        try:
+            hook_event = input_data.get("hook_event_name", "")
+            if hook_event != "PostToolUse":
+                return self._allow()
+
+            tool_name = input_data.get("tool_name", "")
+            if tool_name not in ("Write", "Edit"):
+                return self._allow()
+
+            file_path = self._get_file_path(input_data)
+            if not file_path:
+                return self._allow()
+
+            loop = asyncio.get_running_loop()
+            phase = await loop.run_in_executor(None, self.markers.get_phase)
+
+            if phase != 4:
+                return self._allow()
+
+            if self._review_coordinator is not None:
+                try:
+                    await self._review_coordinator.on_file_changed(file_path, tool_name)
+                except Exception as e:
+                    await loop.run_in_executor(
+                        None,
+                        self.logger.log_event,
+                        "REVIEWER",
+                        f"File change tracking error: {e}"
+                    )
+
+            if self._on_file_change is not None:
+                try:
+                    self._on_file_change(file_path, tool_name)
+                except Exception:
+                    pass
+
+            return self._allow()
+        except Exception as e:
+            try:
+                self.logger.log_event("HOOK_ERROR", f"track_file_change exception: {e}")
+            except:
+                pass
+            return self._allow()
 
     def _run_command(self, cmd: str, cwd: str, timeout: int = 120) -> tuple:
         """Run a shell command and return (exit_code, output)."""
@@ -208,7 +237,6 @@ class SupervisorHooks:
             return 1, f"Command error: {e}"
 
     def _has_placeholder(self, cmd: str) -> bool:
-        """Check if command has unreplaced placeholders."""
         placeholders = ["{file}", "{testClass}", "{testName}", "{testFile}"]
         return any(p in cmd for p in placeholders)
 
@@ -218,15 +246,7 @@ class SupervisorHooks:
         tool_use_id: Optional[str],
         context: Any
     ) -> Dict[str, Any]:
-        """
-        Build verification hook (Stop) - runs compile/test before phase completion.
-
-        Phase behavior:
-        - Phase 1: No verification
-        - Phase 2: Run compile command
-        - Phase 3: Run test compile command
-        - Phase 4: Run compile + full test suite
-        """
+        """Build verification hook (Stop) - runs compile/test before phase completion."""
         import asyncio
 
         try:
@@ -253,7 +273,6 @@ class SupervisorHooks:
                 f"Phase {phase} stop hook triggered (profile: {profile})"
             )
 
-            # Phase 2: Verify interfaces compile
             if phase == 2 and compile_cmd and not self._has_placeholder(compile_cmd):
                 await loop.run_in_executor(None, self.logger.log_event, "BUILD", f"Running: {compile_cmd}")
                 code, out = await loop.run_in_executor(None, self._run_command, compile_cmd, cwd)
@@ -262,7 +281,6 @@ class SupervisorHooks:
                     return {"continue": False, "stopReason": format_compile_error(out, profile, compile_cmd)}
                 await loop.run_in_executor(None, self.logger.log_wp, "Phase 2: Compile OK")
 
-            # Phase 3: Verify tests compile
             if phase == 3:
                 cmd = test_compile_cmd or compile_cmd
                 if cmd and not self._has_placeholder(cmd):
@@ -273,7 +291,6 @@ class SupervisorHooks:
                         return {"continue": False, "stopReason": format_compile_error(out, profile, cmd)}
                     await loop.run_in_executor(None, self.logger.log_wp, "Phase 3: Test compile OK")
 
-            # Phase 4: Verify compile + tests pass
             if phase == 4:
                 if compile_cmd and not self._has_placeholder(compile_cmd):
                     await loop.run_in_executor(None, self.logger.log_event, "BUILD", f"Running: {compile_cmd}")
@@ -302,13 +319,10 @@ class SupervisorHooks:
                 pass
             return self._allow()
 
-    # --- Hook Config ---
-
     def get_hooks_config(self) -> Dict[str, Any]:
         """Get hooks config for ClaudeAgentOptions."""
         import os
 
-        # Allow disabling hooks via environment variable for debugging
         if os.environ.get("WP_DISABLE_HOOKS") == "1":
             self.logger.log_event("HOOK", "Hooks DISABLED via WP_DISABLE_HOOKS=1")
             return {}
@@ -319,12 +333,14 @@ class SupervisorHooks:
             self.logger.log_event("HOOK", "HookMatcher import FAILED - no hooks registered")
             return {}
 
-        # Full hooks: phase guard, logging, and build verification
-        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify)")
+        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify, file_tracking)")
         return {
             "PreToolUse": [
                 HookMatcher(matcher="Write|Edit", hooks=[self.phase_guard]),
                 HookMatcher(hooks=[self.log_tool_use]),
+            ],
+            "PostToolUse": [
+                HookMatcher(matcher="Write|Edit", hooks=[self.track_file_change]),
             ],
             "Stop": [
                 HookMatcher(hooks=[self.build_verify]),
@@ -332,12 +348,7 @@ class SupervisorHooks:
         }
 
     def get_extraction_hooks_config(self) -> Dict[str, Any]:
-        """
-        Get lightweight hooks config for internal queries (summary, review, knowledge extraction).
-
-        Excludes build_verify Stop hook to avoid unnecessary compilation
-        when Claude is only generating text summaries.
-        """
+        """Get lightweight hooks config for internal queries (no build verification)."""
         import os
 
         if os.environ.get("WP_DISABLE_HOOKS") == "1":

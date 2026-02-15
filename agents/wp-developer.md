@@ -114,6 +114,9 @@ true # wp:mark-complete requirements
 - If the feature requires changes to existing code, modify those existing classes too:
   add new dependencies, add call site stubs with TODO. A new helper class alone is NOT
   sufficient if the requirements expect it to be called from existing code.
+- Trace data flows end-to-end: if new code produces output that existing code
+  needs to consume (callbacks, queues, return values), add consumer stubs
+  in the existing code — not just the forward call sites.
 
 **Examples by Language**:
 
