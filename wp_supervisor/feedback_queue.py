@@ -4,7 +4,6 @@
 import asyncio
 import time
 from dataclasses import dataclass
-from enum import Enum
 from typing import List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,17 +11,10 @@ if TYPE_CHECKING:
     from .reviewer import ReviewResult
 
 
-class FeedbackPriority(Enum):
-    """Priority level for feedback injection."""
-    NORMAL = "normal"
-    ESCALATED = "escalated"
-
-
 @dataclass
 class FeedbackItem:
     """A queued feedback item for injection."""
     message: str
-    priority: FeedbackPriority
     review_result: "ReviewResult"
     timestamp: float
 
@@ -45,14 +37,12 @@ class FeedbackQueue:
     async def enqueue(
         self,
         message: str,
-        priority: FeedbackPriority,
         review_result: "ReviewResult"
     ) -> None:
         """Add feedback to the queue. Thread-safe."""
         async with self._lock:
             item = FeedbackItem(
                 message=message,
-                priority=priority,
                 review_result=review_result,
                 timestamp=time.monotonic()
             )

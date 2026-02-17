@@ -61,24 +61,14 @@ class TestReviewResult:
         assert isinstance(result.files_reviewed, set)
         assert len(result.files_reviewed) == 0
 
-    def test_review_result_has_is_repeat_issue_field(self):
-        assert ReviewResult().is_repeat_issue is False
-
-    def test_review_result_has_cycle_count_field(self):
-        assert ReviewResult().cycle_count == 0
-
     def test_review_result_with_issues(self):
         result = ReviewResult(
             issues=["Issue 1", "Issue 2"],
             files_reviewed={"/path/to/file.py"},
-            is_repeat_issue=True,
-            cycle_count=2
         )
         assert len(result.issues) == 2
         assert "Issue 1" in result.issues
         assert "/path/to/file.py" in result.files_reviewed
-        assert result.is_repeat_issue is True
-        assert result.cycle_count == 2
 
 
 class TestReviewerContext:
@@ -175,26 +165,6 @@ class TestReviewerAgentStop:
         assert inspect.iscoroutinefunction(ReviewerAgent.stop)
 
 
-class TestReviewerAgentShouldEscalate:
-
-    def testshould_escalate_method_exists(self):
-        assert hasattr(ReviewerAgent, 'should_escalate')
-
-    def testshould_escalate_accepts_result_parameter(self):
-        import inspect
-        assert 'result' in inspect.signature(ReviewerAgent.should_escalate).parameters
-
-
-class TestReviewerAgentTrackIssues:
-
-    def test_track_issues_method_exists(self):
-        assert hasattr(ReviewerAgent, '_track_issues')
-
-    def test_track_issues_accepts_issues_parameter(self):
-        import inspect
-        assert 'issues' in inspect.signature(ReviewerAgent._track_issues).parameters
-
-
 # --- Behavioral Tests ---
 
 class TestReviewerAgentBehavior:
@@ -225,22 +195,7 @@ class TestReviewerAgentBehavior:
     def test_review_returns_empty_result_when_no_files_changed(self):
         assert hasattr(ReviewerAgent, 'review')
 
-    def test_review_tracks_issues_for_escalation(self):
-        assert hasattr(ReviewerAgent, '_track_issues')
-
-    def testshould_escalate_returns_true_after_two_cycles(self):
-        result = ReviewResult(issues=["Same issue"], cycle_count=2, is_repeat_issue=True)
-        assert result.cycle_count == 2
-
-    def testshould_escalate_returns_false_on_first_occurrence(self):
-        result = ReviewResult(issues=["New issue"], cycle_count=1, is_repeat_issue=False)
-        assert result.cycle_count == 1
-        assert result.is_repeat_issue is False
-
     def test_format_feedback_includes_issues(self):
-        assert hasattr(ReviewerAgent, 'format_feedback')
-
-    def test_format_feedback_escalated_has_higher_visibility(self):
         assert hasattr(ReviewerAgent, 'format_feedback')
 
     def test_stop_cleans_up_resources(self):
@@ -260,24 +215,6 @@ class TestReviewerContextMinimalData:
         files = {"/path/to/file.py": "def foo(): pass"}
         context = ReviewerContext(requirements_summary="# Requirements", changed_files=files)
         assert isinstance(context.changed_files["/path/to/file.py"], str)
-
-
-class TestReviewResultEscalation:
-
-    def test_result_tracks_is_repeat_issue(self):
-        result = ReviewResult(issues=["Missing error handling"], is_repeat_issue=True, cycle_count=2)
-        assert result.is_repeat_issue is True
-
-    def test_result_tracks_cycle_count(self):
-        result = ReviewResult(issues=["Missing error handling"], is_repeat_issue=True, cycle_count=3)
-        assert result.cycle_count == 3
-
-    def test_escalation_threshold_is_two(self):
-        result1 = ReviewResult(issues=["Issue A"], cycle_count=1, is_repeat_issue=False)
-        assert result1.cycle_count < 2
-
-        result2 = ReviewResult(issues=["Issue A"], cycle_count=2, is_repeat_issue=True)
-        assert result2.cycle_count >= 2
 
 
 if __name__ == '__main__':

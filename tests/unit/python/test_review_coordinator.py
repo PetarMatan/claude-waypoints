@@ -63,7 +63,6 @@ class TestReviewCoordinatorInit:
         import inspect
         params = inspect.signature(ReviewCoordinator.__init__).parameters
         assert 'logger' in params
-        assert 'markers' in params
         assert 'working_dir' in params
         assert 'requirements_summary' in params
         assert 'interfaces_summary' in params
@@ -179,10 +178,9 @@ class TestReviewCoordinatorBehavior:
 
     def test_init_sets_inactive_state(self):
         logger = self._create_mock_logger()
-        markers = self._create_mock_markers()
         with tempfile.TemporaryDirectory() as tmpdir:
             coordinator = ReviewCoordinator(
-                logger=logger, markers=markers,
+                logger=logger,
                 working_dir=tmpdir, requirements_summary="# Requirements"
             )
             assert coordinator.is_active is False
@@ -273,9 +271,8 @@ class TestReviewCoordinatorDebounce:
     def _create_coordinator(self):
         logger = MagicMock()
         logger.log_event = MagicMock()
-        markers = MagicMock()
         return ReviewCoordinator(
-            logger=logger, markers=markers,
+            logger=logger,
             working_dir="/tmp", requirements_summary="# Requirements"
         )
 
@@ -285,7 +282,7 @@ class TestReviewCoordinatorDebounce:
 
     def test_review_pending_false_initially(self):
         coordinator = self._create_coordinator()
-        assert coordinator._review_pending is False
+        assert not coordinator._review_pending.is_set()
 
     def test_is_reviewing_false_initially(self):
         coordinator = self._create_coordinator()
@@ -298,33 +295,33 @@ class TestReviewCoordinatorDebounce:
     def test_wait_for_pending_reviews_returns_immediately_when_none(self):
         coordinator = self._create_coordinator()
         run_async(coordinator.wait_for_pending_reviews(timeout=1.0))
-        assert coordinator._review_pending is False
+        assert not coordinator._review_pending.is_set()
 
     def test_wait_for_pending_reviews_times_out_gracefully(self):
         coordinator = self._create_coordinator()
-        coordinator._review_pending = True
+        coordinator._review_pending.set()
         coordinator._is_reviewing = True
         import time
         start = time.monotonic()
         run_async(coordinator.wait_for_pending_reviews(timeout=0.5))
         elapsed = time.monotonic() - start
         assert elapsed >= 0.5
-        assert coordinator._review_pending is True
+        assert coordinator._review_pending.is_set()
 
     def test_run_review_clears_flags_when_degraded(self):
         coordinator = self._create_coordinator()
-        coordinator._review_pending = True
+        coordinator._review_pending.set()
         coordinator._is_reviewing = True
         coordinator._is_degraded = True
         from wp_supervisor.review_trigger import TriggerEvent, TriggerReason
         event = TriggerEvent(reason=TriggerReason.FILE_THRESHOLD, file_count=1)
         run_async(coordinator._run_review(event))
         assert coordinator._is_reviewing is False
-        assert coordinator._review_pending is False
+        assert not coordinator._review_pending.is_set()
 
     def test_review_count_increments_after_review(self):
         coordinator = self._create_coordinator()
-        coordinator._review_pending = True
+        coordinator._review_pending.set()
         coordinator._is_reviewing = True
         coordinator._is_active = True
 
@@ -345,7 +342,7 @@ class TestReviewCoordinatorDebounce:
         assert coordinator._review_count == 1
         assert coordinator.has_reviewed is True
         assert coordinator._is_reviewing is False
-        assert coordinator._review_pending is False
+        assert not coordinator._review_pending.is_set()
 
 
 if __name__ == '__main__':

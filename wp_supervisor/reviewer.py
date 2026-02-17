@@ -2,10 +2,9 @@
 """Concurrent reviewer agent for Phase 4 implementation validation."""
 
 import asyncio
-import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Set, TYPE_CHECKING
+from typing import List, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeSDKClient
@@ -30,8 +29,6 @@ class ReviewResult:
     """Result of a review cycle."""
     issues: List[str] = field(default_factory=list)
     files_reviewed: Set[str] = field(default_factory=set)
-    is_repeat_issue: bool = False
-    cycle_count: int = 0
 
 
 @dataclass
@@ -58,7 +55,6 @@ class ReviewerAgent:
         self._client: Optional["ClaudeSDKClient"] = None
         self._options = None
         self._session_id: Optional[str] = None
-        self._issue_history: Dict[str, int] = {}
 
     @property
     def state(self) -> ReviewerState:
@@ -106,13 +102,9 @@ class ReviewerAgent:
                 f"Review complete: {len(issues)} issue(s) in {len(context.changed_files)} file(s)"
             )
 
-            issue_info = self._track_issues(issues)
-
             result = ReviewResult(
                 issues=issues,
                 files_reviewed=set(context.changed_files.keys()),
-                is_repeat_issue=issue_info.get("is_repeat", False),
-                cycle_count=issue_info.get("max_cycle", 0)
             )
 
             self._state = ReviewerState.READY
@@ -176,8 +168,8 @@ class ReviewerAgent:
         """Extract individual issue strings from bulleted/numbered text.
 
         This parsing is optional — the raw reviewer response could be forwarded
-        directly to the implementer. We parse primarily to enable per-issue
-        repeat detection and accurate issue counts in logs.
+        directly to the implementer. We parse primarily for accurate issue
+        counts in logs.
         """
         issues = []
         for line in text.split('\n'):
@@ -204,7 +196,6 @@ class ReviewerAgent:
 
         return REVIEWER_FEEDBACK_TEMPLATE.format(
             files_text=files_text,
-            cycle_count=result.cycle_count,
             issues_text=issues_text,
             action_instruction=REVIEWER_FEEDBACK_ACTION,
         )
@@ -216,31 +207,3 @@ class ReviewerAgent:
         self._options = None
         self._session_id = None
         self._state = ReviewerState.DEGRADED
-
-    def should_escalate(self, result: ReviewResult) -> bool:
-        """Returns True if same issue persists after 2 feedback cycles."""
-        return result.is_repeat_issue and result.cycle_count >= 2
-
-    def _track_issues(self, issues: List[str]) -> dict:
-        """Track issues for repeat detection. Returns dict with is_repeat and max_cycle."""
-        if not issues:
-            return {"is_repeat": False, "max_cycle": 0}
-
-        is_repeat = False
-        max_cycle = 0
-
-        for issue in issues:
-            issue_hash = hashlib.md5(issue.encode()).hexdigest()[:16]
-
-            if issue_hash in self._issue_history:
-                self._issue_history[issue_hash] += 1
-                is_repeat = True
-            else:
-                self._issue_history[issue_hash] = 1
-
-            max_cycle = max(max_cycle, self._issue_history[issue_hash])
-
-        return {
-            "is_repeat": is_repeat,
-            "max_cycle": max_cycle
-        }

@@ -8,12 +8,11 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .logger import SupervisorLogger
-    from .markers import SupervisorMarkers
 
 from .reviewer import ReviewerAgent, ReviewerState, ReviewerContext, ReviewResult
 from .file_tracker import FileChangeTracker
 from .review_trigger import ReviewTrigger, TriggerEvent
-from .feedback_queue import FeedbackQueue, FeedbackPriority
+from .feedback_queue import FeedbackQueue
 
 
 @dataclass
@@ -29,14 +28,12 @@ class ReviewCoordinator:
     def __init__(
         self,
         logger: "SupervisorLogger",
-        markers: "SupervisorMarkers",
         working_dir: str,
         requirements_summary: str,
         interfaces_summary: str = "",
         config: Optional[ReviewCoordinatorConfig] = None
     ) -> None:
         self._logger = logger
-        self._markers = markers
         self._working_dir = working_dir
         self._requirements_summary = requirements_summary
         self._interfaces_summary = interfaces_summary
@@ -49,7 +46,7 @@ class ReviewCoordinator:
 
         self._is_active = False
         self._is_degraded = False
-        self._review_pending = False
+        self._review_pending = asyncio.Event()
         self._is_reviewing = False
         self._review_count: int = 0
 
@@ -157,11 +154,11 @@ class ReviewCoordinator:
 
     async def wait_for_pending_reviews(self, timeout: float = 60.0) -> None:
         """Wait for pending reviews to complete, with timeout."""
-        if not self._review_pending:
+        if not self._review_pending.is_set():
             return
         self._logger.log_event("REVIEWER", "Waiting for pending review to complete")
         start = time.monotonic()
-        while self._review_pending:
+        while self._review_pending.is_set():
             if time.monotonic() - start >= timeout:
                 self._logger.log_event(
                     "REVIEWER",
@@ -172,7 +169,7 @@ class ReviewCoordinator:
 
     def _schedule_review(self, event: TriggerEvent) -> None:
         """Schedule a review. Debounces: if already reviewing, merges into one follow-up."""
-        self._review_pending = True
+        self._review_pending.set()
         if self._is_reviewing:
             self._logger.log_event("REVIEWER", "Review already in progress, changes will be included in follow-up")
             return
@@ -183,13 +180,13 @@ class ReviewCoordinator:
         """Run review loop. Continues until no more changes accumulate."""
         if self._is_degraded:
             self._is_reviewing = False
-            self._review_pending = False
+            self._review_pending.clear()
             return
 
         try:
             review_iteration = 0
-            while self._review_pending:
-                self._review_pending = False
+            while self._review_pending.is_set():
+                self._review_pending.clear()
                 review_iteration += 1
 
                 if review_iteration > 1:
@@ -207,7 +204,7 @@ class ReviewCoordinator:
                     break
 
                 if result.issues:
-                    self._queue_feedback(result)
+                    await self._queue_feedback(result)
 
                 if self._trigger is not None:
                     await self._trigger.reset()
@@ -221,7 +218,7 @@ class ReviewCoordinator:
             self._logger.log_event("REVIEWER", f"Review cycle error: {e}")
         finally:
             self._is_reviewing = False
-            self._review_pending = False
+            self._review_pending.clear()
             self._logger.log_event("REVIEWER", f"Review session done ({self._review_count} total reviews)")
 
     async def _perform_review(self) -> Optional[ReviewResult]:
@@ -251,20 +248,14 @@ class ReviewCoordinator:
             self._logger.log_event("REVIEWER", f"Review error: {e}")
             return None
 
-    def _queue_feedback(self, result: ReviewResult) -> None:
-        """Queue feedback from review result. Determines priority based on escalation."""
+    async def _queue_feedback(self, result: ReviewResult) -> None:
+        """Queue feedback from review result."""
         if self._feedback_queue is None or self._reviewer is None:
             return
 
         try:
-            escalate = self._reviewer.should_escalate(result)
-            priority = FeedbackPriority.ESCALATED if escalate else FeedbackPriority.NORMAL
-
             feedback = self._reviewer.format_feedback(result)
-
-            asyncio.create_task(
-                self._feedback_queue.enqueue(feedback, priority, result)
-            )
+            await self._feedback_queue.enqueue(feedback, result)
 
         except Exception as e:
             self._logger.log_event("REVIEWER", f"Feedback queueing error: {e}")

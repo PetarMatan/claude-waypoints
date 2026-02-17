@@ -1040,7 +1040,6 @@ REVIEWER_FEEDBACK_ACTION = (
 
 REVIEWER_FEEDBACK_TEMPLATE = """**Reviewer Feedback**
 Files reviewed: {files_text}
-Cycle: {cycle_count}
 
 Issues:
 {issues_text}

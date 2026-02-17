@@ -605,7 +605,6 @@ class WPOrchestrator:
 
         return ReviewCoordinator(
             logger=self.logger,
-            markers=self.markers,
             working_dir=str(self.working_dir),
             requirements_summary=requirements_summary,
             interfaces_summary=interfaces_summary,

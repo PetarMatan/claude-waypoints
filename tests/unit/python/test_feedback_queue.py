@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, AsyncMock, patch
 sys.path.insert(0, '.')
 from wp_supervisor.feedback_queue import (
     FeedbackQueue,
-    FeedbackPriority,
     FeedbackItem,
 )
 from wp_supervisor.reviewer import ReviewResult
@@ -30,42 +29,21 @@ def run_async(coro):
     return asyncio.run(coro)
 
 
-class TestFeedbackPriority:
-
-    def test_normal_priority_exists(self):
-        assert FeedbackPriority.NORMAL.value == "normal"
-
-    def test_escalated_priority_exists(self):
-        assert FeedbackPriority.ESCALATED.value == "escalated"
-
-
 class TestFeedbackItem:
 
     def test_feedback_item_has_message_field(self):
         result = ReviewResult()
         item = FeedbackItem(
             message="Test feedback",
-            priority=FeedbackPriority.NORMAL,
             review_result=result,
             timestamp=123.456
         )
         assert item.message == "Test feedback"
 
-    def test_feedback_item_has_priority_field(self):
-        result = ReviewResult()
-        item = FeedbackItem(
-            message="Test feedback",
-            priority=FeedbackPriority.ESCALATED,
-            review_result=result,
-            timestamp=123.456
-        )
-        assert item.priority == FeedbackPriority.ESCALATED
-
     def test_feedback_item_has_review_result_field(self):
         result = ReviewResult(issues=["Issue A"])
         item = FeedbackItem(
             message="Test feedback",
-            priority=FeedbackPriority.NORMAL,
             review_result=result,
             timestamp=123.456
         )
@@ -75,7 +53,6 @@ class TestFeedbackItem:
         result = ReviewResult()
         item = FeedbackItem(
             message="Test feedback",
-            priority=FeedbackPriority.NORMAL,
             review_result=result,
             timestamp=123.456
         )
@@ -118,7 +95,6 @@ class TestFeedbackQueueEnqueue:
         import inspect
         params = inspect.signature(FeedbackQueue.enqueue).parameters
         assert 'message' in params
-        assert 'priority' in params
         assert 'review_result' in params
 
 
@@ -183,18 +159,6 @@ class TestNonBlockingFeedbackInjection:
         assert hasattr(FeedbackQueue, 'format_for_injection')
 
 
-class TestFeedbackEscalation:
-
-    def test_escalated_priority_for_repeat_issues(self):
-        assert FeedbackPriority.ESCALATED.value == "escalated"
-
-    def test_normal_priority_for_new_issues(self):
-        assert FeedbackPriority.NORMAL.value == "normal"
-
-    def test_escalated_priority_is_distinct_from_normal(self):
-        assert FeedbackPriority.ESCALATED != FeedbackPriority.NORMAL
-
-
 class TestFeedbackQueueOrdering:
 
     def test_fifo_ordering(self):
@@ -231,7 +195,6 @@ class TestFeedbackItemTimestamp:
         result = ReviewResult()
         item = FeedbackItem(
             message="Test",
-            priority=FeedbackPriority.NORMAL,
             review_result=result,
             timestamp=time.monotonic()
         )
