@@ -49,7 +49,8 @@ class ReviewCoordinator:
 
         self._is_active = False
         self._is_degraded = False
-        self._inflight_reviews: int = 0
+        self._review_pending = False
+        self._is_reviewing = False
         self._review_count: int = 0
 
     @property
@@ -155,53 +156,73 @@ class ReviewCoordinator:
         return self._feedback_queue.has_pending()
 
     async def wait_for_pending_reviews(self, timeout: float = 60.0) -> None:
-        """Wait for all in-flight reviews to complete, with timeout."""
-        if self._inflight_reviews <= 0:
+        """Wait for pending reviews to complete, with timeout."""
+        if not self._review_pending:
             return
+        self._logger.log_event("REVIEWER", "Waiting for pending review to complete")
         start = time.monotonic()
-        while self._inflight_reviews > 0:
+        while self._review_pending:
             if time.monotonic() - start >= timeout:
                 self._logger.log_event(
                     "REVIEWER",
-                    f"Timed out, {self._inflight_reviews} review(s) still pending"
+                    "Timed out waiting for pending review"
                 )
                 return
             await asyncio.sleep(0.5)
 
     def _schedule_review(self, event: TriggerEvent) -> None:
-        """Schedule an async review, tracking it as in-flight."""
-        self._inflight_reviews += 1
+        """Schedule a review. Debounces: if already reviewing, merges into one follow-up."""
+        self._review_pending = True
+        if self._is_reviewing:
+            self._logger.log_event("REVIEWER", "Review already in progress, changes will be included in follow-up")
+            return
+        self._is_reviewing = True
         asyncio.create_task(self._run_review(event))
 
     async def _run_review(self, event: TriggerEvent) -> None:
-        """Internal callback when review is triggered."""
+        """Run review loop. Continues until no more changes accumulate."""
         if self._is_degraded:
-            self._inflight_reviews -= 1
+            self._is_reviewing = False
+            self._review_pending = False
             return
 
         try:
-            self._logger.log_event(
-                "REVIEWER",
-                f"Review triggered: {event.reason.value} ({event.file_count} files)"
-            )
+            review_iteration = 0
+            while self._review_pending:
+                self._review_pending = False
+                review_iteration += 1
 
-            result = await self._perform_review()
+                if review_iteration > 1:
+                    self._logger.log_event("REVIEWER", f"Follow-up review #{review_iteration} (changes accumulated during previous review)")
 
-            if result is not None and result.issues:
-                self._queue_feedback(result)
+                self._logger.log_event(
+                    "REVIEWER",
+                    f"Review triggered: {event.reason.value} ({event.file_count} files)"
+                )
 
-            if self._trigger is not None:
-                await self._trigger.reset()
+                result = await self._perform_review()
 
-            if self._file_tracker is not None:
-                await self._file_tracker.clear_pending()
+                if result is None:
+                    self._logger.log_event("REVIEWER", "No pending changes to review, skipping")
+                    break
 
-            self._review_count += 1
+                if result.issues:
+                    self._queue_feedback(result)
+
+                if self._trigger is not None:
+                    await self._trigger.reset()
+
+                if self._file_tracker is not None:
+                    await self._file_tracker.clear_pending()
+
+                self._review_count += 1
 
         except Exception as e:
             self._logger.log_event("REVIEWER", f"Review cycle error: {e}")
         finally:
-            self._inflight_reviews -= 1
+            self._is_reviewing = False
+            self._review_pending = False
+            self._logger.log_event("REVIEWER", f"Review session done ({self._review_count} total reviews)")
 
     async def _perform_review(self) -> Optional[ReviewResult]:
         """Perform a review cycle. Returns None if degraded or no changes."""
@@ -239,7 +260,7 @@ class ReviewCoordinator:
             escalate = self._reviewer._should_escalate(result)
             priority = FeedbackPriority.ESCALATED if escalate else FeedbackPriority.NORMAL
 
-            feedback = self._reviewer.format_feedback(result, escalate=escalate)
+            feedback = self._reviewer.format_feedback(result)
 
             asyncio.create_task(
                 self._feedback_queue.enqueue(feedback, priority, result)

@@ -268,7 +268,7 @@ class TestFeedbackRetrieval:
         assert hasattr(ReviewCoordinator, 'has_pending_feedback')
 
 
-class TestReviewCoordinatorInflightTracking:
+class TestReviewCoordinatorDebounce:
 
     def _create_coordinator(self):
         logger = MagicMock()
@@ -283,9 +283,13 @@ class TestReviewCoordinatorInflightTracking:
         coordinator = self._create_coordinator()
         assert coordinator.has_reviewed is False
 
-    def test_inflight_reviews_zero_initially(self):
+    def test_review_pending_false_initially(self):
         coordinator = self._create_coordinator()
-        assert coordinator._inflight_reviews == 0
+        assert coordinator._review_pending is False
+
+    def test_is_reviewing_false_initially(self):
+        coordinator = self._create_coordinator()
+        assert coordinator._is_reviewing is False
 
     def test_review_count_zero_initially(self):
         coordinator = self._create_coordinator()
@@ -294,50 +298,54 @@ class TestReviewCoordinatorInflightTracking:
     def test_wait_for_pending_reviews_returns_immediately_when_none(self):
         coordinator = self._create_coordinator()
         run_async(coordinator.wait_for_pending_reviews(timeout=1.0))
-        assert coordinator._inflight_reviews == 0
+        assert coordinator._review_pending is False
 
     def test_wait_for_pending_reviews_times_out_gracefully(self):
         coordinator = self._create_coordinator()
-        coordinator._inflight_reviews = 1
+        coordinator._review_pending = True
+        coordinator._is_reviewing = True
         import time
         start = time.monotonic()
         run_async(coordinator.wait_for_pending_reviews(timeout=0.5))
         elapsed = time.monotonic() - start
         assert elapsed >= 0.5
-        assert coordinator._inflight_reviews == 1
+        assert coordinator._review_pending is True
 
-    def test_inflight_counter_decrements_after_review(self):
+    def test_run_review_clears_flags_when_degraded(self):
         coordinator = self._create_coordinator()
-        coordinator._inflight_reviews = 1
-        coordinator._is_degraded = True  # Skip actual review logic
+        coordinator._review_pending = True
+        coordinator._is_reviewing = True
+        coordinator._is_degraded = True
         from wp_supervisor.review_trigger import TriggerEvent, TriggerReason
         event = TriggerEvent(reason=TriggerReason.FILE_THRESHOLD, file_count=1)
         run_async(coordinator._run_review(event))
-        assert coordinator._inflight_reviews == 0
+        assert coordinator._is_reviewing is False
+        assert coordinator._review_pending is False
 
     def test_review_count_increments_after_review(self):
         coordinator = self._create_coordinator()
-        coordinator._inflight_reviews = 1
+        coordinator._review_pending = True
+        coordinator._is_reviewing = True
         coordinator._is_active = True
 
         from wp_supervisor.review_trigger import TriggerEvent, TriggerReason
-        from wp_supervisor.file_tracker import FileChangeTracker
-        from wp_supervisor.feedback_queue import FeedbackQueue
+        from wp_supervisor.reviewer import ReviewResult
 
         coordinator._file_tracker = MagicMock()
-        coordinator._file_tracker.get_pending_changes = AsyncMock(return_value=[])
+        coordinator._file_tracker.get_pending_changes = AsyncMock(return_value={"/tmp/file.py": "content"})
         coordinator._file_tracker.clear_pending = AsyncMock()
         coordinator._trigger = MagicMock()
         coordinator._trigger.reset = AsyncMock()
         coordinator._feedback_queue = MagicMock()
         coordinator._reviewer = MagicMock()
-        coordinator._reviewer.review = AsyncMock(return_value=None)
+        coordinator._reviewer.review = AsyncMock(return_value=ReviewResult())
 
         event = TriggerEvent(reason=TriggerReason.FILE_THRESHOLD, file_count=1)
         run_async(coordinator._run_review(event))
         assert coordinator._review_count == 1
         assert coordinator.has_reviewed is True
-        assert coordinator._inflight_reviews == 0
+        assert coordinator._is_reviewing is False
+        assert coordinator._review_pending is False
 
 
 if __name__ == '__main__':

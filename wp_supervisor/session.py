@@ -324,14 +324,18 @@ class SessionRunner:
         await review_coordinator.wait_for_pending_reviews(timeout=60.0)
 
         if not review_coordinator.has_pending_feedback():
+            self.logger.log_event("REVIEWER", "Review gate passed (no feedback)")
             return True
 
+        self.logger.log_event("REVIEWER", "Review gate: feedback pending, injecting into session")
         signal = await self._inject_feedback(
             client, phase, signal_checker, review_coordinator
         )
         if signal:
+            self.logger.log_event("REVIEWER", "Review gate passed (implementer acknowledged feedback)")
             return True
 
+        self.logger.log_event("REVIEWER", "Review gate: implementer did not re-signal completion")
         return False
 
     async def _inject_feedback(
@@ -349,11 +353,16 @@ class SessionRunner:
         if not feedback:
             return None
 
-        self.logger.log_event("REVIEWER", "Injecting feedback into implementer session")
+        import time as _time
+        issue_count = feedback.count("- ") if feedback else 0
+        self.logger.log_event("REVIEWER", f"Injecting feedback ({issue_count} items) into implementer session")
         print(f"\n{feedback}\n")
 
+        inject_start = _time.monotonic()
         await client.query(feedback)
         _, signal = await self._process_stream(client, phase, signal_checker)
+        elapsed = _time.monotonic() - inject_start
+        self.logger.log_event("REVIEWER", f"Implementer responded in {elapsed:.0f}s (re-completed: {signal is not None})")
         return signal
 
     def _check_signal(self, text: str, patterns: SignalPatterns) -> bool:

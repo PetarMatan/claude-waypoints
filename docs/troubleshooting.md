@@ -214,6 +214,7 @@ Claude Waypoints logs all activity for debugging and auditing. Both CLI and Supe
 - `PHASE` - Phase start/complete events (supervisor)
 - `HOOK` - Hook registration events
 - `TOOL` - Tool usage (supervisor)
+- `REVIEWER` - Concurrent reviewer events: triggers, gate outcomes, feedback injection (supervisor, Phase 4)
 - `SESSION` - Session start/end events
 - `ERROR` - Errors and failures
 

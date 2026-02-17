@@ -1011,11 +1011,39 @@ Before evaluating anything else:
 - The violation simplifies the code meaningfully
 - The scope is small enough that it doesn't matter
 
-## Output
-If everything looks good, respond with "No issues found."
+## Output Format
 
-Otherwise, list each issue concisely as a numbered or bulleted list.
-Explain the principle being violated and WHY it matters in this context.
-Suggest alternatives only if they provide meaningful improvement.
-Do not suggest over-engineered solutions.
+**CRITICAL: Your output is parsed programmatically. Follow this format exactly.**
+
+If everything looks good, respond with exactly: "No issues found."
+
+If there ARE issues, output ONLY a bulleted list of problems. Example:
+
+- Missing null check on `deviceId` parameter in `process()` — will throw NPE when called from GridProcessor
+- `calculateDemand()` ignores the `roomSize` edge case from REQ-3 (roomSize=0 should return 0)
+
+**Rules:**
+- Each bullet = one concrete, actionable problem
+- Start each bullet with the specific location (class, method, or line)
+- Explain WHY it's a problem, not just WHAT the code does
+- Do NOT describe what the code does correctly — only flag what's wrong
+- Do NOT output checklists, confirmations, summaries, or "✅" items
+- Do NOT repeat the requirements back
+- Do NOT explain the architecture unless something is wrong with it
+- If zero issues, say "No issues found." — nothing else
+"""
+
+REVIEWER_FEEDBACK_ACTION = (
+    "For each issue: either fix it, or explain briefly why it does not apply. "
+    "Do NOT simply re-signal completion without addressing each point."
+)
+
+REVIEWER_FEEDBACK_TEMPLATE = """**Reviewer Feedback**
+Files reviewed: {files_text}
+Cycle: {cycle_count}
+
+Issues:
+{issues_text}
+
+{action_instruction}
 """

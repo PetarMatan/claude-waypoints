@@ -145,6 +145,7 @@ Supervisor mode includes the same safety hooks as CLI mode, implemented via the 
 | **Phase Guard** | PreToolUse | Blocks file edits that violate current phase rules |
 | **Tool Logger** | PreToolUse | Logs all tool usage to workflow.log |
 | **Build Verify** | Stop | Runs compile/test before phase completion |
+| **File Change Tracker** | PostToolUse | Records Write/Edit events for reviewer (Phase 4 only) |
 
 ### Build Verification by Phase
 
@@ -156,6 +157,43 @@ Supervisor mode includes the same safety hooks as CLI mode, implemented via the 
 | Phase 4 | Compile + full test suite must pass |
 
 Build failures block phase completion and return errors to Claude for fixing.
+
+## Concurrent Reviewer (Phase 4)
+
+During Phase 4, a Sonnet-based reviewer agent runs concurrently with the implementer. It validates code changes against the requirements gathered in Phase 1.
+
+### How It Works
+
+```
+Implementer (Opus)              Reviewer (Sonnet)
+    │                               │
+    ├── Edits file ─────────────────► Triggered (threshold=1)
+    ├── Edits another file          │ Reviewing...
+    ├── Edits third file            │ (debounced into one review)
+    │                               │
+    ├── Signals PHASE_COMPLETE      │
+    │   ┌───────────────────────────┤
+    │   │  Review gate activates    │
+    │   │  Waits for review...      ◄── Review complete
+    │   │                           │
+    │   │  Feedback found?          │
+    │   │  ├── No  → Gate passes    │
+    │   │  └── Yes → Inject feedback│
+    │   │      └── Implementer      │
+    │   │         addresses issues  │
+    │   │         re-signals done   │
+    │   └───────────────────────────┘
+    │
+    ▼ Phase complete
+```
+
+### Key Behaviors
+
+- **Triggers on every file edit** with debounce — multiple rapid edits merge into a single review
+- **Review gate** blocks phase completion until pending reviews finish and any feedback is addressed
+- **Feedback injection** sends issues directly into the implementer session with instructions to fix or explain each point
+- **Repeat detection** escalates issues that persist after 2 feedback cycles
+- **Degraded mode** — if the reviewer fails to start, Phase 4 continues normally without review
 
 ## Troubleshooting
 

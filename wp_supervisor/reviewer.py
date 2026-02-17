@@ -11,7 +11,11 @@ if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeSDKClient
     from .logger import SupervisorLogger
 
-from .templates import REVIEWER_PROMPT_TEMPLATE
+from .templates import (
+    REVIEWER_PROMPT_TEMPLATE,
+    REVIEWER_FEEDBACK_ACTION,
+    REVIEWER_FEEDBACK_TEMPLATE,
+)
 
 
 class ReviewerState(Enum):
@@ -161,6 +165,20 @@ class ReviewerAgent:
         if "no issues found" in text.lower():
             return []
 
+        issues = self._extract_issue_items(text)
+
+        if not issues and len(text) > 30:
+            issues = [text]
+
+        return issues
+
+    def _extract_issue_items(self, text: str) -> List[str]:
+        """Extract individual issue strings from bulleted/numbered text.
+
+        This parsing is optional — the raw reviewer response could be forwarded
+        directly to the implementer. We parse primarily to enable per-issue
+        repeat detection and accurate issue counts in logs.
+        """
         issues = []
         for line in text.split('\n'):
             line = line.strip()
@@ -174,13 +192,9 @@ class ReviewerAgent:
                 parts = line.split('. ', 1)
                 if len(parts) == 2 and parts[1].strip():
                     issues.append(parts[1].strip())
-
-        if not issues and len(text) > 30:
-            issues = [text]
-
         return issues
 
-    def format_feedback(self, result: ReviewResult, escalate: bool = False) -> str:
+    def format_feedback(self, result: ReviewResult) -> str:
         """Format review result as feedback text for implementer injection."""
         if not result.issues:
             return ""
@@ -188,21 +202,12 @@ class ReviewerAgent:
         issues_text = "\n".join(f"- {issue}" for issue in result.issues)
         files_text = ", ".join(result.files_reviewed) if result.files_reviewed else "no files"
 
-        if escalate or self._should_escalate(result):
-            return f"""**REVIEWER FEEDBACK (REPEAT ISSUE)**
-Files reviewed: {files_text}
-Cycle: {result.cycle_count}
-
-Issues:
-{issues_text}
-"""
-        else:
-            return f"""**Reviewer Feedback**
-Files reviewed: {files_text}
-
-Issues:
-{issues_text}
-"""
+        return REVIEWER_FEEDBACK_TEMPLATE.format(
+            files_text=files_text,
+            cycle_count=result.cycle_count,
+            issues_text=issues_text,
+            action_instruction=REVIEWER_FEEDBACK_ACTION,
+        )
 
     async def stop(self) -> None:
         """Stop the reviewer agent and clean up resources."""

@@ -72,6 +72,7 @@ Each phase runs in a **fresh Claude session** with clean context. Summaries are 
 - **User Approval Gates** - Human confirms each phase transition
 - **Clean Cleanup** - Session end automatically removes markers
 - **Supervisor Mode** - Multi-session orchestration for large features (prevents context bloat)
+- **Concurrent Code Review** - Sonnet reviewer validates Phase 4 implementation against requirements in real-time (Supervisor mode only)
 - **Living Project Documents** - Persistent knowledge that accumulates across sessions (architecture decisions, lessons learned) - *Supervisor mode only*
 - **Property-Based Testing** - Optional PBT support in Phase 3 for finding edge cases automatically
 
@@ -201,6 +202,7 @@ See [Supervisor Mode Guide](docs/supervisor-mode.md) for details.
 
 - Implement business logic method by method
 - Automatic compile-test loop after each change
+- Concurrent reviewer validates changes against requirements (Supervisor mode)
 - Continue until all tests pass
 
 ## Troubleshooting

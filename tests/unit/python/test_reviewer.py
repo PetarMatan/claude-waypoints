@@ -163,8 +163,6 @@ class TestReviewerAgentFormatFeedback:
         import inspect
         params = inspect.signature(ReviewerAgent.format_feedback).parameters
         assert 'result' in params
-        assert 'escalate' in params
-        assert params['escalate'].default is False
 
 
 class TestReviewerAgentStop:
