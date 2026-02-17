@@ -217,7 +217,7 @@ class ReviewerAgent:
         self._session_id = None
         self._state = ReviewerState.DEGRADED
 
-    def _should_escalate(self, result: ReviewResult) -> bool:
+    def should_escalate(self, result: ReviewResult) -> bool:
         """Returns True if same issue persists after 2 feedback cycles."""
         return result.is_repeat_issue and result.cycle_count >= 2
 

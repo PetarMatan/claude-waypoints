@@ -9,13 +9,16 @@ extracting duplicated loop logic from orchestrator.py.
 import asyncio
 import os
 import sys
-from typing import Callable, Dict, List, Optional, Any, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 try:
     from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AgentDefinition
     from claude_agent_sdk.types import AssistantMessage, ResultMessage
 except ImportError:
     pass
+
+if TYPE_CHECKING:
+    from .review_coordinator import ReviewCoordinator
 
 from .markers import SupervisorMarkers
 from .hooks import SupervisorHooks
@@ -164,7 +167,7 @@ class SessionRunner:
         initial_prompt: str,
         phase: int,
         signal_patterns: SignalPatterns,
-        review_coordinator: Any = None,
+        review_coordinator: Optional["ReviewCoordinator"] = None,
     ) -> Optional[str]:
         """
         Run an interactive Claude session for a phase. Returns session_id.
@@ -318,7 +321,7 @@ class SessionRunner:
         client: "ClaudeSDKClient",
         phase: int,
         signal_checker: Optional[SignalChecker],
-        review_coordinator: Any
+        review_coordinator: "ReviewCoordinator"
     ) -> bool:
         """Wait for in-flight reviews and inject feedback. Returns True if gate passed."""
         await review_coordinator.wait_for_pending_reviews(timeout=60.0)
@@ -343,7 +346,7 @@ class SessionRunner:
         client: "ClaudeSDKClient",
         phase: int,
         signal_checker: Optional[SignalChecker],
-        review_coordinator: Any
+        review_coordinator: "ReviewCoordinator"
     ) -> Optional[str]:
         """Inject pending reviewer feedback into implementer session."""
         if not review_coordinator.has_pending_feedback():

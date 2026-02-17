@@ -73,36 +73,7 @@ class FeedbackQueue:
             return None
 
     def format_for_injection(self, items: List[FeedbackItem]) -> str:
-        """Format feedback items into a single injection string."""
-        try:
-            if not items:
-                return ""
-
-            formatted_parts = []
-            for item in items:
-                if item.priority == FeedbackPriority.ESCALATED:
-                    formatted_parts.append(self._format_escalated_feedback(item))
-                else:
-                    formatted_parts.append(self._format_normal_feedback(item))
-
-            return "\n\n".join(formatted_parts)
-        except Exception as e:
-            try:
-                self._logger.log_event(
-                    "REVIEWER",
-                    f"Feedback formatting error: {e}"
-                )
-            except Exception:
-                pass
+        """Join queued feedback messages into a single injection string."""
+        if not items:
             return ""
-
-    def _format_normal_feedback(self, item: FeedbackItem) -> str:
-        header = "📝 **Reviewer Feedback**"
-        return f"{header}\n{item.message}"
-
-    def _format_escalated_feedback(self, item: FeedbackItem) -> str:
-        header = "⚠️ **IMPORTANT: Repeat Issue Detected**"
-        cycle_info = ""
-        if item.review_result and item.review_result.cycle_count > 1:
-            cycle_info = f"\n_(This issue has appeared {item.review_result.cycle_count} times)_"
-        return f"{header}{cycle_info}\n{item.message}"
+        return "\n\n".join(item.message for item in items)

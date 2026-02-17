@@ -177,12 +177,12 @@ class TestReviewerAgentStop:
 
 class TestReviewerAgentShouldEscalate:
 
-    def test_should_escalate_method_exists(self):
-        assert hasattr(ReviewerAgent, '_should_escalate')
+    def testshould_escalate_method_exists(self):
+        assert hasattr(ReviewerAgent, 'should_escalate')
 
-    def test_should_escalate_accepts_result_parameter(self):
+    def testshould_escalate_accepts_result_parameter(self):
         import inspect
-        assert 'result' in inspect.signature(ReviewerAgent._should_escalate).parameters
+        assert 'result' in inspect.signature(ReviewerAgent.should_escalate).parameters
 
 
 class TestReviewerAgentTrackIssues:
@@ -228,11 +228,11 @@ class TestReviewerAgentBehavior:
     def test_review_tracks_issues_for_escalation(self):
         assert hasattr(ReviewerAgent, '_track_issues')
 
-    def test_should_escalate_returns_true_after_two_cycles(self):
+    def testshould_escalate_returns_true_after_two_cycles(self):
         result = ReviewResult(issues=["Same issue"], cycle_count=2, is_repeat_issue=True)
         assert result.cycle_count == 2
 
-    def test_should_escalate_returns_false_on_first_occurrence(self):
+    def testshould_escalate_returns_false_on_first_occurrence(self):
         result = ReviewResult(issues=["New issue"], cycle_count=1, is_repeat_issue=False)
         assert result.cycle_count == 1
         assert result.is_repeat_issue is False

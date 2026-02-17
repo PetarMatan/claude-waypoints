@@ -257,7 +257,7 @@ class ReviewCoordinator:
             return
 
         try:
-            escalate = self._reviewer._should_escalate(result)
+            escalate = self._reviewer.should_escalate(result)
             priority = FeedbackPriority.ESCALATED if escalate else FeedbackPriority.NORMAL
 
             feedback = self._reviewer.format_feedback(result)

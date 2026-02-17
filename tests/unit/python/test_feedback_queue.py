@@ -152,15 +152,6 @@ class TestFeedbackQueueFormatForInjection:
         assert 'items' in inspect.signature(FeedbackQueue.format_for_injection).parameters
 
 
-class TestFeedbackQueueFormatMethods:
-
-    def test_format_normal_feedback_method_exists(self):
-        assert hasattr(FeedbackQueue, '_format_normal_feedback')
-
-    def test_format_escalated_feedback_method_exists(self):
-        assert hasattr(FeedbackQueue, '_format_escalated_feedback')
-
-
 # --- Behavioral Tests ---
 
 class TestFeedbackQueueBehavior:
@@ -200,11 +191,8 @@ class TestFeedbackEscalation:
     def test_normal_priority_for_new_issues(self):
         assert FeedbackPriority.NORMAL.value == "normal"
 
-    def test_escalated_feedback_has_higher_visibility(self):
-        assert hasattr(FeedbackQueue, '_format_escalated_feedback')
-
-    def test_normal_feedback_is_standard_visibility(self):
-        assert hasattr(FeedbackQueue, '_format_normal_feedback')
+    def test_escalated_priority_is_distinct_from_normal(self):
+        assert FeedbackPriority.ESCALATED != FeedbackPriority.NORMAL
 
 
 class TestFeedbackQueueOrdering:
@@ -255,9 +243,8 @@ class TestFeedbackFormatting:
     def test_format_includes_issue_details(self):
         assert hasattr(FeedbackQueue, 'format_for_injection')
 
-    def test_escalated_format_is_different_from_normal(self):
-        assert hasattr(FeedbackQueue, '_format_escalated_feedback')
-        assert hasattr(FeedbackQueue, '_format_normal_feedback')
+    def test_format_for_injection_joins_messages(self):
+        assert hasattr(FeedbackQueue, 'format_for_injection')
 
 
 if __name__ == '__main__':
