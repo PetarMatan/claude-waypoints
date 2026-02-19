@@ -31,12 +31,14 @@ class ReviewCoordinator:
         working_dir: str,
         requirements_summary: str,
         interfaces_summary: str = "",
+        tests_summary: str = "",
         config: Optional[ReviewCoordinatorConfig] = None
     ) -> None:
         self._logger = logger
         self._working_dir = working_dir
         self._requirements_summary = requirements_summary
         self._interfaces_summary = interfaces_summary
+        self._tests_summary = tests_summary
         self._config = config or ReviewCoordinatorConfig()
 
         self._reviewer: Optional[ReviewerAgent] = None
@@ -238,7 +240,8 @@ class ReviewCoordinator:
             context = ReviewerContext(
                 requirements_summary=self._requirements_summary,
                 changed_files=changed_files,
-                interfaces_summary=self._interfaces_summary
+                interfaces_summary=self._interfaces_summary,
+                tests_summary=self._tests_summary
             )
 
             result = await self._reviewer.review(context)

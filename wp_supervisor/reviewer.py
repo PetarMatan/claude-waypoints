@@ -4,7 +4,7 @@
 import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Set, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from claude_agent_sdk import ClaudeSDKClient
@@ -33,10 +33,11 @@ class ReviewResult:
 
 @dataclass
 class ReviewerContext:
-    """Context for reviewer: requirements, interfaces, and changed files."""
+    """Context for reviewer: requirements, interfaces, tests, and changed files."""
     requirements_summary: str
     changed_files: dict  # Dict[str, str]: path -> content
     interfaces_summary: str = ""
+    tests_summary: str = ""
 
 
 class ReviewerAgent:
@@ -60,6 +61,30 @@ class ReviewerAgent:
     def state(self) -> ReviewerState:
         return self._state
 
+    @staticmethod
+    def _build_hooks_config() -> Dict[str, Any]:
+        """Build hooks that block Write/Edit tools — reviewer is read-only."""
+        from claude_agent_sdk import HookMatcher
+
+        async def deny_write(
+            input_data: Dict[str, Any],
+            tool_use_id: Optional[str],
+            context: Any
+        ) -> Dict[str, Any]:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": input_data.get("hook_event_name", "PreToolUse"),
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": "Reviewer is read-only: Write/Edit not allowed.",
+                }
+            }
+
+        return {
+            "PreToolUse": [
+                HookMatcher(matcher="Write|Edit", hooks=[deny_write]),
+            ],
+        }
+
     async def start(self) -> None:
         """Start the reviewer agent session. Transitions to READY or DEGRADED."""
         try:
@@ -72,6 +97,7 @@ class ReviewerAgent:
                 model="sonnet",
                 max_budget_usd=1.0,
                 permission_mode="bypassPermissions",
+                hooks=self._build_hooks_config(),
             )
 
             self._client = ClaudeSDKClient(self._options)
@@ -110,6 +136,10 @@ class ReviewerAgent:
             self._state = ReviewerState.READY
             return result
 
+        except asyncio.TimeoutError:
+            self._logger.log_event("REVIEWER", "Review timed out (120s)")
+            self._state = ReviewerState.READY
+            return ReviewResult()
         except Exception as e:
             self._logger.log_event("REVIEWER", f"Review failed: {e}")
             self._state = ReviewerState.READY
@@ -122,11 +152,19 @@ class ReviewerAgent:
 
         interfaces_section = ""
         if context.interfaces_summary:
-            interfaces_section = f"\n## Interfaces from Phase 2\n{context.interfaces_summary}\n"
+            interfaces_section = (
+                f"\n## Interfaces from Phase 2 (design-time stubs — may contain TODOs that are now implemented)\n"
+                f"{context.interfaces_summary}\n"
+            )
+
+        tests_section = ""
+        if context.tests_summary:
+            tests_section = f"\n## Tests from Phase 3\n{context.tests_summary}\n"
 
         return REVIEWER_PROMPT_TEMPLATE.format(
             requirements_summary=context.requirements_summary,
             interfaces_section=interfaces_section,
+            tests_section=tests_section,
             files_section=files_section
         )
 

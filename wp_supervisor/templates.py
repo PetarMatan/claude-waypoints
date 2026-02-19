@@ -973,10 +973,23 @@ The goal is maintainable, reusable code that solves real problems — not perfec
 that's over-complicated. Sometimes the simple solution that breaks a principle is better than the
 "correct" architecture. Evaluate trade-offs, not principles.
 
+## Scope — IMPORTANT
+**Focus your review on the changed files below.** You have been given the requirements, interfaces,
+tests, and the full source of every changed file. This should be sufficient for most reviews.
+
+If you need to verify how a changed class integrates with its **direct callers or callees** (one level),
+you may use Read or Grep to check those specific files. Do NOT do broad codebase searches or explore
+unrelated code. Stay focused on the changed files and their immediate connections.
+
 ## Requirements
 {requirements_summary}
 {interfaces_section}
-## Changed Files
+{tests_section}
+## Changed Files (SOURCE OF TRUTH)
+The code below reflects the **current state** of each file. If the interfaces section above
+shows TODO stubs or placeholder method bodies, ignore those — the changed files below contain
+the actual implementation. Always trust the changed file content over the interfaces document
+when assessing whether something is implemented.
 {files_section}
 
 ## Review Process

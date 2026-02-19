@@ -597,6 +597,7 @@ class WPOrchestrator:
         """Create a new ReviewCoordinator for Phase 4."""
         requirements_summary = self.markers.get_phase_document(1) or "# Requirements\n(Not available)"
         interfaces_summary = self.markers.get_phase_document(2) or ""
+        tests_summary = self.markers.get_phase_document(3) or ""
 
         config = ReviewCoordinatorConfig(
             file_threshold=1,
@@ -608,6 +609,7 @@ class WPOrchestrator:
             working_dir=str(self.working_dir),
             requirements_summary=requirements_summary,
             interfaces_summary=interfaces_summary,
+            tests_summary=tests_summary,
             config=config
         )
 

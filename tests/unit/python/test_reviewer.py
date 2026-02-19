@@ -204,12 +204,13 @@ class TestReviewerAgentBehavior:
 
 class TestReviewerContextMinimalData:
 
-    def test_context_contains_requirements_files_and_interfaces(self):
+    def test_context_contains_requirements_files_interfaces_and_tests(self):
         hints = ReviewerContext.__dataclass_fields__
         assert 'requirements_summary' in hints
         assert 'changed_files' in hints
         assert 'interfaces_summary' in hints
-        assert len(hints) == 3
+        assert 'tests_summary' in hints
+        assert len(hints) == 4
 
     def test_context_files_are_read_only(self):
         files = {"/path/to/file.py": "def foo(): pass"}
