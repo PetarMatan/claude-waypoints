@@ -33,12 +33,9 @@ from .hooks import SupervisorHooks
 from .templates import (
     PHASE_NAMES,
     KNOWLEDGE_EXTRACTION_PROMPT,
-    format_phase_header,
-    format_workflow_header,
-    format_phase_complete_banner,
-    format_workflow_complete,
     format_staged_knowledge_for_prompt,
 )
+from .display import SupervisorDisplay
 from .subagents import SubagentBuilder
 
 from .session import (
@@ -68,17 +65,20 @@ class WPOrchestrator:
             workflow_dir=self.markers.markers_dir,
             workflow_id=self.markers.workflow_id
         )
+        self.display = SupervisorDisplay()
         self.agent_loader = AgentLoader()
         self.hooks = SupervisorHooks(
             markers=self.markers,
             logger=self.logger,
-            working_dir=str(self.working_dir)
+            working_dir=str(self.working_dir),
+            display=self.display,
         )
         self._session_runner = SessionRunner(
             working_dir=str(self.working_dir),
             markers=self.markers,
             hooks=self.hooks,
-            logger=self.logger
+            logger=self.logger,
+            display=self.display,
         )
         self._knowledge_manager = KnowledgeManager(project_dir=str(self.working_dir))
         self._knowledge_context: str = ""
@@ -89,11 +89,11 @@ class WPOrchestrator:
 
     async def run(self, initial_task: Optional[str] = None) -> None:
         """Run the complete Waypoints workflow."""
-        print(format_workflow_header(
+        self.display.workflow_header(
             working_dir=str(self.working_dir),
             workflow_id=self.markers.workflow_id,
             markers_dir=str(self.markers.get_marker_dir())
-        ))
+        )
 
         try:
             self.markers.initialize()
@@ -113,16 +113,16 @@ class WPOrchestrator:
                 duration_sec=self.markers.get_total_duration_sec()
             )
 
-            print(format_workflow_complete())
+            self.display.workflow_complete()
 
         except KeyboardInterrupt:
-            print("\n\nWorkflow interrupted by user.")
+            self.display.supervisor_warning("Workflow interrupted by user.")
             self.logger.log_workflow_aborted("User interrupted")
             self.markers.clear_staged_knowledge()
             self.markers.cleanup()
-            print("Markers cleaned up.")
+            self.display.supervisor_message("Markers cleaned up.")
         except Exception as e:
-            print(f"\n\nWorkflow error: {e}", file=sys.stderr)
+            self.display.supervisor_error(f"Workflow error: {e}")
             self.logger.log_error("Workflow failed", e)
             self.logger.log_workflow_aborted(str(e))
             self.markers.clear_staged_knowledge()
@@ -182,7 +182,7 @@ class WPOrchestrator:
             counts = self.markers.apply_staged_knowledge(str(self.working_dir))
             if counts:
                 summary = KnowledgeManager(str(self.working_dir)).get_updated_files_summary(counts)
-                print(f"\n{summary}")
+                self.display.knowledge_summary(summary)
             self.markers.clear_staged_knowledge()
         except Exception as e:
             self.logger.log_error(f"Failed to apply staged knowledge: {e}")
@@ -237,7 +237,7 @@ class WPOrchestrator:
     async def _run_phase(self, phase: int, initial_task: Optional[str] = None) -> None:
         """Run a single Waypoints phase."""
         phase_name = PHASE_NAMES[phase]
-        print(format_phase_header(phase, phase_name))
+        self.display.phase_header(phase, phase_name)
         self.markers.set_phase(phase)
         self.logger.log_phase_start(phase, phase_name)
 
@@ -262,7 +262,8 @@ class WPOrchestrator:
             self.logger.log_phase_context_saved(phase, context_path)
 
         if phase == 4:
-            await self._start_review_coordinator()
+            async with self.display.spinner("Starting code reviewer"):
+                await self._start_review_coordinator()
 
         try:
             session_id = await self._run_phase_session(context, phase, subagents=subagents)
@@ -275,9 +276,10 @@ class WPOrchestrator:
             doc_path = self.markers.save_phase_document(phase, summary)
             if doc_path:
                 self.logger.log_phase_summary_saved(phase, doc_path)
-                print(f"\n[Supervisor] {phase_name} document saved: {doc_path}")
+                self.display.supervisor_success(f"{phase_name} document saved: {doc_path}")
 
-            await self._extract_and_stage_knowledge(phase, session_id)
+            async with self.display.spinner("Extracting knowledge"):
+                await self._extract_and_stage_knowledge(phase, session_id)
 
             while True:
                 action = await self._confirm_phase_completion(phase, doc_path, session_id)
@@ -285,33 +287,31 @@ class WPOrchestrator:
                 if action == 'proceed':
                     break
                 elif action == 'edit':
-                    # Verify the edited document can be read
                     edited_content = self.markers.get_phase_document(phase)
                     if edited_content:
                         preview_lines = edited_content.strip().split('\n')[:5]
                         preview = '\n'.join(preview_lines)
                         if len(edited_content.strip().split('\n')) > 5:
                             preview += '\n...'
-                        print(f"\n[Supervisor] Document updated. Preview:")
-                        print(f"---")
-                        print(preview)
-                        print(f"---")
+                        self.display.supervisor_message("Document updated. Preview:")
+                        self.display.document_preview(preview)
                         self.logger.log_event("USER", f"Phase {phase} document edited manually")
                     else:
-                        print(f"[Supervisor] Warning: Could not read document at {doc_path}")
+                        self.display.supervisor_warning(f"Could not read document at {doc_path}")
                 elif action == 'regenerate':
                     summary = await self._regenerate_summary(phase, session_id)
                     doc_path = self.markers.save_phase_document(phase, summary)
                     if doc_path:
                         self.logger.log_phase_summary_saved(phase, doc_path)
-                        print(f"[Supervisor] Updated document saved: {doc_path}")
+                        self.display.supervisor_success(f"Updated document saved: {doc_path}")
         else:
-            print(f"\n[Supervisor] Implementation complete - all tests passing!")
+            self.display.supervisor_success("Implementation complete - all tests passing!")
             self.logger.log_phase_complete(phase, phase_name)
             self._mark_phase_complete(phase)
-            await self._extract_and_stage_knowledge(phase, session_id)
+            async with self.display.spinner("Extracting knowledge"):
+                await self._extract_and_stage_knowledge(phase, session_id)
             self._display_usage_summary()
-            print(f"\n[Supervisor] Documents preserved in: {self.markers.get_marker_dir()}")
+            self.display.supervisor_message(f"Documents preserved in: {self.markers.get_marker_dir()}")
 
     async def _run_phase_session(
         self,
@@ -321,7 +321,7 @@ class WPOrchestrator:
     ) -> Optional[str]:
         """Run an interactive Claude session for a phase. Returns session ID."""
         env_vars = self.markers.get_env_vars()
-        print(f"\n[Starting Phase {phase} session...]\n")
+        self.display.supervisor_message(f"Initializing Phase {phase} session...")
 
         agent_options = ClaudeAgentOptions(
             cwd=str(self.working_dir),
@@ -359,45 +359,7 @@ class WPOrchestrator:
 
     def _display_usage_summary(self) -> None:
         usage = self.markers.get_all_usage()
-
-        print("\n" + "=" * 60)
-        print("TOKEN USAGE SUMMARY")
-        print("=" * 60)
-
-        for phase_num in [1, 2, 3, 4]:
-            phase_key = f"phase{phase_num}"
-            phase_data = usage.get(phase_key, {})
-            phase_name = PHASE_NAMES.get(phase_num, f"Phase {phase_num}")
-
-            input_tokens = phase_data.get("input_tokens", 0)
-            output_tokens = phase_data.get("output_tokens", 0)
-            total_tokens = input_tokens + output_tokens
-            cost = phase_data.get("cost_usd", 0.0)
-            duration = phase_data.get("duration_ms", 0)
-            turns = phase_data.get("turns", 0)
-
-            if total_tokens > 0:
-                duration_sec = duration / 1000.0
-                print(f"\nPhase {phase_num} ({phase_name}):")
-                print(f"  Tokens: {input_tokens:,} in / {output_tokens:,} out ({total_tokens:,} total)")
-                print(f"  Cost: ${cost:.4f}")
-                print(f"  Duration: {duration_sec:.1f}s | Turns: {turns}")
-
-        # Total
-        total = usage.get("total", {})
-        total_input = total.get("input_tokens", 0)
-        total_output = total.get("output_tokens", 0)
-        total_tokens = total_input + total_output
-        total_cost = total.get("cost_usd", 0.0)
-        total_duration = total.get("duration_ms", 0)
-        total_turns = total.get("turns", 0)
-
-        print("\n" + "-" * 60)
-        print("TOTAL:")
-        print(f"  Tokens: {total_input:,} in / {total_output:,} out ({total_tokens:,} total)")
-        print(f"  Cost: ${total_cost:.4f}")
-        print(f"  Duration: {total_duration / 1000.0:.1f}s | Turns: {total_turns}")
-        print("=" * 60)
+        self.display.usage_summary(usage, PHASE_NAMES)
 
     async def _confirm_phase_completion(
         self,
@@ -408,7 +370,7 @@ class WPOrchestrator:
         """Ask user to confirm phase completion. Returns 'proceed', 'edit', or 'regenerate'."""
         name = PHASE_NAMES.get(phase, f"Phase {phase}")
 
-        print(format_phase_complete_banner(phase, name, doc_path))
+        self.display.phase_complete_banner(phase, name, doc_path)
 
         while True:
             response = input("\nYour choice [y/e/r]: ").strip().lower()
@@ -420,18 +382,18 @@ class WPOrchestrator:
                 self._mark_phase_complete(phase)
                 return 'proceed'
             elif response == 'e':
-                print(f"\n[Supervisor] Edit the document, then press Enter to continue...")
-                print(f"             File: {doc_path}")
+                self.display.supervisor_message("Edit the document, then press Enter to continue...")
+                self.display.supervisor_message(f"File: {doc_path}")
                 input("\nPress Enter when done editing: ")
                 return 'edit'
             elif response == 'r':
                 return 'regenerate'
             else:
-                print("\nOptions:")
-                print("  y - Proceed to next phase")
-                print("  e - Edit document manually, then reload")
-                print("  r - Provide feedback to regenerate")
-                print("  Ctrl+C - Abort workflow")
+                self.display.print("\nOptions:")
+                self.display.print("  y - Proceed to next phase")
+                self.display.print("  e - Edit document manually, then reload")
+                self.display.print("  r - Provide feedback to regenerate")
+                self.display.print("  Ctrl+C - Abort workflow")
 
     async def _generate_and_verify_summary(self, phase: int, session_id: Optional[str] = None) -> str:
         """Generate summary with self-review verification."""
@@ -439,35 +401,33 @@ class WPOrchestrator:
         if not summary_prompt:
             return ""
 
-        print(f"\n[Supervisor] Generating phase {phase} summary...")
-
-        initial_summary = await self._extract_text_response(summary_prompt, session_id=session_id, phase=phase)
+        async with self.display.spinner(f"Generating Phase {phase} summary"):
+            initial_summary = await self._extract_text_response(summary_prompt, session_id=session_id, phase=phase)
 
         review_prompt = ContextBuilder.get_review_prompt(phase)
         if not review_prompt:
             return initial_summary
 
-        print(f"[Supervisor] Verifying summary completeness...")
-
-        review_response = await self._extract_text_response(review_prompt, session_id=session_id, phase=phase)
+        async with self.display.spinner("Verifying summary completeness"):
+            review_response = await self._extract_text_response(review_prompt, session_id=session_id, phase=phase)
 
         if review_response.startswith(GAPS_FOUND_SIGNAL):
             lines = review_response.split('\n', 1)
             if len(lines) > 1:
                 updated_summary = lines[1].strip()
-                print(f"[Supervisor] Summary updated with missing items.")
+                self.display.supervisor_message("Summary updated with missing items.")
                 return updated_summary
             else:
                 return initial_summary
         elif review_response.startswith(SUMMARY_VERIFIED_SIGNAL):
             lines = review_response.split('\n', 1)
             if len(lines) > 1:
-                print(f"[Supervisor] Summary verified complete.")
+                self.display.supervisor_success("Summary verified complete.")
                 return lines[1].strip()
             else:
                 return initial_summary
         else:
-            print(f"[Supervisor] Summary captured.")
+            self.display.supervisor_message("Summary captured.")
             return review_response if review_response else initial_summary
 
     async def _run_regeneration_conversation(
@@ -516,17 +476,17 @@ class WPOrchestrator:
 
         current_summary = self.markers.get_phase_document(phase)
 
-        print("\n[Supervisor] What changes would you like to make?")
-        print("             (Describe what to add, remove, or modify)")
+        self.display.supervisor_message("What changes would you like to make?")
+        self.display.supervisor_message("(Describe what to add, remove, or modify)")
         feedback = read_user_input("\nYour feedback: ").strip()
 
         if not feedback:
-            print("[Supervisor] No feedback provided, keeping current summary.")
+            self.display.supervisor_message("No feedback provided, keeping current summary.")
             return current_summary
 
         self.logger.log_user_input(f"Regenerate feedback: {feedback}")
 
-        print(f"\n[Supervisor] Starting revision discussion...\n")
+        self.display.supervisor_message("Starting revision discussion...")
 
         was_completed, conversation_session_id = await self._run_regeneration_conversation(
             phase=phase,
@@ -535,23 +495,22 @@ class WPOrchestrator:
         )
 
         if not was_completed:
-            print(f"\n[Supervisor] Keeping original summary.")
+            self.display.supervisor_message("Keeping original summary.")
             return current_summary
 
-        print(f"\n[Supervisor] Generating final summary...")
-
-        final_summary_prompt = ContextBuilder.get_regeneration_summary_prompt()
-        new_summary = await self._extract_text_response(
-            final_summary_prompt,
-            session_id=conversation_session_id,
-            phase=phase
-        )
+        async with self.display.spinner("Generating final summary"):
+            final_summary_prompt = ContextBuilder.get_regeneration_summary_prompt()
+            new_summary = await self._extract_text_response(
+                final_summary_prompt,
+                session_id=conversation_session_id,
+                phase=phase
+            )
 
         if new_summary:
-            print(f"[Supervisor] Summary regenerated.")
+            self.display.supervisor_success("Summary regenerated.")
             return new_summary
         else:
-            print(f"[Supervisor] Regeneration failed, keeping current summary.")
+            self.display.supervisor_warning("Regeneration failed, keeping current summary.")
             return current_summary
 
     async def _start_review_coordinator(self) -> None:

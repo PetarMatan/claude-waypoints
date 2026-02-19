@@ -58,5 +58,14 @@ if ! python3 -c "import claude_agent_sdk" 2>/dev/null; then
     exit 1
 fi
 
+# Check if rich is installed
+if ! python3 -c "import rich" 2>/dev/null; then
+    echo "Error: rich not installed."
+    echo ""
+    echo "Install with:"
+    echo "  pip install rich"
+    exit 1
+fi
+
 # Run the supervisor module
 exec python3 -m wp_supervisor "$@"

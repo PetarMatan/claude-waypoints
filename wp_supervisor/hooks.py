@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .logger import SupervisorLogger
     from .markers import SupervisorMarkers
     from .review_coordinator import ReviewCoordinator
+    from .display import SupervisorDisplay
 
 FileChangeCallback = Callable[[str, str], None]  # (file_path, tool_name) -> None
 
@@ -33,11 +34,13 @@ class SupervisorHooks:
         self,
         markers: "SupervisorMarkers",
         logger: "SupervisorLogger",
-        working_dir: str
+        working_dir: str,
+        display: Optional["SupervisorDisplay"] = None,
     ):
         self.markers = markers
         self.logger = logger
         self.config = WPConfig(working_dir)
+        self.display = display
 
         self._review_coordinator: Optional["ReviewCoordinator"] = None
         self._on_file_change: Optional[FileChangeCallback] = None
@@ -236,6 +239,17 @@ class SupervisorHooks:
         except Exception as e:
             return 1, f"Command error: {e}"
 
+    async def _run_with_spinner(self, cmd: str, cwd: str, label: str, timeout: int = 120) -> tuple:
+        """Run a shell command with a display spinner, falling back to plain execution."""
+        import asyncio
+
+        loop = asyncio.get_running_loop()
+        if self.display is not None:
+            async with self.display.spinner(label):
+                return await loop.run_in_executor(None, self._run_command, cmd, cwd, timeout)
+        else:
+            return await loop.run_in_executor(None, self._run_command, cmd, cwd, timeout)
+
     def _has_placeholder(self, cmd: str) -> bool:
         placeholders = ["{file}", "{testClass}", "{testName}", "{testFile}"]
         return any(p in cmd for p in placeholders)
@@ -275,7 +289,7 @@ class SupervisorHooks:
 
             if phase == 2 and compile_cmd and not self._has_placeholder(compile_cmd):
                 await loop.run_in_executor(None, self.logger.log_event, "BUILD", f"Running: {compile_cmd}")
-                code, out = await loop.run_in_executor(None, self._run_command, compile_cmd, cwd)
+                code, out = await self._run_with_spinner(compile_cmd, cwd, "Verifying compilation")
                 if code != 0:
                     await loop.run_in_executor(None, self.logger.log_wp, "Phase 2: Compile FAILED")
                     return {"continue": False, "stopReason": format_compile_error(out, profile, compile_cmd)}
@@ -285,7 +299,7 @@ class SupervisorHooks:
                 cmd = test_compile_cmd or compile_cmd
                 if cmd and not self._has_placeholder(cmd):
                     await loop.run_in_executor(None, self.logger.log_event, "BUILD", f"Running: {cmd}")
-                    code, out = await loop.run_in_executor(None, self._run_command, cmd, cwd)
+                    code, out = await self._run_with_spinner(cmd, cwd, "Verifying test compilation")
                     if code != 0:
                         await loop.run_in_executor(None, self.logger.log_wp, "Phase 3: Test compile FAILED")
                         return {"continue": False, "stopReason": format_compile_error(out, profile, cmd)}
@@ -294,7 +308,7 @@ class SupervisorHooks:
             if phase == 4:
                 if compile_cmd and not self._has_placeholder(compile_cmd):
                     await loop.run_in_executor(None, self.logger.log_event, "BUILD", f"Running: {compile_cmd}")
-                    code, out = await loop.run_in_executor(None, self._run_command, compile_cmd, cwd)
+                    code, out = await self._run_with_spinner(compile_cmd, cwd, "Verifying compilation")
                     if code != 0:
                         await loop.run_in_executor(None, self.logger.log_wp, "Phase 4: Compile FAILED")
                         return {"continue": False, "stopReason": format_compile_error(out, profile, compile_cmd)}
@@ -302,7 +316,7 @@ class SupervisorHooks:
 
                 if test_cmd and not self._has_placeholder(test_cmd):
                     await loop.run_in_executor(None, self.logger.log_event, "BUILD", f"Running: {test_cmd}")
-                    code, out = await loop.run_in_executor(None, self._run_command, test_cmd, cwd, 300)
+                    code, out = await self._run_with_spinner(test_cmd, cwd, "Running tests", 300)
                     if code != 0:
                         await loop.run_in_executor(None, self.logger.log_wp, "Phase 4: Tests FAILED")
                         return {"continue": False, "stopReason": format_test_failure(out, profile)}

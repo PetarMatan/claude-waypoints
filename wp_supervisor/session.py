@@ -8,6 +8,7 @@ extracting duplicated loop logic from orchestrator.py.
 
 import asyncio
 import os
+import readline  # noqa: F401 - enables line editing for input()
 import sys
 from typing import Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 from .markers import SupervisorMarkers
 from .hooks import SupervisorHooks
 from .logger import SupervisorLogger
+from .display import SupervisorDisplay
 
 
 PHASE_COMPLETE_PATTERNS = [
@@ -100,12 +102,14 @@ class SessionRunner:
         working_dir: str,
         markers: SupervisorMarkers,
         hooks: SupervisorHooks,
-        logger: SupervisorLogger
+        logger: SupervisorLogger,
+        display: Optional[SupervisorDisplay] = None,
     ) -> None:
         self.working_dir = working_dir
         self.markers = markers
         self.hooks = hooks
         self.logger = logger
+        self.display = display or SupervisorDisplay()
 
     async def _process_stream(
         self,
@@ -131,7 +135,7 @@ class SessionRunner:
         """
         session_id: Optional[str] = None
         detected_signal: Optional[str] = None
-        working_indicator_shown = False
+        tool_spinner_active = False
 
         async for message in client.receive_response():
             if hasattr(message, 'session_id') and message.session_id:
@@ -141,23 +145,28 @@ class SessionRunner:
                 last_text = ""
                 for block in message.content:
                     if hasattr(block, 'text'):
-                        if working_indicator_shown:
-                            print("\n", end='')
-                            working_indicator_shown = False
-                        print(block.text, end='', flush=True)
+                        if tool_spinner_active:
+                            await self.display.stop_tool_spinner()
+                            tool_spinner_active = False
+                        self.display.stream_text(block.text)
                         last_text = block.text
                         if signal_checker:
                             result = signal_checker(block.text)
                             if result:
                                 detected_signal = result
                     elif hasattr(block, 'name'):
-                        print(".", end='', flush=True)
-                        working_indicator_shown = True
+                        await self.display.start_tool_spinner(block.name)
+                        tool_spinner_active = True
                 if last_text and not last_text.endswith('\n'):
-                    print()
+                    sys.stdout.write('\n')
+                    sys.stdout.flush()
+                self.display.stream_text_end()
 
             if hasattr(message, 'usage'):
                 self._record_usage(phase, message)
+
+        if tool_spinner_active:
+            await self.display.stop_tool_spinner()
 
         return session_id, detected_signal
 
@@ -194,7 +203,7 @@ class SessionRunner:
         while True:
             while not phase_complete:
                 if first_input:
-                    print("\n[Tip: For structured input, provide a file path: @/path/to/file.md]")
+                    self.display.tip("For structured input, provide a file path: @/path/to/file.md")
                     first_input = False
 
                 user_input = read_user_input("\nYou: ").strip()
@@ -213,7 +222,8 @@ class SessionRunner:
                     self.logger.log_user_command(user_input.lower())
                     raise KeyboardInterrupt("User requested abort")
 
-                print("\n", end='', flush=True)
+                sys.stdout.write("\n")
+                sys.stdout.flush()
                 await client_context_manager.query(user_input)
 
                 _, signal = await self._process_stream(
@@ -276,7 +286,8 @@ class SessionRunner:
                 was_completed = True
                 break
 
-            print("\n", end='', flush=True)
+            sys.stdout.write("\n")
+            sys.stdout.flush()
             await client_context_manager.query(user_input)
 
             _, signal = await self._process_stream(
@@ -324,7 +335,11 @@ class SessionRunner:
         review_coordinator: "ReviewCoordinator"
     ) -> bool:
         """Wait for in-flight reviews and inject feedback. Returns True if gate passed."""
-        await review_coordinator.wait_for_pending_reviews(timeout=60.0)
+        if getattr(review_coordinator, '_is_reviewing', False):
+            async with self.display.spinner("Waiting for in-flight review"):
+                await review_coordinator.wait_for_pending_reviews(timeout=60.0)
+        else:
+            await review_coordinator.wait_for_pending_reviews(timeout=60.0)
 
         if not review_coordinator.has_pending_feedback():
             self.logger.log_event("REVIEWER", "Review gate passed (no feedback)")
@@ -359,7 +374,7 @@ class SessionRunner:
         import time as _time
         issue_count = feedback.count("- ") if feedback else 0
         self.logger.log_event("REVIEWER", f"Injecting feedback ({issue_count} items) into implementer session")
-        print(f"\n{feedback}\n")
+        self.display.feedback_injection(feedback)
 
         inject_start = _time.monotonic()
         await client.query(feedback)

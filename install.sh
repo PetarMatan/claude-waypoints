@@ -194,6 +194,17 @@ else
     echo "  Supervisor Mode requires it. Install with: pip install claude-agent-sdk"
 fi
 
+# Check for rich (required for terminal UI)
+if python3 -c "import rich" 2>/dev/null; then
+    echo "  rich: found"
+else
+    echo "  rich: NOT FOUND (required)"
+    echo "  Installing rich..."
+    python3 -m pip install rich --quiet 2>/dev/null || {
+        echo "  WARNING: Auto-install failed. Install manually with: pip install rich"
+    }
+fi
+
 echo "Supervisor Mode installed."
 
 # Update settings.json
