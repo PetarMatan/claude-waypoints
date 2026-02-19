@@ -50,6 +50,7 @@ from .session import (
     SIGNAL_COMPLETE,
     SIGNAL_CANCELED,
 )
+from .review_coordinator import ReviewCoordinator, ReviewCoordinatorConfig
 
 # Orchestrator-specific signal constants
 PHASE_COMPLETE_SIGNAL = "---PHASE_COMPLETE---"
@@ -81,6 +82,7 @@ class WPOrchestrator:
         )
         self._knowledge_manager = KnowledgeManager(project_dir=str(self.working_dir))
         self._knowledge_context: str = ""
+        self._review_coordinator: Optional[ReviewCoordinator] = None
 
         if not self.working_dir.is_dir():
             raise ValueError(f"Working directory does not exist: {self.working_dir}")
@@ -259,7 +261,14 @@ class WPOrchestrator:
         if context_path:
             self.logger.log_phase_context_saved(phase, context_path)
 
-        session_id = await self._run_phase_session(context, phase, subagents=subagents)
+        if phase == 4:
+            await self._start_review_coordinator()
+
+        try:
+            session_id = await self._run_phase_session(context, phase, subagents=subagents)
+        finally:
+            if phase == 4:
+                await self._stop_review_coordinator()
 
         if phase < 4:
             summary = await self._generate_and_verify_summary(phase, session_id)
@@ -335,6 +344,7 @@ class WPOrchestrator:
                 initial_prompt=initial_context,
                 phase=phase,
                 signal_patterns=PHASE_COMPLETE_PATTERNS,
+                review_coordinator=self._review_coordinator,
             )
 
     def _mark_phase_complete(self, phase: int) -> None:
@@ -543,6 +553,65 @@ class WPOrchestrator:
         else:
             print(f"[Supervisor] Regeneration failed, keeping current summary.")
             return current_summary
+
+    async def _start_review_coordinator(self) -> None:
+        """Start the concurrent reviewer for Phase 4."""
+        try:
+            self.logger.log_event("ORCHESTRATOR", "Starting review coordinator for Phase 4")
+
+            self._review_coordinator = self._create_review_coordinator()
+            await self._review_coordinator.start()
+
+            self.hooks.set_review_coordinator(self._review_coordinator)
+
+            if self._review_coordinator.is_degraded:
+                self.logger.log_event(
+                    "ORCHESTRATOR",
+                    "Review coordinator started in degraded mode"
+                )
+            else:
+                self.logger.log_event(
+                    "ORCHESTRATOR",
+                    "Review coordinator ready"
+                )
+
+        except Exception as e:
+            self.logger.log_event("ORCHESTRATOR", f"Review coordinator failed to start: {e}")
+            self._review_coordinator = None
+
+    async def _stop_review_coordinator(self) -> None:
+        """Stop the review coordinator and clean up resources."""
+        try:
+            if self._review_coordinator is not None:
+                self.logger.log_event("ORCHESTRATOR", "Stopping review coordinator")
+                await self._review_coordinator.stop()
+                self._review_coordinator = None
+
+            self.hooks.set_review_coordinator(None)
+
+        except Exception as e:
+            self.logger.log_event("ORCHESTRATOR", f"Error stopping review coordinator: {e}")
+            self._review_coordinator = None
+
+    def _create_review_coordinator(self) -> ReviewCoordinator:
+        """Create a new ReviewCoordinator for Phase 4."""
+        requirements_summary = self.markers.get_phase_document(1) or "# Requirements\n(Not available)"
+        interfaces_summary = self.markers.get_phase_document(2) or ""
+        tests_summary = self.markers.get_phase_document(3) or ""
+
+        config = ReviewCoordinatorConfig(
+            file_threshold=1,
+            enabled=True
+        )
+
+        return ReviewCoordinator(
+            logger=self.logger,
+            working_dir=str(self.working_dir),
+            requirements_summary=requirements_summary,
+            interfaces_summary=interfaces_summary,
+            tests_summary=tests_summary,
+            config=config
+        )
 
     async def _extract_text_response(
         self,

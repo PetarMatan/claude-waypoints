@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Concurrent Reviewer Agent** (Supervisor mode, Phase 4)
+  - Sonnet-based reviewer validates implementation against Phase 1 requirements in real-time
+  - Fires on every file edit (threshold=1) with debounce to prevent redundant reviews
+  - Pre-completion review gate: blocks `PHASE_COMPLETE` until pending reviews finish and feedback is addressed
+  - Feedback injection into implementer session with explicit action instructions
+  - Repeat issue detection with escalation after 2 cycles
+  - Graceful degraded mode: if reviewer fails to start, Phase 4 continues without review
+- **Review system components**: `ReviewerAgent`, `ReviewCoordinator`, `FileChangeTracker`, `ReviewTrigger`, `FeedbackQueue`
+- **Reviewer logging**: debounce events, gate outcomes, feedback injection details, response timing
+
+### Changed
+- Phase 1 subagent templates now include "Do NOT create any files" instruction to prevent junk file creation in working directory
+- Removed test-run tracking from hooks (redundant with file threshold=1)
+- Simplified `ReviewTrigger` to file-threshold only (removed `TEST_RUN` trigger reason)
+
 ## [1.3.1] - 2026-02-14
 
 ### Added
