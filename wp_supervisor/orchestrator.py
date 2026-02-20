@@ -531,7 +531,6 @@ class WPOrchestrator:
         tests_summary = self.markers.get_phase_document(3) or ""
 
         config = ReviewCoordinatorConfig(
-            file_threshold=1,
             enabled=True
         )
 

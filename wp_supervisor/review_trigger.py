@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Review trigger: fires after N files written."""
+"""Review trigger: fires when build/test/compile commands are executed."""
 
 import asyncio
 from dataclasses import dataclass
@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 
 class TriggerReason(Enum):
-    FILE_THRESHOLD = "file_threshold"
+    """Reason why a review was triggered."""
+    BUILD_EXECUTION = "build_execution"
     MANUAL = "manual"
 
 
@@ -26,62 +27,54 @@ class TriggerEvent:
 TriggerCallback = Callable[[TriggerEvent], None]
 
 
-class ReviewTrigger:
-    """Monitors file changes, fires callback when review should occur."""
+# Keywords that trigger a review when found in Bash commands (case-insensitive)
+BUILD_KEYWORDS = ("test", "compile", "build")
 
-    DEFAULT_FILE_THRESHOLD = 1
+
+class ReviewTrigger:
+    """Monitors build command execution, fires callback when review should occur."""
 
     def __init__(
         self,
         file_tracker: "FileChangeTracker",
         logger: "SupervisorLogger",
         on_trigger: TriggerCallback,
-        file_threshold: int = DEFAULT_FILE_THRESHOLD
     ) -> None:
         self._file_tracker = file_tracker
         self._logger = logger
         self._on_trigger = on_trigger
-        self._file_threshold = file_threshold
-        self._files_since_review = 0
         self._lock = asyncio.Lock()
 
-    @property
-    def file_threshold(self) -> int:
-        return self._file_threshold
+    async def on_build_executed(self, command: str) -> bool:
+        """Called when Bash executes a build/test/compile command.
 
-    @property
-    def files_since_review(self) -> int:
-        return self._files_since_review
+        Triggers a review if there are pending file changes.
+        Returns True if review was triggered, False otherwise.
 
-    async def on_file_changed(self) -> bool:
-        """Called when Write/Edit completes. Returns True if review was triggered."""
+        Flow:
+        1. Check if file_tracker.pending_count > 0
+        2. If no pending changes, return False (skip review per EDGE-2)
+        3. Create TriggerEvent with reason=BUILD_EXECUTION and file_count
+        4. Call on_trigger callback
+        5. Return True
+
+        Args:
+            command: The Bash command that was executed.
+        """
         async with self._lock:
-            self._files_since_review += 1
+            # EDGE-2: Skip review if no pending file changes
+            pending_count = self._file_tracker.pending_count
+            if pending_count == 0:
+                return False
 
-            if self._should_trigger_on_file():
-                event = TriggerEvent(
-                    reason=TriggerReason.FILE_THRESHOLD,
-                    file_count=self._files_since_review
-                )
-                self._logger.log_event(
-                    "REVIEWER",
-                    f"File threshold reached ({self._files_since_review} files)"
-                )
-                try:
-                    self._on_trigger(event)
-                except Exception as e:
-                    self._logger.log_event(
-                        "REVIEWER",
-                        f"Trigger callback error: {e}"
-                    )
-                return True
-
-            return False
+            # Create trigger event and fire callback
+            event = TriggerEvent(
+                reason=TriggerReason.BUILD_EXECUTION,
+                file_count=pending_count
+            )
+            self._on_trigger(event)
+            return True
 
     async def reset(self) -> None:
-        """Reset file counter after review completes."""
-        async with self._lock:
-            self._files_since_review = 0
-
-    def _should_trigger_on_file(self) -> bool:
-        return self._files_since_review >= self._file_threshold
+        """Reset trigger state after review completes."""
+        pass

@@ -225,6 +225,80 @@ class SupervisorHooks:
                 pass
             return self._allow()
 
+    async def track_build_execution(
+        self,
+        input_data: Dict[str, Any],
+        tool_use_id: Optional[str],
+        context: Any
+    ) -> Dict[str, Any]:
+        """PostToolUse hook for triggering reviews when build/test/compile commands execute.
+
+        Detects keywords 'test', 'compile', 'build' (case-insensitive) in Bash commands.
+        Triggers a review if there are pending file changes.
+
+        Flow:
+        1. Extract command from input_data.tool_input.command
+        2. Check if command contains build keywords (case-insensitive)
+        3. If yes and Phase 4 and coordinator active:
+           - Call self._review_coordinator.on_build_executed(command)
+        4. Always return self._allow() (fail-open)
+
+        Error handling: Log errors and allow command through (fail-open per ERR-1).
+        """
+        import asyncio
+
+        try:
+            # Only process Bash tool
+            tool_name = input_data.get("tool_name", "")
+            if tool_name != "Bash":
+                return self._allow()
+
+            # Extract command
+            tool_input = input_data.get("tool_input", {})
+            command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+
+            # Skip if no command or no build keywords
+            if not command or not self._is_build_command(command):
+                return self._allow()
+
+            # Only trigger in Phase 4
+            loop = asyncio.get_running_loop()
+            phase = await loop.run_in_executor(None, self.markers.get_phase)
+            if phase != 4:
+                return self._allow()
+
+            # Call coordinator if set
+            if self._review_coordinator is not None:
+                try:
+                    await self._review_coordinator.on_build_executed(command)
+                except Exception as e:
+                    await loop.run_in_executor(
+                        None,
+                        self.logger.log_event,
+                        "REVIEWER",
+                        f"Build execution trigger error: {e}"
+                    )
+
+            return self._allow()
+
+        except Exception as e:
+            # ERR-1: Log errors and allow command through (fail-open)
+            try:
+                self.logger.log_event("HOOK_ERROR", f"track_build_execution exception: {e}")
+            except:
+                pass
+            return self._allow()
+
+    def _is_build_command(self, command: str) -> bool:
+        """Check if command contains build/test/compile keywords (case-insensitive).
+
+        Keywords: 'test', 'compile', 'build' matched as substrings.
+        """
+        if not command:
+            return False
+        command_lower = command.lower()
+        return any(keyword in command_lower for keyword in ("test", "compile", "build"))
+
     def _run_command(self, cmd: str, cwd: str, timeout: int = 120) -> tuple:
         """Run a shell command and return (exit_code, output)."""
         import subprocess
@@ -347,7 +421,7 @@ class SupervisorHooks:
             self.logger.log_event("HOOK", "HookMatcher import FAILED - no hooks registered")
             return {}
 
-        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify, file_tracking)")
+        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify, file_tracking, build_execution)")
         return {
             "PreToolUse": [
                 HookMatcher(matcher="Write|Edit", hooks=[self.phase_guard]),
@@ -355,6 +429,7 @@ class SupervisorHooks:
             ],
             "PostToolUse": [
                 HookMatcher(matcher="Write|Edit", hooks=[self.track_file_change]),
+                HookMatcher(matcher="Bash", hooks=[self.track_build_execution]),
             ],
             "Stop": [
                 HookMatcher(hooks=[self.build_verify]),

@@ -6,7 +6,7 @@ import sys
 import tempfile
 import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "wp_supervisor"))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib"))
@@ -570,6 +570,355 @@ class TestTrackFileChangeBehavior:
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
             assert hasattr(hooks, 'track_file_change')
+
+
+# =============================================================================
+# REQ-9: track_build_execution Hook Tests
+# =============================================================================
+
+class TestTrackBuildExecutionHook:
+    """REQ-9: PostToolUse hook for Bash tool with keyword detection."""
+
+    def test_track_build_execution_method_exists(self):
+        """REQ-9: track_build_execution hook method should exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            assert hasattr(hooks, 'track_build_execution')
+
+    def test_track_build_execution_is_async(self):
+        """REQ-9: track_build_execution should be async."""
+        import inspect
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            assert inspect.iscoroutinefunction(hooks.track_build_execution)
+
+    def test_track_build_execution_accepts_standard_hook_params(self):
+        """REQ-9: track_build_execution takes standard hook parameters."""
+        import inspect
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+            params = inspect.signature(hooks.track_build_execution).parameters
+            assert 'input_data' in params
+            assert 'tool_use_id' in params
+            assert 'context' in params
+
+
+class TestIsBuildCommand:
+    """REQ-1: Keyword detection for test/compile/build."""
+
+    def _create_hooks(self, tmpdir):
+        return SupervisorHooks(MagicMock(), MagicMock(), tmpdir)
+
+    def test_is_build_command_method_exists(self):
+        """_is_build_command helper should exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks(tmpdir)
+            assert hasattr(hooks, '_is_build_command')
+
+    def test_is_build_command_detects_test_keyword(self):
+        """REQ-1: Detects 'test' keyword."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks(tmpdir)
+            assert hooks._is_build_command("pytest tests/") is True
+
+    def test_is_build_command_detects_compile_keyword(self):
+        """REQ-1: Detects 'compile' keyword."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks(tmpdir)
+            assert hooks._is_build_command("mvn compile") is True
+
+    def test_is_build_command_detects_build_keyword(self):
+        """REQ-1: Detects 'build' keyword."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks(tmpdir)
+            assert hooks._is_build_command("npm run build") is True
+
+    def test_is_build_command_case_insensitive(self):
+        """REQ-1: Case-insensitive substring match."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks(tmpdir)
+            assert hooks._is_build_command("PYTEST") is True
+            assert hooks._is_build_command("Make Build") is True
+            assert hooks._is_build_command("TestRunner") is True
+            assert hooks._is_build_command("COMPILE_ALL") is True
+
+    def test_is_build_command_false_for_non_build_commands(self):
+        """EDGE-1: Non-build commands should return False."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks(tmpdir)
+            assert hooks._is_build_command("git status") is False
+            assert hooks._is_build_command("ls -la") is False
+            assert hooks._is_build_command("cat file.txt") is False
+
+
+class TestTrackBuildExecutionBehavior:
+    """Behavioral tests for track_build_execution hook."""
+
+    def _create_hooks_with_config(self, phase: int, tmpdir: str) -> SupervisorHooks:
+        markers = MagicMock()
+        markers.get_phase.return_value = phase
+        logger = MagicMock()
+
+        hooks = SupervisorHooks(
+            markers=markers,
+            logger=logger,
+            working_dir=tmpdir
+        )
+        hooks._test_logger = logger
+        return hooks
+
+    def test_track_build_execution_calls_coordinator_on_build_executed(self):
+        """REQ-9: Hook calls review_coordinator.on_build_executed for build commands."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pytest tests/"}
+            }
+
+            # when
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then
+            mock_coordinator.on_build_executed.assert_called_once_with("pytest tests/")
+            assert result == {}  # Always returns allow
+
+    def test_track_build_execution_skips_non_bash_tools(self):
+        """track_build_execution only processes Bash tool."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Write",  # Not Bash
+                "tool_input": {"file_path": "/test.py"}
+            }
+
+            # when
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then
+            mock_coordinator.on_build_executed.assert_not_called()
+            assert result == {}
+
+    def test_track_build_execution_skips_non_build_commands(self):
+        """EDGE-1: Bash command without keywords: No review triggered."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git status"}  # No build keyword
+            }
+
+            # when
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then
+            mock_coordinator.on_build_executed.assert_not_called()
+            assert result == {}
+
+    def test_track_build_execution_only_phase4(self):
+        """track_build_execution only triggers in Phase 4."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given - Phase 3, not Phase 4
+            hooks = self._create_hooks_with_config(3, tmpdir)
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pytest tests/"}
+            }
+
+            # when
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then - should not trigger in non-Phase4
+            mock_coordinator.on_build_executed.assert_not_called()
+            assert result == {}
+
+    def test_track_build_execution_without_coordinator(self):
+        """track_build_execution handles no coordinator gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given - no coordinator set
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            # hooks._review_coordinator is None by default
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pytest tests/"}
+            }
+
+            # when - should not raise
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then
+            assert result == {}
+
+    def test_track_build_execution_always_returns_allow(self):
+        """ERR-1: Keyword detection errors: allow command through (fail-open)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            hooks = self._create_hooks_with_config(4, tmpdir)
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pytest tests/"}
+            }
+
+            # when
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then - always allow
+            assert result == {}
+
+    def test_track_build_execution_logs_errors_and_continues(self):
+        """ERR-1: Log errors and allow command through."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock(side_effect=Exception("Test error"))
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pytest tests/"}
+            }
+
+            # when - should not raise
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then - still returns allow
+            assert result == {}
+
+
+class TestTrackBuildExecutionEdgeCases:
+    """Edge case tests for track_build_execution."""
+
+    def _create_hooks_with_config(self, phase: int, tmpdir: str) -> SupervisorHooks:
+        markers = MagicMock()
+        markers.get_phase.return_value = phase
+        logger = MagicMock()
+
+        hooks = SupervisorHooks(
+            markers=markers,
+            logger=logger,
+            working_dir=tmpdir
+        )
+        return hooks
+
+    def test_false_positive_keyword_in_path(self):
+        """EDGE-3: False positive keyword match (e.g., 'test' in path)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            # 'test' appears in path, not as a command
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "cat /path/to/test/file.txt"}
+            }
+
+            # when
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then - harmless false positive: review skips if no pending changes
+            # The hook will call on_build_executed, but coordinator handles the check
+            mock_coordinator.on_build_executed.assert_called_once()
+            assert result == {}
+
+    def test_missing_command_in_tool_input(self):
+        """Handle missing command in tool_input gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {}  # No command key
+            }
+
+            # when - should not raise
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then
+            mock_coordinator.on_build_executed.assert_not_called()
+            assert result == {}
+
+    def test_empty_command_string(self):
+        """Handle empty command string gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": ""}
+            }
+
+            # when
+            result = run_async(hooks.track_build_execution(input_data, None, None))
+
+            # then - empty command has no keywords
+            mock_coordinator.on_build_executed.assert_not_called()
+            assert result == {}
+
+
+class TestGetHooksConfigBuildExecution:
+    """REQ-9: Verify track_build_execution registered in hooks config."""
+
+    def test_hooks_config_registers_bash_posttoolluse_hook(self):
+        """REQ-9: PostToolUse hook for Bash registered in get_hooks_config."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            markers = MagicMock()
+            logger = MagicMock()
+            hooks = SupervisorHooks(markers, logger, tmpdir)
+
+            # Mock HookMatcher import
+            with patch.dict(sys.modules, {'claude_agent_sdk': MagicMock()}):
+                from claude_agent_sdk import HookMatcher
+                HookMatcher.return_value = MagicMock()
+
+                config = hooks.get_hooks_config()
+
+                # Verify PostToolUse has Bash hook
+                assert 'PostToolUse' in config
+                # The PostToolUse list should have a matcher for Bash
+                # (exact verification depends on HookMatcher implementation)
 
 
 if __name__ == '__main__':

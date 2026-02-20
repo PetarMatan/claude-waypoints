@@ -18,7 +18,6 @@ from .feedback_queue import FeedbackQueue
 @dataclass
 class ReviewCoordinatorConfig:
     """Configuration for the review coordinator."""
-    file_threshold: int = 1
     enabled: bool = True
 
 
@@ -86,7 +85,6 @@ class ReviewCoordinator:
                 file_tracker=self._file_tracker,
                 logger=self._logger,
                 on_trigger=self._schedule_review,
-                file_threshold=self._config.file_threshold
             )
 
             self._reviewer = ReviewerAgent(
@@ -124,18 +122,47 @@ class ReviewCoordinator:
         self._is_active = False
 
     async def on_file_changed(self, file_path: str, tool_name: str) -> None:
-        """Called when Write/Edit tool completes. Records change and checks triggers."""
+        """Called when Write/Edit tool completes. Records change only (no trigger).
+
+        File changes are tracked but do not trigger reviews.
+        Reviews are triggered by build command execution via on_build_executed().
+        """
         if not self._is_active or self._is_degraded:
             return
 
-        if self._file_tracker is None or self._trigger is None:
+        if self._file_tracker is None:
             return
 
         try:
             await self._file_tracker.record_change(file_path, tool_name)
-            await self._trigger.on_file_changed()
         except Exception as e:
-            self._logger.log_event("REVIEWER", f"File change handling error: {e}")
+            self._logger.log_event("REVIEWER", f"File change tracking error: {e}")
+
+    async def on_build_executed(self, command: str) -> None:
+        """Called when Bash executes a build/test/compile command.
+
+        Triggers a review if there are pending file changes.
+        This is the primary trigger mechanism for reviews.
+
+        Flow:
+        1. Return early if not active or degraded (per ERR-2)
+        2. Return early if trigger is None
+        3. Delegate to self._trigger.on_build_executed(command)
+
+        Args:
+            command: The Bash command that was executed.
+        """
+        # ERR-2: Return early when not active or degraded
+        if not self._is_active or self._is_degraded:
+            return
+
+        if self._trigger is None:
+            return
+
+        try:
+            await self._trigger.on_build_executed(command)
+        except Exception as e:
+            self._logger.log_event("REVIEWER", f"Build execution trigger error: {e}")
 
     async def get_pending_feedback(self) -> str:
         """Get and clear pending feedback. Returns formatted string or empty."""
