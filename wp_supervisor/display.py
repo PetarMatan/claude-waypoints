@@ -101,10 +101,6 @@ class SupervisorDisplay:
     ) -> None:
         if self._use_rich:
             lines = [f"[bold]Phase {phase} ({name}) Complete[/bold]"]
-            if doc_path:
-                lines.append("")
-                lines.append(f"[dim]Review:[/dim] {doc_path}")
-                lines.append("[dim]        (You can open this file in your editor)[/dim]")
             lines.append("")
             lines.append("[bold]Options:[/bold]")
             lines.append("  [green]y[/green] - Proceed to next phase")
@@ -115,6 +111,8 @@ class SupervisorDisplay:
                 "\n".join(lines),
                 box=ROUNDED,
             ))
+            if doc_path:
+                self._console.print(f"  [dim]Review:[/dim] {doc_path}")
         else:
             print(format_phase_complete_banner(phase, name, doc_path))
 

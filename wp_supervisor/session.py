@@ -115,7 +115,8 @@ class SessionRunner:
         self,
         client: "ClaudeSDKClient",
         phase: int,
-        signal_checker: Optional[SignalChecker] = None
+        signal_checker: Optional[SignalChecker] = None,
+        show_thinking: bool = False
     ) -> Tuple[Optional[str], Optional[str]]:
         """
         Process a message stream: print text, show work indicators, detect signals.
@@ -127,6 +128,9 @@ class SessionRunner:
             phase: Current phase number for usage recording
             signal_checker: Optional callback that checks text for signals.
                            Returns signal string if detected, None otherwise.
+            show_thinking: If True, show a "Thinking..." spinner until first
+                          content arrives. Used after user input to indicate
+                          the request is being processed.
 
         Returns:
             (session_id, detected_signal) tuple. session_id is from the first
@@ -136,6 +140,10 @@ class SessionRunner:
         session_id: Optional[str] = None
         detected_signal: Optional[str] = None
         tool_spinner_active = False
+
+        if show_thinking:
+            await self.display.start_tool_spinner("Thinking...")
+            tool_spinner_active = True
 
         async for message in client.receive_response():
             if hasattr(message, 'session_id') and message.session_id:
@@ -227,7 +235,8 @@ class SessionRunner:
                 await client_context_manager.query(user_input)
 
                 _, signal = await self._process_stream(
-                    client_context_manager, phase, phase_checker
+                    client_context_manager, phase, phase_checker,
+                    show_thinking=True
                 )
                 if signal:
                     phase_complete = True
@@ -291,7 +300,8 @@ class SessionRunner:
             await client_context_manager.query(user_input)
 
             _, signal = await self._process_stream(
-                client_context_manager, phase, regen_checker
+                client_context_manager, phase, regen_checker,
+                show_thinking=True
             )
             if signal:
                 conversation_complete = True
@@ -378,7 +388,7 @@ class SessionRunner:
 
         inject_start = _time.monotonic()
         await client.query(feedback)
-        _, signal = await self._process_stream(client, phase, signal_checker)
+        _, signal = await self._process_stream(client, phase, signal_checker, show_thinking=True)
         elapsed = _time.monotonic() - inject_start
         self.logger.log_event("REVIEWER", f"Implementer responded in {elapsed:.0f}s (re-completed: {signal is not None})")
         return signal

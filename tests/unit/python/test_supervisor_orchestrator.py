@@ -276,14 +276,6 @@ class TestOrchestratorSignals:
         from wp_supervisor.orchestrator import PHASE_COMPLETE_SIGNAL
         assert PHASE_COMPLETE_SIGNAL == "---PHASE_COMPLETE---"
 
-    def test_summary_verified_signal_exists(self):
-        from wp_supervisor.orchestrator import SUMMARY_VERIFIED_SIGNAL
-        assert SUMMARY_VERIFIED_SIGNAL == "SUMMARY_VERIFIED"
-
-    def test_gaps_found_signal_exists(self):
-        from wp_supervisor.orchestrator import GAPS_FOUND_SIGNAL
-        assert GAPS_FOUND_SIGNAL == "GAPS_FOUND"
-
     def test_phase_names_dict_exists(self):
         from wp_supervisor.templates import PHASE_NAMES
         assert 1 in PHASE_NAMES
@@ -314,14 +306,14 @@ class TestRunPhase:
                         nonlocal phase_during_session
                         phase_during_session = orchestrator.markers.get_phase()
 
-                    async def mock_generate_and_verify(*args, **kwargs):
+                    async def mock_generate_summary(*args, **kwargs):
                         return "# Summary"
 
                     async def mock_confirm(*args, **kwargs):
                         return 'proceed'
 
                     orchestrator._run_phase_session = mock_run_session
-                    orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                    orchestrator._generate_summary = mock_generate_summary
                     orchestrator._confirm_phase_completion = mock_confirm
 
                     run_async(orchestrator._run_phase(phase, "test task" if phase == 1 else None))
@@ -337,14 +329,14 @@ class TestRunPhase:
                 async def mock_run_session(*args, **kwargs):
                     pass
 
-                async def mock_generate_and_verify(*args, **kwargs):
+                async def mock_generate_summary(*args, **kwargs):
                     return "# Requirements\n- Feature A"
 
                 async def mock_confirm(*args, **kwargs):
                     return 'proceed'
 
                 orchestrator._run_phase_session = mock_run_session
-                orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                orchestrator._generate_summary = mock_generate_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(1, "test"))
@@ -362,14 +354,14 @@ class TestRunPhase:
                 async def mock_run_session(*args, **kwargs):
                     pass
 
-                async def mock_generate_and_verify(*args, **kwargs):
+                async def mock_generate_summary(*args, **kwargs):
                     return "# Interfaces\n- ServiceA"
 
                 async def mock_confirm(*args, **kwargs):
                     return 'proceed'
 
                 orchestrator._run_phase_session = mock_run_session
-                orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                orchestrator._generate_summary = mock_generate_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(2))
@@ -388,14 +380,14 @@ class TestRunPhase:
                 async def mock_run_session(*args, **kwargs):
                     pass
 
-                async def mock_generate_and_verify(*args, **kwargs):
+                async def mock_generate_summary(*args, **kwargs):
                     return "# Tests\n- test_feature"
 
                 async def mock_confirm(*args, **kwargs):
                     return 'proceed'
 
                 orchestrator._run_phase_session = mock_run_session
-                orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                orchestrator._generate_summary = mock_generate_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(3))
@@ -459,7 +451,7 @@ class TestRunPhase:
                 async def mock_run_session(*args, **kwargs):
                     pass
 
-                async def mock_generate_and_verify(*args, **kwargs):
+                async def mock_generate_summary(*args, **kwargs):
                     return "# Original Requirements"
 
                 confirm_calls = []
@@ -471,7 +463,7 @@ class TestRunPhase:
                     return 'proceed'
 
                 orchestrator._run_phase_session = mock_run_session
-                orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                orchestrator._generate_summary = mock_generate_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(1, "test"))
@@ -488,7 +480,7 @@ class TestRunPhase:
                 async def mock_run_session(*args, **kwargs):
                     pass
 
-                async def mock_generate_and_verify(*args, **kwargs):
+                async def mock_generate_summary(*args, **kwargs):
                     return "# Original Requirements"
 
                 regenerate_called = []
@@ -504,7 +496,7 @@ class TestRunPhase:
                     return 'proceed'
 
                 orchestrator._run_phase_session = mock_run_session
-                orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                orchestrator._generate_summary = mock_generate_summary
                 orchestrator._confirm_phase_completion = mock_confirm
                 orchestrator._regenerate_summary = mock_regenerate
 
@@ -564,18 +556,18 @@ class TestRegenerateSummary:
                 assert "# Current Summary" in conversation_calls[0]['current_summary']
 
 
-class TestGenerateAndVerifySummary:
+class TestGenerateSummary:
 
-    def test_generate_and_verify_returns_empty_for_phase4(self):
+    def test_generate_summary_returns_empty_for_phase4(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
-                result = run_async(orchestrator._generate_and_verify_summary(4))
+                result = run_async(orchestrator._generate_summary(4))
                 assert result == ""
 
-    def test_generate_and_verify_calls_extract_text_response(self):
+    def test_generate_summary_calls_extract_text_response_once(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -586,82 +578,30 @@ class TestGenerateAndVerifySummary:
                 async def mock_extract_text_response(prompt, session_id=None, phase=None):
                     nonlocal call_count
                     call_count += 1
-                    if call_count == 1:
-                        return "# Initial Summary"
-                    else:
-                        return "SUMMARY_VERIFIED\n# Initial Summary"
+                    return "# Summary"
 
                 orchestrator._extract_text_response = mock_extract_text_response
 
-                result = run_async(orchestrator._generate_and_verify_summary(1))
+                result = run_async(orchestrator._generate_summary(1))
 
-                assert call_count == 2
+                assert call_count == 1
+                assert result == "# Summary"
 
-    def test_generate_and_verify_handles_gaps_found(self):
+    def test_generate_summary_returns_text_response(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
 
-                call_count = 0
-
                 async def mock_extract_text_response(prompt, session_id=None, phase=None):
-                    nonlocal call_count
-                    call_count += 1
-                    if call_count == 1:
-                        return "# Initial Summary"
-                    else:
-                        return "GAPS_FOUND\n# Updated Summary with additions"
+                    return "# Requirements\n- REQ-1: Feature\n- REQ-2: Other"
 
                 orchestrator._extract_text_response = mock_extract_text_response
 
-                result = run_async(orchestrator._generate_and_verify_summary(1))
+                result = run_async(orchestrator._generate_summary(1))
 
-                assert "Updated Summary" in result
-
-    def test_generate_and_verify_handles_verified(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-
-                call_count = 0
-
-                async def mock_extract_text_response(prompt, session_id=None, phase=None):
-                    nonlocal call_count
-                    call_count += 1
-                    if call_count == 1:
-                        return "# Initial Summary"
-                    else:
-                        return "SUMMARY_VERIFIED\n# Verified Summary"
-
-                orchestrator._extract_text_response = mock_extract_text_response
-
-                result = run_async(orchestrator._generate_and_verify_summary(1))
-
-                assert "Verified Summary" in result
-
-    def test_generate_and_verify_handles_non_standard_response(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-
-                call_count = 0
-
-                async def mock_extract_text_response(prompt, session_id=None, phase=None):
-                    nonlocal call_count
-                    call_count += 1
-                    if call_count == 1:
-                        return "# Initial Summary"
-                    else:
-                        return "# Some other response"
-
-                orchestrator._extract_text_response = mock_extract_text_response
-
-                result = run_async(orchestrator._generate_and_verify_summary(1))
-
-                assert "Some other response" in result
+                assert "Requirements" in result
+                assert "REQ-1" in result
 
 
 class TestRunSupervisor:
@@ -819,14 +759,14 @@ class TestContextPassing:
                     nonlocal captured_context
                     captured_context = context
 
-                async def mock_generate_and_verify(*args, **kwargs):
+                async def mock_generate_summary(*args, **kwargs):
                     return "# Interfaces"
 
                 async def mock_confirm(*args, **kwargs):
                     return 'proceed'
 
                 orchestrator._run_phase_session = capture_context
-                orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                orchestrator._generate_summary = mock_generate_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(2))
@@ -847,14 +787,14 @@ class TestContextPassing:
                     nonlocal captured_context
                     captured_context = context
 
-                async def mock_generate_and_verify(*args, **kwargs):
+                async def mock_generate_summary(*args, **kwargs):
                     return "# Tests"
 
                 async def mock_confirm(*args, **kwargs):
                     return 'proceed'
 
                 orchestrator._run_phase_session = capture_context
-                orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                orchestrator._generate_summary = mock_generate_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(3))
@@ -911,14 +851,14 @@ This is test agent content.
                     nonlocal captured_context
                     captured_context = context
 
-                async def mock_generate_and_verify(*args, **kwargs):
+                async def mock_generate_summary(*args, **kwargs):
                     return "# Requirements"
 
                 async def mock_confirm(*args, **kwargs):
                     return 'proceed'
 
                 orchestrator._run_phase_session = capture_context
-                orchestrator._generate_and_verify_summary = mock_generate_and_verify
+                orchestrator._generate_summary = mock_generate_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 with patch.dict(os.environ, {"WP_INSTALL_DIR": str(Path(tmpdir) / ".claude" / "waypoints")}):
@@ -979,8 +919,6 @@ class TestSupervisorEndToEnd:
                     text = "I understand you want to build a feature. ---PHASE_COMPLETE---"
                 elif "summary" in prompt.lower():
                     text = "# Summary\n- Item 1\n- Item 2"
-                elif "review" in prompt.lower() or "verify" in prompt.lower():
-                    text = "SUMMARY_VERIFIED\n# Summary\n- Item 1\n- Item 2"
                 else:
                     text = "OK, continuing..."
 
@@ -1611,7 +1549,7 @@ class TestSubagentIntegrationWithPhaseSession:
                     return 'proceed'
 
                 orchestrator._run_phase_session = mock_session
-                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._generate_summary = mock_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(1, initial_task="Test task"))
@@ -1637,7 +1575,7 @@ class TestSubagentIntegrationWithPhaseSession:
                     return 'proceed'
 
                 orchestrator._run_phase_session = capture_session
-                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._generate_summary = mock_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(1, initial_task="Test task"))
@@ -1666,7 +1604,7 @@ class TestSubagentIntegrationWithPhaseSession:
                     return 'proceed'
 
                 orchestrator._run_phase_session = capture_session
-                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._generate_summary = mock_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(2))
@@ -1695,7 +1633,7 @@ class TestSubagentIntegrationWithPhaseSession:
                     return 'proceed'
 
                 orchestrator._run_phase_session = capture_session
-                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._generate_summary = mock_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(3))
@@ -1752,7 +1690,7 @@ class TestSubagentErrorHandling:
                     return 'proceed'
 
                 orchestrator._run_phase_session = mock_session
-                orchestrator._generate_and_verify_summary = mock_summary
+                orchestrator._generate_summary = mock_summary
                 orchestrator._confirm_phase_completion = mock_confirm
 
                 run_async(orchestrator._run_phase(1, initial_task="Test"))

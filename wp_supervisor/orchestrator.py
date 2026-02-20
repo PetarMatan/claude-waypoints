@@ -51,8 +51,6 @@ from .review_coordinator import ReviewCoordinator, ReviewCoordinatorConfig
 
 # Orchestrator-specific signal constants
 PHASE_COMPLETE_SIGNAL = "---PHASE_COMPLETE---"
-SUMMARY_VERIFIED_SIGNAL = "SUMMARY_VERIFIED"
-GAPS_FOUND_SIGNAL = "GAPS_FOUND"
 
 
 class WPOrchestrator:
@@ -272,7 +270,7 @@ class WPOrchestrator:
                 await self._stop_review_coordinator()
 
         if phase < 4:
-            summary = await self._generate_and_verify_summary(phase, session_id)
+            summary = await self._generate_summary(phase, session_id)
             doc_path = self.markers.save_phase_document(phase, summary)
             if doc_path:
                 self.logger.log_phase_summary_saved(phase, doc_path)
@@ -395,40 +393,14 @@ class WPOrchestrator:
                 self.display.print("  r - Provide feedback to regenerate")
                 self.display.print("  Ctrl+C - Abort workflow")
 
-    async def _generate_and_verify_summary(self, phase: int, session_id: Optional[str] = None) -> str:
-        """Generate summary with self-review verification."""
+    async def _generate_summary(self, phase: int, session_id: Optional[str] = None) -> str:
+        """Generate phase summary document."""
         summary_prompt = ContextBuilder.get_summary_prompt(phase)
         if not summary_prompt:
             return ""
 
         async with self.display.spinner(f"Generating Phase {phase} summary"):
-            initial_summary = await self._extract_text_response(summary_prompt, session_id=session_id, phase=phase)
-
-        review_prompt = ContextBuilder.get_review_prompt(phase)
-        if not review_prompt:
-            return initial_summary
-
-        async with self.display.spinner("Verifying summary completeness"):
-            review_response = await self._extract_text_response(review_prompt, session_id=session_id, phase=phase)
-
-        if review_response.startswith(GAPS_FOUND_SIGNAL):
-            lines = review_response.split('\n', 1)
-            if len(lines) > 1:
-                updated_summary = lines[1].strip()
-                self.display.supervisor_message("Summary updated with missing items.")
-                return updated_summary
-            else:
-                return initial_summary
-        elif review_response.startswith(SUMMARY_VERIFIED_SIGNAL):
-            lines = review_response.split('\n', 1)
-            if len(lines) > 1:
-                self.display.supervisor_success("Summary verified complete.")
-                return lines[1].strip()
-            else:
-                return initial_summary
-        else:
-            self.display.supervisor_message("Summary captured.")
-            return review_response if review_response else initial_summary
+            return await self._extract_text_response(summary_prompt, session_id=session_id, phase=phase)
 
     async def _run_regeneration_conversation(
         self,

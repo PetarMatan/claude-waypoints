@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - TBD
+
 ### Added
+- **Rich Terminal UI** (Supervisor mode)
+  - Centralized `SupervisorDisplay` class replacing scattered `print()` calls
+  - Styled phase headers, workflow banners, and usage summary table via `rich` panels and tables
+  - Animated braille spinners during all silent operations (summary generation, build verification, knowledge extraction, etc.)
+  - Cyan `● Claude` prefix on streamed Claude output for visual distinction
+  - Status message prefixes: `✓` success, `✗` error, `⚠` warning, `⚙` supervisor info
+  - Graceful degradation when `rich` unavailable or `NO_COLOR` is set
 - **Concurrent Reviewer Agent** (Supervisor mode, Phase 4)
   - Sonnet-based reviewer validates implementation against Phase 1 requirements in real-time
   - Fires on every file edit (threshold=1) with debounce to prevent redundant reviews
@@ -17,8 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Graceful degraded mode: if reviewer fails to start, Phase 4 continues without review
 - **Review system components**: `ReviewerAgent`, `ReviewCoordinator`, `FileChangeTracker`, `ReviewTrigger`, `FeedbackQueue`
 - **Reviewer logging**: debounce events, gate outcomes, feedback injection details, response timing
+- **Readline support** for user input prompts (arrow keys, history, cursor movement)
 
 ### Changed
+- `rich` is now a required dependency (enforced at install and startup)
 - Phase 1 subagent templates now include "Do NOT create any files" instruction to prevent junk file creation in working directory
 - Removed test-run tracking from hooks (redundant with file threshold=1)
 - Simplified `ReviewTrigger` to file-threshold only (removed `TEST_RUN` trigger reason)

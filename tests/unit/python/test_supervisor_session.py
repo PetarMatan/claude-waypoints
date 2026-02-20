@@ -1020,6 +1020,167 @@ class TestProcessStreamBehavior:
             assert signal == "found"  # from second message
 
 
+class TestProcessStreamThinkingSpinner:
+    """Tests for _process_stream show_thinking parameter."""
+
+    def _create_runner(self, tmpdir: str):
+        """Create a SessionRunner instance for testing."""
+        with patch.object(Path, 'home', return_value=Path(tmpdir)):
+            from wp_supervisor.markers import SupervisorMarkers
+            from wp_supervisor.hooks import SupervisorHooks
+            from wp_supervisor.logger import SupervisorLogger
+
+            markers = SupervisorMarkers()
+            logger = SupervisorLogger(
+                workflow_dir=markers.markers_dir,
+                workflow_id=markers.workflow_id
+            )
+            hooks = SupervisorHooks(
+                markers=markers,
+                logger=logger,
+                working_dir=tmpdir
+            )
+
+            return SessionRunner(
+                working_dir=tmpdir,
+                markers=markers,
+                hooks=hooks,
+                logger=logger
+            )
+
+    def test_thinking_spinner_starts_when_show_thinking_true(self):
+        """show_thinking=True should start a spinner before processing messages."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Response"
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            # Track spinner calls
+            start_calls = []
+            stop_calls = []
+            runner.display.start_tool_spinner = AsyncMock(side_effect=lambda name: start_calls.append(name))
+            runner.display.stop_tool_spinner = AsyncMock(side_effect=lambda: stop_calls.append(True))
+            runner.display.stream_text = MagicMock()
+            runner.display.stream_text_end = MagicMock()
+
+            # when
+            run_async(runner._process_stream(
+                mock_client, phase=1, show_thinking=True
+            ))
+
+            # then
+            assert "Thinking..." in start_calls
+            assert len(stop_calls) >= 1
+
+    def test_no_thinking_spinner_when_show_thinking_false(self):
+        """show_thinking=False (default) should not start a thinking spinner."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Response"
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            start_calls = []
+            runner.display.start_tool_spinner = AsyncMock(side_effect=lambda name: start_calls.append(name))
+            runner.display.stop_tool_spinner = AsyncMock()
+            runner.display.stream_text = MagicMock()
+            runner.display.stream_text_end = MagicMock()
+
+            # when
+            run_async(runner._process_stream(
+                mock_client, phase=1, show_thinking=False
+            ))
+
+            # then
+            assert "Thinking..." not in start_calls
+
+    def test_thinking_spinner_stopped_by_first_text_block(self):
+        """Thinking spinner should be stopped when first text content arrives."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "First response"
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            call_order = []
+            runner.display.start_tool_spinner = AsyncMock(side_effect=lambda name: call_order.append(f"start:{name}"))
+            runner.display.stop_tool_spinner = AsyncMock(side_effect=lambda: call_order.append("stop"))
+            runner.display.stream_text = MagicMock(side_effect=lambda t: call_order.append(f"text:{t}"))
+            runner.display.stream_text_end = MagicMock()
+
+            # when
+            run_async(runner._process_stream(
+                mock_client, phase=1, show_thinking=True
+            ))
+
+            # then - spinner started, then stopped before text
+            assert call_order[0] == "start:Thinking..."
+            stop_idx = call_order.index("stop")
+            text_idx = next(i for i, c in enumerate(call_order) if c.startswith("text:"))
+            assert stop_idx < text_idx
+
+    def test_thinking_spinner_replaced_by_tool_spinner(self):
+        """Thinking spinner should be replaced when a tool block arrives first."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given - message with tool block (no text)
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            tool_block = MagicMock(spec=[])
+            tool_block.name = "Read"
+            del tool_block.text  # ensure no text attribute
+            msg.content = [tool_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            start_calls = []
+            runner.display.start_tool_spinner = AsyncMock(side_effect=lambda name: start_calls.append(name))
+            runner.display.stop_tool_spinner = AsyncMock()
+            runner.display.stream_text = MagicMock()
+            runner.display.stream_text_end = MagicMock()
+
+            # when
+            run_async(runner._process_stream(
+                mock_client, phase=1, show_thinking=True
+            ))
+
+            # then - "Thinking..." started first, then "Read" replaced it
+            assert start_calls[0] == "Thinking..."
+            assert "Read" in start_calls
+
+
 class TestRunPhaseSessionBehavior:
     """Tests for run_phase_session method behavior [REQ-3]."""
 

@@ -315,51 +315,6 @@ class TestGetSummaryPrompt:
         assert "coverage" in prompt.lower() or "Coverage" in prompt
 
 
-class TestGetReviewPrompt:
-    """Tests for get_review_prompt method."""
-
-    def test_get_review_prompt_phase1(self):
-        prompt = ContextBuilder.get_review_prompt(1)
-        assert len(prompt) > 0
-        assert "review" in prompt.lower() or "verify" in prompt.lower()
-
-    def test_get_review_prompt_phase2(self):
-        prompt = ContextBuilder.get_review_prompt(2)
-        assert len(prompt) > 0
-        assert "review" in prompt.lower() or "verify" in prompt.lower()
-
-    def test_get_review_prompt_phase3(self):
-        prompt = ContextBuilder.get_review_prompt(3)
-        assert len(prompt) > 0
-        assert "review" in prompt.lower() or "verify" in prompt.lower()
-
-    def test_get_review_prompt_phase4_returns_empty(self):
-        prompt = ContextBuilder.get_review_prompt(4)
-        assert prompt == ""
-
-    def test_get_review_prompt_invalid_phase_returns_empty(self):
-        assert ContextBuilder.get_review_prompt(5) == ""
-        assert ContextBuilder.get_review_prompt(-1) == ""
-
-    def test_get_review_prompt_contains_checklist(self):
-        """Review prompts should contain verification checklist."""
-        for phase in [1, 2, 3]:
-            prompt = ContextBuilder.get_review_prompt(phase)
-            assert "[ ]" in prompt or "checklist" in prompt.lower()
-
-    def test_get_review_prompt_contains_gaps_signal(self):
-        """Review prompts should mention GAPS_FOUND signal."""
-        for phase in [1, 2, 3]:
-            prompt = ContextBuilder.get_review_prompt(phase)
-            assert "GAPS_FOUND" in prompt
-
-    def test_get_review_prompt_contains_verified_signal(self):
-        """Review prompts should mention SUMMARY_VERIFIED signal."""
-        for phase in [1, 2, 3]:
-            prompt = ContextBuilder.get_review_prompt(phase)
-            assert "SUMMARY_VERIFIED" in prompt
-
-
 class TestContextBuilderStaticMethods:
     """Tests verifying methods are static."""
 
@@ -384,9 +339,6 @@ class TestContextBuilderStaticMethods:
         result = ContextBuilder.get_summary_prompt(1)
         assert isinstance(result, str)
 
-    def test_get_review_prompt_is_static(self):
-        result = ContextBuilder.get_review_prompt(1)
-        assert isinstance(result, str)
 
 
 class TestContextIntegration:

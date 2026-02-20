@@ -495,18 +495,28 @@ the business logic to make all tests pass.
 {tests_list}
 
 ## Your Task
-1. Read the test files to understand expected behavior
-2. Implement business logic method by method
-3. Run tests frequently to verify progress
-4. Continue until ALL tests pass
+1. Read the reference files from Key Files in Requirements to understand existing patterns
+2. Read the test files from "Tests to Pass" to understand expected behavior
+3. Read the interface stubs from "Interfaces Created"
+4. Implement business logic method by method
+5. Run tests frequently to verify progress
+6. Continue until ALL tests pass
+
+## Efficiency
+- The Requirements Summary above contains **Key Files** with exact paths to all
+  relevant source files, reference implementations, and test patterns.
+- The Interfaces Created and Tests to Pass sections list every file you need to
+  modify or read.
+- Start by reading these files directly. Do not scan directories for files that
+  are already listed above.
+- If you need to understand how a class is used, search for its usages — don't
+  re-list the same directories repeatedly.
 
 ## Guidelines
 - The tests are your specification - make them pass
 - Implement the simplest solution that passes tests
 - If a test seems wrong, discuss with user before changing it
 - Refactor for clarity after tests pass (if needed)
-- The Codebase Context section in requirements contains file paths and project structure.
-  Prefer using these paths directly rather than re-exploring the project structure.
 
 ## Important
 - Focus on making tests pass, not on perfect code
@@ -660,81 +670,6 @@ Document ALL tests you created with concrete details.
 Output ONLY the summary in the format above.
 """
 
-
-# =============================================================================
-# SELF-REVIEW TEMPLATES
-# =============================================================================
-
-REQUIREMENTS_REVIEW_PROMPT = """
-Review the requirements summary you just created for completeness.
-
-## Checklist - Verify each item:
-1. [ ] ALL functional requirements from our discussion are included
-2. [ ] ALL edge cases we talked about are listed
-3. [ ] ALL error scenarios are documented
-4. [ ] ALL constraints and decisions are captured
-5. [ ] No open questions remain (or they're explicitly listed)
-6. [ ] Each item is specific enough to implement against
-
-## Your Task
-Go through our conversation and verify nothing was missed.
-
-If anything is MISSING:
-- Output "GAPS_FOUND" on the first line
-- Then output the COMPLETE UPDATED summary with additions marked as [ADDED]
-
-If everything is complete:
-- Output "SUMMARY_VERIFIED" on the first line
-- Then output the original summary unchanged
-"""
-
-INTERFACES_REVIEW_PROMPT = """
-Review the interfaces summary you just created for completeness.
-
-## Checklist - Verify each item:
-1. [ ] ALL files created are listed with correct paths
-2. [ ] ALL classes/modules are documented
-3. [ ] ALL public method signatures are included
-4. [ ] ALL data types/models are listed
-5. [ ] Signatures match EXACTLY what's in the code
-6. [ ] File paths are correct and would be found in the project
-7. [ ] Data flows are bidirectional — every method that produces output has a designed consumer
-
-## Your Task
-Compare your summary against the actual code you wrote.
-
-If anything is MISSING or INCORRECT:
-- Output "GAPS_FOUND" on the first line
-- Then output the COMPLETE UPDATED summary with corrections marked as [FIXED] or [ADDED]
-
-If everything is complete and accurate:
-- Output "SUMMARY_VERIFIED" on the first line
-- Then output the original summary unchanged
-"""
-
-TESTS_REVIEW_PROMPT = """
-Review the tests summary you just created for completeness.
-
-## Checklist - Verify each item:
-1. [ ] ALL test files are listed with correct paths
-2. [ ] ALL test cases are documented
-3. [ ] Every requirement (REQ-X) has at least one mapped test
-4. [ ] Every edge case (EDGE-X) has a corresponding test
-5. [ ] Every error scenario (ERR-X) has a corresponding test
-6. [ ] Test command is correct for this project
-
-## Your Task
-Compare your summary against the actual tests you wrote and the requirements from Phase 1.
-
-If anything is MISSING or requirements lack test coverage:
-- Output "GAPS_FOUND" on the first line
-- List what's missing
-- Then output the COMPLETE UPDATED summary
-
-If everything is complete with full coverage:
-- Output "SUMMARY_VERIFIED" on the first line
-- Then output the original summary unchanged
-"""
 
 
 # =============================================================================

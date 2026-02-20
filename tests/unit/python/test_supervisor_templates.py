@@ -88,43 +88,6 @@ class TestSummaryPromptTemplates:
         assert "coverage" in prompt.lower() or "Coverage" in prompt
 
 
-class TestReviewPromptTemplates:
-    """Tests for self-review templates."""
-
-    def test_requirements_review_prompt_exists(self):
-        assert hasattr(templates, 'REQUIREMENTS_REVIEW_PROMPT')
-        prompt = templates.REQUIREMENTS_REVIEW_PROMPT
-        assert len(prompt) > 0
-
-    def test_interfaces_review_prompt_exists(self):
-        assert hasattr(templates, 'INTERFACES_REVIEW_PROMPT')
-        prompt = templates.INTERFACES_REVIEW_PROMPT
-        assert len(prompt) > 0
-
-    def test_tests_review_prompt_exists(self):
-        assert hasattr(templates, 'TESTS_REVIEW_PROMPT')
-        prompt = templates.TESTS_REVIEW_PROMPT
-        assert len(prompt) > 0
-
-    def test_review_prompts_contain_checklist(self):
-        """All review prompts should have verification checklist."""
-        for prompt_name in ['REQUIREMENTS_REVIEW_PROMPT', 'INTERFACES_REVIEW_PROMPT', 'TESTS_REVIEW_PROMPT']:
-            prompt = getattr(templates, prompt_name)
-            assert "[ ]" in prompt, f"{prompt_name} should contain checklist items"
-
-    def test_review_prompts_contain_gaps_signal(self):
-        """All review prompts should mention GAPS_FOUND signal."""
-        for prompt_name in ['REQUIREMENTS_REVIEW_PROMPT', 'INTERFACES_REVIEW_PROMPT', 'TESTS_REVIEW_PROMPT']:
-            prompt = getattr(templates, prompt_name)
-            assert "GAPS_FOUND" in prompt, f"{prompt_name} should mention GAPS_FOUND"
-
-    def test_review_prompts_contain_verified_signal(self):
-        """All review prompts should mention SUMMARY_VERIFIED signal."""
-        for prompt_name in ['REQUIREMENTS_REVIEW_PROMPT', 'INTERFACES_REVIEW_PROMPT', 'TESTS_REVIEW_PROMPT']:
-            prompt = getattr(templates, prompt_name)
-            assert "SUMMARY_VERIFIED" in prompt, f"{prompt_name} should mention SUMMARY_VERIFIED"
-
-
 class TestFormatPhaseHeader:
     """Tests for format_phase_header function."""
 

@@ -19,9 +19,6 @@ from .templates import (
     REQUIREMENTS_SUMMARY_PROMPT,
     INTERFACES_SUMMARY_PROMPT,
     TESTS_SUMMARY_PROMPT,
-    REQUIREMENTS_REVIEW_PROMPT,
-    INTERFACES_REVIEW_PROMPT,
-    TESTS_REVIEW_PROMPT,
     REGENERATION_CONVERSATION_CONTEXT,
     REGENERATION_FINAL_SUMMARY_PROMPT,
     KNOWLEDGE_EXTRACTION_PROMPT,
@@ -159,16 +156,6 @@ class ContextBuilder:
             1: REQUIREMENTS_SUMMARY_PROMPT,
             2: INTERFACES_SUMMARY_PROMPT,
             3: TESTS_SUMMARY_PROMPT,
-        }
-        return prompts.get(phase, "")
-
-    @staticmethod
-    def get_review_prompt(phase: int) -> str:
-        """Get the self-review prompt for a phase summary."""
-        prompts = {
-            1: REQUIREMENTS_REVIEW_PROMPT,
-            2: INTERFACES_REVIEW_PROMPT,
-            3: TESTS_REVIEW_PROMPT,
         }
         return prompts.get(phase, "")
 

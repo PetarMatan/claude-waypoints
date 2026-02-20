@@ -206,6 +206,8 @@ true # wp:mark-complete tests
 - Don't optimize prematurely
 - Keep implementation minimal (just enough to pass tests)
 - Refactor only when tests are green
+- Use file paths provided in the context directly — read reference files to understand
+  patterns, but don't scan directories for files already listed in the context
 
 ## Test Quality Standards
 
