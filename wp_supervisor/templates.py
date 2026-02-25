@@ -505,6 +505,8 @@ the business logic to make all tests pass.
 ## Efficiency
 - The Requirements Summary above contains **Key Files** with exact paths to all
   relevant source files, reference implementations, and test patterns.
+- The Codebase Context section in requirements contains file paths and project structure.
+  Prefer using these paths directly rather than re-exploring the project structure.
 - The Interfaces Created and Tests to Pass sections list every file you need to
   modify or read.
 - Start by reading these files directly. Do not scan directories for files that
