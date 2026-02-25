@@ -109,6 +109,33 @@ Content
             result = parse_frontmatter(f.name)
             assert result == {'phases': [2, 4]}
 
+    def test_parses_mode_field(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("""---
+name: CLI Agent
+phases: [1, 2]
+mode: cli
+---
+
+Content
+""")
+            f.flush()
+            result = parse_frontmatter(f.name)
+            assert result['mode'] == 'cli'
+
+    def test_no_mode_field_omits_key(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("""---
+name: Both Modes Agent
+phases: [1, 2]
+---
+
+Content
+""")
+            f.flush()
+            result = parse_frontmatter(f.name)
+            assert 'mode' not in result
+
 
 class TestGetContentWithoutFrontmatter:
     """Tests for get_content_without_frontmatter function."""
@@ -248,6 +275,30 @@ Content
             assert result[0]['name'] == 'Agent One'
             assert result[0]['phases'] == [1, 2]
 
+    def test_includes_mode_when_declared(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "cli-agent.md"), 'w') as f:
+                f.write("""---
+name: CLI Agent
+phases: [1]
+mode: cli
+---
+Content
+""")
+            with open(os.path.join(tmpdir, "both-agent.md"), 'w') as f:
+                f.write("""---
+name: Both Agent
+phases: [1]
+---
+Content
+""")
+
+            result = list_agents_data(tmpdir)
+            by_name = {a['name']: a for a in result}
+
+            assert by_name['CLI Agent']['mode'] == 'cli'
+            assert 'mode' not in by_name['Both Agent']
+
     def test_returns_empty_for_nonexistent_dir(self):
         result = list_agents_data("/nonexistent/dir")
         assert result == []
@@ -319,6 +370,50 @@ phases: [1, 2]
 
             result = get_agents_for_phase(tmpdir, 4)
             assert result == []
+
+    def test_filters_by_mode(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cli_agent = os.path.join(tmpdir, "cli-agent.md")
+            with open(cli_agent, 'w') as f:
+                f.write("""---
+name: CLI Agent
+phases: [1]
+mode: cli
+---
+""")
+            supervisor_agent = os.path.join(tmpdir, "supervisor-agent.md")
+            with open(supervisor_agent, 'w') as f:
+                f.write("""---
+name: Supervisor Agent
+phases: [1]
+mode: supervisor
+---
+""")
+            both_agent = os.path.join(tmpdir, "both-agent.md")
+            with open(both_agent, 'w') as f:
+                f.write("""---
+name: Both Agent
+phases: [1]
+---
+""")
+
+            # CLI mode: gets cli-agent and both-agent, not supervisor-agent
+            result = get_agents_for_phase(tmpdir, 1, mode="cli")
+            assert len(result) == 2
+            assert cli_agent in result
+            assert both_agent in result
+            assert supervisor_agent not in result
+
+            # Supervisor mode: gets supervisor-agent and both-agent, not cli-agent
+            result = get_agents_for_phase(tmpdir, 1, mode="supervisor")
+            assert len(result) == 2
+            assert supervisor_agent in result
+            assert both_agent in result
+            assert cli_agent not in result
+
+            # No mode filter: gets all three
+            result = get_agents_for_phase(tmpdir, 1)
+            assert len(result) == 3
 
 
 if __name__ == '__main__':

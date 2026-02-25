@@ -332,6 +332,15 @@ You delegate the bulk of codebase exploration to specialized subagents. Your wor
 ### Step 1: Gather Initial Requirements
 Ask the user to describe what they want to build. Get enough context to guide exploration.
 
+Classify complexity to calibrate exploration depth and questioning:
+- **Simple**: Single responsibility, clear inputs/outputs, no external dependencies.
+  Focus exploration on existing patterns. Fewer clarifying questions needed.
+- **Medium**: Multiple steps, some external dependencies, moderate failure scenarios.
+  Explore integration points and error handling patterns. Ask about failure modes.
+- **Complex**: Multiple systems, state machines, distributed transactions, failure recovery.
+  Deep exploration of all integration points, state management, and concurrency.
+  Ask about invariants, idempotency, ordering, and performance constraints.
+
 ### Step 2: Spawn Exploration Subagents
 Once you have initial requirements, use the Task tool to spawn these exploration agents.
 IMPORTANT: Pass the gathered requirements to each subagent so they know what to focus on.
@@ -423,6 +432,13 @@ structural skeleton of the solution WITHOUT implementing business logic.
 - The Codebase Context section in requirements contains file paths and project structure.
   Prefer using these paths directly rather than re-exploring the project structure.
 
+## Stub Examples by Language
+
+**Kotlin**: `TODO("Implementation pending - tests first")`
+**TypeScript**: `throw new Error('TODO: Implementation pending - tests first');`
+**Python**: `raise NotImplementedError("TODO: Implementation pending - tests first")`
+**Go**: `panic("TODO: Implementation pending - tests first")`
+
 ## Important
 - Do NOT implement business logic
 - Method bodies should be stubs only
@@ -505,6 +521,8 @@ the business logic to make all tests pass.
 ## Efficiency
 - The Requirements Summary above contains **Key Files** with exact paths to all
   relevant source files, reference implementations, and test patterns.
+- The Codebase Context section in requirements contains file paths and project structure.
+  Prefer using these paths directly rather than re-exploring the project structure.
 - The Interfaces Created and Tests to Pass sections list every file you need to
   modify or read.
 - Start by reading these files directly. Do not scan directories for files that
@@ -513,13 +531,22 @@ the business logic to make all tests pass.
   re-list the same directories repeatedly.
 
 ## Guidelines
-- The tests are your specification - make them pass
-- Implement the simplest solution that passes tests
-- If a test seems wrong, discuss with user before changing it
+- Your goal is to **fulfill the requirements** - tests are the primary way to verify that.
+- Implement the simplest correct solution that passes tests and satisfies the requirements.
 - Refactor for clarity after tests pass (if needed)
 
+## Critical: Test vs Requirements Conflicts
+- If a test contains a **provably incorrect assertion** that contradicts the requirements
+  or objective reality (e.g., wrong mathematical result, impossible timestamp conversion,
+  logically contradictory expectations), **stop and flag it to the user** rather than
+  implementing workarounds to force it to pass.
+- "Provably incorrect" means you can demonstrate the error objectively - not just that the
+  test seems unusual or tests an unexpected edge case.
+- When in doubt, implement the code to pass the test. Only flag tests you are certain are wrong.
+- Never silently modify tests to make them pass.
+
 ## Important
-- Focus on making tests pass, not on perfect code
+- Focus on making tests pass and fulfilling requirements, not on perfect code
 - Run tests after each significant change
 - When ALL tests pass, output exactly `---PHASE_COMPLETE---` on its own line to signal completion (no bold, no markdown - the supervisor parses this signal)
 """

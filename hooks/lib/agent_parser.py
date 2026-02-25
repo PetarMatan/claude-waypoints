@@ -41,6 +41,11 @@ def parse_frontmatter(filepath: str) -> Optional[dict]:
             phases_str = phases_match.group(1)
             data['phases'] = [int(p.strip()) for p in phases_str.split(',') if p.strip().isdigit()]
 
+        # Parse mode: cli | supervisor (optional, omit for both)
+        mode_match = re.search(r'mode:\s*(\w+)', frontmatter)
+        if mode_match:
+            data['mode'] = mode_match.group(1).strip()
+
         return data if data else None
     except Exception:
         return None
@@ -107,17 +112,28 @@ def list_agents_data(agents_dir: str) -> list:
         frontmatter = parse_frontmatter(filepath)
         if frontmatter and 'phases' in frontmatter:
             name = frontmatter.get('name', filename.replace('.md', '').replace('-', ' ').title())
-            result.append({
+            agent_data = {
                 'name': name,
                 'file': filepath,
                 'phases': frontmatter['phases']
-            })
+            }
+            if 'mode' in frontmatter:
+                agent_data['mode'] = frontmatter['mode']
+            result.append(agent_data)
 
     return result
 
 
-def get_agents_for_phase(agents_dir: str, phase: int) -> list:
-    """Get agent file paths that match the given phase. Returns list of paths."""
+def get_agents_for_phase(agents_dir: str, phase: int, mode: str = None) -> list:
+    """Get agent file paths that match the given phase and optional mode filter.
+
+    Args:
+        agents_dir: Directory containing agent markdown files
+        phase: Phase number to filter by
+        mode: Optional mode filter ('cli' or 'supervisor'). If provided,
+              excludes agents whose mode doesn't match. Agents without a
+              mode field load in both modes.
+    """
     result = []
     if not os.path.isdir(agents_dir):
         return result
@@ -133,6 +149,9 @@ def get_agents_for_phase(agents_dir: str, phase: int) -> list:
         frontmatter = parse_frontmatter(filepath)
         if frontmatter and 'phases' in frontmatter:
             if phase in frontmatter['phases']:
+                agent_mode = frontmatter.get('mode')
+                if mode and agent_mode and agent_mode != mode:
+                    continue
                 result.append(filepath)
 
     return result

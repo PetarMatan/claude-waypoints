@@ -74,11 +74,11 @@ def main():
         if not markers.is_wp_active():
             markers._state.initialize()
             logger.log_wp(f"Activation hook: Initialized WP state for session {hook.session_id}")
-            phase_agents = agents.load_phase_agents(1, logger, skip_already_loaded=True)
+            phase_agents = agents.load_phase_agents(1, logger, skip_already_loaded=True, mode="cli")
             respond("Waypoints workflow initialized. You are now in Phase 1: Requirements Gathering.", phase_agents + knowledge_section)
         else:
             current_phase = markers.get_phase()
-            phase_agents = agents.load_phase_agents(current_phase, logger, skip_already_loaded=True)
+            phase_agents = agents.load_phase_agents(current_phase, logger, skip_already_loaded=True, mode="cli")
             respond(f"Waypoints workflow already active (Phase {current_phase}).", phase_agents + knowledge_section)
         return
 
@@ -89,19 +89,19 @@ def main():
             markers.mark_requirements_complete()
             markers.set_phase(2)
             logger.log_wp("Activation hook: Marked requirements complete, advancing to phase 2")
-            phase_agents = agents.load_phase_agents(2, logger, skip_already_loaded=True)
+            phase_agents = agents.load_phase_agents(2, logger, skip_already_loaded=True, mode="cli")
             respond("Requirements phase marked complete. Advancing to Phase 2: Interface Design.", phase_agents)
         elif 'interfaces' in command:
             markers.mark_interfaces_complete()
             markers.set_phase(3)
             logger.log_wp("Activation hook: Marked interfaces complete, advancing to phase 3")
-            phase_agents = agents.load_phase_agents(3, logger, skip_already_loaded=True)
+            phase_agents = agents.load_phase_agents(3, logger, skip_already_loaded=True, mode="cli")
             respond("Interfaces phase marked complete. Advancing to Phase 3: Test Writing.", phase_agents)
         elif 'tests' in command:
             markers.mark_tests_complete()
             markers.set_phase(4)
             logger.log_wp("Activation hook: Marked tests complete, advancing to phase 4")
-            phase_agents = agents.load_phase_agents(4, logger, skip_already_loaded=True)
+            phase_agents = agents.load_phase_agents(4, logger, skip_already_loaded=True, mode="cli")
             respond("Tests phase marked complete. Advancing to Phase 4: Implementation.", phase_agents)
         elif 'implementation' in command:
             markers.mark_implementation_complete()
@@ -137,7 +137,7 @@ def main():
         active = markers.is_wp_active()
         status_msg = f"Waypoints Status: {'Active' if active else 'Inactive'}, Phase: {phase}"
         if active:
-            phase_agents = agents.load_phase_agents(phase, logger, skip_already_loaded=True)
+            phase_agents = agents.load_phase_agents(phase, logger, skip_already_loaded=True, mode="cli")
             respond(status_msg, phase_agents)
         else:
             respond(status_msg)

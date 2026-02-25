@@ -36,6 +36,9 @@ else
     exit 1
 fi
 
+# Set WP_INSTALL_DIR so AgentLoader finds agents relative to this installation
+export WP_INSTALL_DIR="$SUPERVISOR_DIR"
+
 # Add to PYTHONPATH so wp_supervisor module can be found
 # On Windows (MINGW/Git Bash), convert to native path and use ; separator
 if command -v cygpath &>/dev/null; then

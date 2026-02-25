@@ -279,5 +279,124 @@ Phase 2 content
             assert "Common Agent" in result
 
 
+    def test_load_phase_agents_filters_by_mode(self, capsys):
+        """Should exclude agents whose mode doesn't match."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "cli-only.md"), 'w') as f:
+                f.write("""---
+name: CLI Only Agent
+phases: [1]
+mode: cli
+---
+CLI content
+""")
+            with open(os.path.join(tmpdir, "supervisor-only.md"), 'w') as f:
+                f.write("""---
+name: Supervisor Only Agent
+phases: [1]
+mode: supervisor
+---
+Supervisor content
+""")
+            with open(os.path.join(tmpdir, "both.md"), 'w') as f:
+                f.write("""---
+name: Both Modes Agent
+phases: [1]
+---
+Both content
+""")
+
+            loader = AgentLoader(tmpdir)
+
+            # CLI mode
+            result = loader.load_phase_agents(1, mode="cli")
+            assert "CLI Only Agent" in result
+            assert "Both Modes Agent" in result
+            assert "Supervisor Only Agent" not in result
+
+            # Supervisor mode
+            result = loader.load_phase_agents(1, mode="supervisor")
+            assert "Supervisor Only Agent" in result
+            assert "Both Modes Agent" in result
+            assert "CLI Only Agent" not in result
+
+    def test_load_phase_agents_skip_already_loaded_with_mode(self, capsys):
+        """Should combine skip_already_loaded and mode filtering (real CLI call pattern)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # CLI-only agent in phases 1, 2 (like wp-developer)
+            with open(os.path.join(tmpdir, "cli-dev.md"), 'w') as f:
+                f.write("""---
+name: CLI Developer
+phases: [1, 2]
+mode: cli
+---
+CLI dev content
+""")
+            # Supervisor-only agent in phases 1, 2
+            with open(os.path.join(tmpdir, "sup-agent.md"), 'w') as f:
+                f.write("""---
+name: Supervisor Agent
+phases: [1, 2]
+mode: supervisor
+---
+Supervisor content
+""")
+            # Shared agent in phase 1 only
+            with open(os.path.join(tmpdir, "shared.md"), 'w') as f:
+                f.write("""---
+name: Shared Agent
+phases: [1]
+---
+Shared content
+""")
+            # Shared agent new in phase 2
+            with open(os.path.join(tmpdir, "phase2-shared.md"), 'w') as f:
+                f.write("""---
+name: Phase 2 Shared
+phases: [2]
+---
+Phase 2 shared content
+""")
+
+            loader = AgentLoader(tmpdir)
+
+            # Phase 2, CLI mode, skip_already_loaded: should get Phase 2 Shared (new, no mode)
+            # CLI Developer was in phase 1 so skipped; Supervisor Agent excluded by mode
+            result = loader.load_phase_agents(2, skip_already_loaded=True, mode="cli")
+            assert "Phase 2 Shared" in result
+            assert "CLI Developer" not in result
+            assert "Supervisor Agent" not in result
+            assert "Shared Agent" not in result
+
+    def test_get_new_agents_for_phase_respects_mode(self):
+        """Should respect mode filter when computing new agents."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # CLI-only agent in phases 1, 2
+            with open(os.path.join(tmpdir, "cli-dev.md"), 'w') as f:
+                f.write("""---
+name: CLI Developer
+phases: [1, 2]
+mode: cli
+---
+Content
+""")
+            # Supervisor-only agent in phase 2
+            with open(os.path.join(tmpdir, "sup-agent.md"), 'w') as f:
+                f.write("""---
+name: Supervisor Agent
+phases: [2]
+mode: supervisor
+---
+Content
+""")
+
+            loader = AgentLoader(tmpdir)
+
+            # In supervisor mode, phase 2 should show sup-agent as new (cli-dev excluded)
+            new = loader.get_new_agents_for_phase(2, mode="supervisor")
+            assert len(new) == 1
+            assert any("sup-agent.md" in f for f in new)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

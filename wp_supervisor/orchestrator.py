@@ -220,7 +220,7 @@ class WPOrchestrator:
         else:
             raise ValueError(f"Invalid phase: {phase}")
 
-        agent_content = self.agent_loader.load_phase_agents(phase, logger=self.logger)
+        agent_content = self.agent_loader.load_phase_agents(phase, logger=self.logger, mode="supervisor")
         if agent_content:
             context += f"\n\n# Phase Agents\n{agent_content}"
 
