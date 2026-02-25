@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Phase 1 subagent templates now include "Do NOT create any files" instruction to prevent junk file creation in working directory
 - Removed test-run tracking from hooks (redundant with file threshold=1)
 - Simplified `ReviewTrigger` to file-threshold only (removed `TEST_RUN` trigger reason)
+- Reviewer trigger changed from file-writes to build execution
+
+### Fixed
+- Added missing Codebase Context reference to Phase 4 template
 
 ## [1.3.1] - 2026-02-14
 
