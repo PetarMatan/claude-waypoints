@@ -1,6 +1,7 @@
 ---
 name: Knowledge Curator Agent
 phases: [1, 2, 3, 4]
+mode: [cli, supervisor]
 ---
 
 # Knowledge Curator Agent

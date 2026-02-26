@@ -114,14 +114,28 @@ Content
             f.write("""---
 name: CLI Agent
 phases: [1, 2]
-mode: cli
+mode: [cli]
 ---
 
 Content
 """)
             f.flush()
             result = parse_frontmatter(f.name)
-            assert result['mode'] == 'cli'
+            assert result['mode'] == ['cli']
+
+    def test_parses_mode_field_multiple(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("""---
+name: Both Agent
+phases: [1, 2]
+mode: [cli, supervisor]
+---
+
+Content
+""")
+            f.flush()
+            result = parse_frontmatter(f.name)
+            assert result['mode'] == ['cli', 'supervisor']
 
     def test_no_mode_field_omits_key(self):
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
@@ -281,7 +295,7 @@ Content
                 f.write("""---
 name: CLI Agent
 phases: [1]
-mode: cli
+mode: [cli]
 ---
 Content
 """)
@@ -296,7 +310,7 @@ Content
             result = list_agents_data(tmpdir)
             by_name = {a['name']: a for a in result}
 
-            assert by_name['CLI Agent']['mode'] == 'cli'
+            assert by_name['CLI Agent']['mode'] == ['cli']
             assert 'mode' not in by_name['Both Agent']
 
     def test_returns_empty_for_nonexistent_dir(self):
@@ -378,7 +392,7 @@ phases: [1, 2]
                 f.write("""---
 name: CLI Agent
 phases: [1]
-mode: cli
+mode: [cli]
 ---
 """)
             supervisor_agent = os.path.join(tmpdir, "supervisor-agent.md")
@@ -386,7 +400,7 @@ mode: cli
                 f.write("""---
 name: Supervisor Agent
 phases: [1]
-mode: supervisor
+mode: [supervisor]
 ---
 """)
             both_agent = os.path.join(tmpdir, "both-agent.md")

@@ -286,7 +286,7 @@ Phase 2 content
                 f.write("""---
 name: CLI Only Agent
 phases: [1]
-mode: cli
+mode: [cli]
 ---
 CLI content
 """)
@@ -294,7 +294,7 @@ CLI content
                 f.write("""---
 name: Supervisor Only Agent
 phases: [1]
-mode: supervisor
+mode: [supervisor]
 ---
 Supervisor content
 """)
@@ -328,7 +328,7 @@ Both content
                 f.write("""---
 name: CLI Developer
 phases: [1, 2]
-mode: cli
+mode: [cli]
 ---
 CLI dev content
 """)
@@ -337,7 +337,7 @@ CLI dev content
                 f.write("""---
 name: Supervisor Agent
 phases: [1, 2]
-mode: supervisor
+mode: [supervisor]
 ---
 Supervisor content
 """)
@@ -376,7 +376,7 @@ Phase 2 shared content
                 f.write("""---
 name: CLI Developer
 phases: [1, 2]
-mode: cli
+mode: [cli]
 ---
 Content
 """)
@@ -385,7 +385,7 @@ Content
                 f.write("""---
 name: Supervisor Agent
 phases: [2]
-mode: supervisor
+mode: [supervisor]
 ---
 Content
 """)

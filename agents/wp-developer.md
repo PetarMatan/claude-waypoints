@@ -1,7 +1,7 @@
 ---
 name: Waypoints Developer Agent
 phases: [1, 2, 4]
-mode: cli
+mode: [cli]
 ---
 
 # Waypoints Developer Agent

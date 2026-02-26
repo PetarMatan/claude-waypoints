@@ -41,10 +41,11 @@ def parse_frontmatter(filepath: str) -> Optional[dict]:
             phases_str = phases_match.group(1)
             data['phases'] = [int(p.strip()) for p in phases_str.split(',') if p.strip().isdigit()]
 
-        # Parse mode: cli | supervisor (optional, omit for both)
-        mode_match = re.search(r'mode:\s*(\w+)', frontmatter)
+        # Parse mode: [cli, supervisor] or mode: [cli] (optional, omit for both)
+        mode_match = re.search(r'mode:\s*\[([^\]]*)\]', frontmatter)
         if mode_match:
-            data['mode'] = mode_match.group(1).strip()
+            modes_str = mode_match.group(1)
+            data['mode'] = [m.strip() for m in modes_str.split(',') if m.strip()]
 
         return data if data else None
     except Exception:
@@ -131,8 +132,8 @@ def get_agents_for_phase(agents_dir: str, phase: int, mode: str = None) -> list:
         agents_dir: Directory containing agent markdown files
         phase: Phase number to filter by
         mode: Optional mode filter ('cli' or 'supervisor'). If provided,
-              excludes agents whose mode doesn't match. Agents without a
-              mode field load in both modes.
+              excludes agents whose mode list doesn't include it. Agents
+              without a mode field load in both modes.
     """
     result = []
     if not os.path.isdir(agents_dir):
@@ -149,8 +150,8 @@ def get_agents_for_phase(agents_dir: str, phase: int, mode: str = None) -> list:
         frontmatter = parse_frontmatter(filepath)
         if frontmatter and 'phases' in frontmatter:
             if phase in frontmatter['phases']:
-                agent_mode = frontmatter.get('mode')
-                if mode and agent_mode and agent_mode != mode:
+                agent_modes = frontmatter.get('mode')
+                if mode and agent_modes and mode not in agent_modes:
                     continue
                 result.append(filepath)
 

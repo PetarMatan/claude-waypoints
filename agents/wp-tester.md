@@ -1,6 +1,7 @@
 ---
 name: Tester Agent
 phases: [3]
+mode: [cli, supervisor]
 ---
 
 # Tester Agent
