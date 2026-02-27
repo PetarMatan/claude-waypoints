@@ -749,30 +749,50 @@ Output ONLY the updated summary, no explanations or preamble.
 KNOWLEDGE_EXTRACTION_PROMPT = """
 Review the work done in this phase and identify knowledge worth capturing for future sessions.
 
-BE HIGHLY SELECTIVE. Most phases should result in NO_KNOWLEDGE_EXTRACTED. Only capture knowledge that:
+Capture knowledge that would save someone time or prevent mistakes 6 months from now. When in doubt, capture it — a slightly larger knowledge base is better than missing useful insights.
+
+Only capture knowledge that:
 - Would genuinely help someone 6 months from now
 - Is NOT obvious from reading the code
-- Represents reusable patterns, not one-time implementation details
+- Captures "why" not just "what"
+
+Do NOT capture:
+- Implementation code snippets (unless demonstrating a pattern)
+- Temporary workarounds as if they were permanent patterns
+- User preferences that aren't project-wide
 
 ## Categories
 
-**ARCHITECTURE**: High-level system patterns and component relationships
+**ARCHITECTURE**: System patterns, component relationships, and service behaviors
 - CAPTURE: Design patterns that span multiple components, data flow approaches, integration strategies
-- SKIP: How a specific service works (that's code documentation), implementation details of one feature
+- CAPTURE: Service integration patterns and data flows discovered during implementation
+- CAPTURE: Component responsibilities and boundaries that aren't obvious from code alone
+- SKIP: Implementation details of a single method or function
 
-**DECISIONS**: Significant architectural choices that affect the system broadly
+**DECISIONS**: Architectural and design choices with rationale
 - CAPTURE: Choices between fundamentally different approaches (REST vs GraphQL, sync vs async)
 - CAPTURE: Decisions that would be non-obvious to a new team member
+- CAPTURE: Service-specific design choices and their rationale
+- CAPTURE: Why a particular pattern was used over alternatives in this context
 - SKIP: Implementation details for a single feature (e.g., "chose < instead of <=")
-- SKIP: Service-specific choices that don't affect other parts of the system
 
-**LESSONS_LEARNED**: Non-obvious gotchas and surprises specific to THIS project
+**LESSONS_LEARNED**: Gotchas, surprises, and effective patterns specific to THIS project
 - CAPTURE: Framework quirks, library behaviors that surprised you, project-specific patterns
 - CAPTURE: Things that caused bugs or confusion that others might hit
+- CAPTURE: Patterns and approaches that worked well (not just gotchas)
+- CAPTURE: Configuration insights and setup requirements
+- CAPTURE: Testing patterns that proved effective for specific scenarios
 - SKIP: Basic language features (safe navigation, null handling, standard patterns)
 - SKIP: Specific code paths or class hierarchies (that duplicates code structure)
 - SKIP: General best practices everyone should already know
 - MUST include a technology tag like [Kotlin], [Quarkus], [Ditto], etc.
+
+## Phase-Specific Hints
+
+- After requirements/exploration: look for architectural decisions, external dependencies discovered
+- After interface design: look for interface design rationale, patterns chosen
+- After test writing: look for testing constraints, edge cases identified
+- After implementation: look for implementation gotchas, technology lessons
 
 ## Existing Project Knowledge (DO NOT REPEAT)
 {existing_knowledge}
@@ -795,24 +815,26 @@ LESSONS_LEARNED:
 - [Tag] Title: Description (must be non-obvious, project-specific)
 ```
 
-If nothing notable was discovered (this is expected for most phases), output ONLY:
+If nothing notable was discovered, output ONLY:
 ```
 NO_KNOWLEDGE_EXTRACTED
 ```
 
 ## Examples of What NOT to Capture
 
-BAD ARCHITECTURE: "MutingService uses Clock for time" (implementation detail)
+BAD ARCHITECTURE: "MutingService uses Clock for time" (implementation detail of one method)
 BAD DECISION: "Used < instead of <= for expiry check" (code-level detail)
 BAD LESSON: "[Kotlin] Use ?. for null safety" (basic language feature)
-BAD LESSON: "[Kotlin] Path is features.monitoring.muting.period.to" (duplicates code)
 
 ## Examples of What TO Capture
 
 GOOD ARCHITECTURE: "Services return AccumulativeResult for composable updates"
+GOOD ARCHITECTURE: "Service X validates input before forwarding to Service Y — downstream expects clean data"
 GOOD DECISION: "Event-driven processing supplements scheduled jobs for responsiveness"
+GOOD DECISION: "Chose event sourcing for audit trail because business requires full history"
 GOOD LESSON: "[WoT] Generator creates top-level DSL functions, not class methods"
 GOOD LESSON: "[Quarkus] @InjectMock requires the bean to be CDI-managed"
+GOOD LESSON: "[Kafka] Consumer deserializer must return null on failure to avoid blocking the topic"
 """
 
 
