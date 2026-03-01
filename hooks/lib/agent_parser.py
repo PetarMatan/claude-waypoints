@@ -7,9 +7,14 @@ Used by wp_agents.py to load phase-bound agents.
 """
 
 import json
+import logging
 import os
 import re
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+KNOWN_MODES = {'cli', 'supervisor'}
 
 
 def parse_frontmatter(filepath: str) -> Optional[dict]:
@@ -45,7 +50,11 @@ def parse_frontmatter(filepath: str) -> Optional[dict]:
         mode_match = re.search(r'mode:\s*\[([^\]]*)\]', frontmatter)
         if mode_match:
             modes_str = mode_match.group(1)
-            data['mode'] = [m.strip() for m in modes_str.split(',') if m.strip()]
+            modes = [m.strip().lower() for m in modes_str.split(',') if m.strip()]
+            for m in modes:
+                if m not in KNOWN_MODES:
+                    logger.warning("Unrecognized mode '%s' in %s (known modes: %s)", m, filepath, ', '.join(sorted(KNOWN_MODES)))
+            data['mode'] = modes
 
         return data if data else None
     except Exception:

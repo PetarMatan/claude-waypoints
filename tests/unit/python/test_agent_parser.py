@@ -4,6 +4,7 @@ Unit tests for agent_parser.py
 """
 
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -136,6 +137,64 @@ Content
             f.flush()
             result = parse_frontmatter(f.name)
             assert result['mode'] == ['cli', 'supervisor']
+
+    def test_parses_mode_field_supervisor_only(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("""---
+name: Supervisor Agent
+phases: [1, 2]
+mode: [supervisor]
+---
+
+Content
+""")
+            f.flush()
+            result = parse_frontmatter(f.name)
+            assert result['mode'] == ['supervisor']
+
+    def test_normalizes_mode_to_lowercase(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("""---
+name: Mixed Case Agent
+phases: [1]
+mode: [CLI, Supervisor]
+---
+
+Content
+""")
+            f.flush()
+            result = parse_frontmatter(f.name)
+            assert result['mode'] == ['cli', 'supervisor']
+
+    def test_empty_mode_array(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("""---
+name: Empty Mode Agent
+phases: [1]
+mode: []
+---
+
+Content
+""")
+            f.flush()
+            result = parse_frontmatter(f.name)
+            assert result['mode'] == []
+
+    def test_warns_on_unrecognized_mode(self, caplog):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("""---
+name: Bad Mode Agent
+phases: [1]
+mode: [cli, unknown]
+---
+
+Content
+""")
+            f.flush()
+            with caplog.at_level(logging.WARNING):
+                result = parse_frontmatter(f.name)
+            assert result['mode'] == ['cli', 'unknown']
+            assert "Unrecognized mode 'unknown'" in caplog.text
 
     def test_no_mode_field_omits_key(self):
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
@@ -428,6 +487,51 @@ phases: [1]
             # No mode filter: gets all three
             result = get_agents_for_phase(tmpdir, 1)
             assert len(result) == 3
+
+    def test_empty_mode_treated_as_no_mode(self):
+        """mode: [] is treated the same as omitting mode (loads in all modes)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty_mode = os.path.join(tmpdir, "empty-mode.md")
+            with open(empty_mode, 'w') as f:
+                f.write("""---
+name: Empty Mode Agent
+phases: [1]
+mode: []
+---
+""")
+            normal = os.path.join(tmpdir, "normal.md")
+            with open(normal, 'w') as f:
+                f.write("""---
+name: Normal Agent
+phases: [1]
+---
+""")
+
+            # Empty mode list is falsy, so agent loads in all modes (same as omitting mode)
+            result = get_agents_for_phase(tmpdir, 1, mode="cli")
+            assert len(result) == 2
+
+            result = get_agents_for_phase(tmpdir, 1, mode="supervisor")
+            assert len(result) == 2
+
+            result = get_agents_for_phase(tmpdir, 1)
+            assert len(result) == 2
+
+    def test_mode_filtering_case_insensitive(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent = os.path.join(tmpdir, "uppercase.md")
+            with open(agent, 'w') as f:
+                f.write("""---
+name: Uppercase Agent
+phases: [1]
+mode: [CLI]
+---
+""")
+
+            # Should match because parsing normalizes to lowercase
+            result = get_agents_for_phase(tmpdir, 1, mode="cli")
+            assert len(result) == 1
+            assert agent in result
 
 
 if __name__ == '__main__':

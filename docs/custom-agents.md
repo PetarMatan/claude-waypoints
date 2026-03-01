@@ -138,12 +138,13 @@ Expert in REST API design, focused on consistency and developer experience.
 Ask clarifying questions about edge cases before proposing designs.
 ```
 
-### Testing Specialist (Phase 3)
+### Testing Specialist (Phase 3, CLI only)
 
 ```markdown
 ---
 name: Testing Specialist
 phases: [3]
+mode: [cli]
 ---
 
 # Testing Specialist
