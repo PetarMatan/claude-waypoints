@@ -270,14 +270,24 @@ class WPOrchestrator:
                 await self._stop_review_coordinator()
 
         if phase < 4:
+            # Run summary generation and knowledge extraction in parallel.
+            # Both resume the same session_id as independent subprocesses,
+            # avoiding the sequential double-resume that causes "Stream closed".
+            knowledge_task = asyncio.create_task(
+                self._extract_and_stage_knowledge(phase, session_id)
+            )
+
             summary = await self._generate_summary(phase, session_id)
             doc_path = self.markers.save_phase_document(phase, summary)
             if doc_path:
                 self.logger.log_phase_summary_saved(phase, doc_path)
                 self.display.supervisor_success(f"{phase_name} document saved: {doc_path}")
 
-            async with self.display.spinner("Extracting knowledge"):
-                await self._extract_and_stage_knowledge(phase, session_id)
+            if not knowledge_task.done():
+                async with self.display.spinner("Extracting knowledge"):
+                    await knowledge_task
+            else:
+                await knowledge_task
 
             while True:
                 action = await self._confirm_phase_completion(phase, doc_path, session_id)
