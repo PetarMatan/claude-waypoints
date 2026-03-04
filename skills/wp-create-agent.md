@@ -37,6 +37,14 @@ If yes, ask: "Which phases?" with multi-select options:
 - Phase 3: Test Writing
 - Phase 4: Implementation
 
+### Step 2b: Mode Selection
+
+Ask: "Which modes should this agent load in?" with multi-select options (at least one required):
+- CLI mode (single session, persistent context)
+- Supervisor mode (multi-session, orchestrated phases)
+
+Map selections to mode values: CLI → `cli`, Supervisor → `supervisor`.
+
 ### Step 3: Generate Agent File
 
 Create the agent file at `~/.claude/waypoints/agents/{agent-name-slug}.md` with this structure:
@@ -45,6 +53,7 @@ Create the agent file at `~/.claude/waypoints/agents/{agent-name-slug}.md` with 
 ---
 name: {Agent Name}
 phases: [{selected phases as numbers, e.g., 2, 3}]
+mode: [{selected modes, e.g., cli, supervisor}]
 ---
 
 # {Agent Name} Agent
@@ -71,6 +80,7 @@ Output to user:
 ```
 Created: ~/.claude/waypoints/agents/{filename}.md
 {If phases selected: "Bound to Waypoints phases: {phase names} - will auto-load during these phases"}
+Loads in: {mode names, e.g., "CLI and Supervisor modes"}
 
 To customize further, edit the file directly.
 ```

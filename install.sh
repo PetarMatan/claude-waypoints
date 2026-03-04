@@ -162,6 +162,15 @@ cp -r "$SOURCE_DIR/config" "$INSTALL_DIR/"
 echo "Installing example agents..."
 cp -r "$SOURCE_DIR/agents" "$INSTALL_DIR/"
 
+# Clean up removed agents from previous installations
+REMOVED_AGENTS="wp-knowledge-curator.md"
+for agent in $REMOVED_AGENTS; do
+    if [[ -f "$INSTALL_DIR/agents/$agent" ]]; then
+        echo "  Removing deprecated agent: $agent"
+        rm "$INSTALL_DIR/agents/$agent"
+    fi
+done
+
 # Copy uninstall script
 cp "$SOURCE_DIR/uninstall.sh" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/uninstall.sh"

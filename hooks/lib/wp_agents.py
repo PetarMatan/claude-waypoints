@@ -28,12 +28,12 @@ class AgentLoader:
             )
             self.agents_dir = os.path.join(install_dir, "agents")
 
-    def get_agents_for_phase(self, phase: int) -> List[str]:
+    def get_agents_for_phase(self, phase: int, mode: Optional[str] = None) -> List[str]:
         """Get list of agent file paths configured for a specific phase."""
         if not os.path.isdir(self.agents_dir):
             return []
 
-        return agent_parser.get_agents_for_phase(self.agents_dir, phase)
+        return agent_parser.get_agents_for_phase(self.agents_dir, phase, mode=mode)
 
     def get_agent_name(self, agent_file: str) -> str:
         """Get agent name from frontmatter or filename."""
@@ -43,7 +43,7 @@ class AgentLoader:
         """Get agent content (markdown without frontmatter)."""
         return agent_parser.get_agent_content(agent_file)
 
-    def get_new_agents_for_phase(self, phase: int) -> List[str]:
+    def get_new_agents_for_phase(self, phase: int, mode: Optional[str] = None) -> List[str]:
         """
         Get agents that are NEW in this phase (not in any previous phase).
 
@@ -52,24 +52,25 @@ class AgentLoader:
 
         Args:
             phase: The Waypoints phase number (1-4)
+            mode: Optional mode filter ('cli' or 'supervisor')
 
         Returns:
             List of agent file paths that are new in this phase
         """
-        current_agents = set(self.get_agents_for_phase(phase))
+        current_agents = set(self.get_agents_for_phase(phase, mode=mode))
         if not current_agents:
             return []
 
         # Get agents from all previous phases
         previous_agents = set()
         for prev_phase in range(1, phase):
-            previous_agents.update(self.get_agents_for_phase(prev_phase))
+            previous_agents.update(self.get_agents_for_phase(prev_phase, mode=mode))
 
         # Return only agents that weren't in previous phases
         new_agents = current_agents - previous_agents
         return list(new_agents)
 
-    def load_phase_agents(self, phase: int, logger=None, skip_already_loaded: bool = False) -> str:
+    def load_phase_agents(self, phase: int, logger=None, skip_already_loaded: bool = False, mode: Optional[str] = None) -> str:
         """
         Load agents configured for a phase and return combined content.
 
@@ -78,14 +79,16 @@ class AgentLoader:
             logger: Optional WPLogger for logging agent loads
             skip_already_loaded: If True, only load agents new to this phase
                                 (for CLI mode where context persists)
+            mode: Optional mode filter ('cli' or 'supervisor'). Agents with
+                  a non-matching mode are excluded.
 
         Returns:
             Combined agent content string for injection into context
         """
         if skip_already_loaded:
-            agent_files = self.get_new_agents_for_phase(phase)
+            agent_files = self.get_new_agents_for_phase(phase, mode=mode)
         else:
-            agent_files = self.get_agents_for_phase(phase)
+            agent_files = self.get_agents_for_phase(phase, mode=mode)
 
         if not agent_files:
             return ""

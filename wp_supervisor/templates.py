@@ -332,6 +332,15 @@ You delegate the bulk of codebase exploration to specialized subagents. Your wor
 ### Step 1: Gather Initial Requirements
 Ask the user to describe what they want to build. Get enough context to guide exploration.
 
+Classify complexity to calibrate exploration depth and questioning:
+- **Simple**: Single responsibility, clear inputs/outputs, no external dependencies.
+  Focus exploration on existing patterns. Fewer clarifying questions needed.
+- **Medium**: Multiple steps, some external dependencies, moderate failure scenarios.
+  Explore integration points and error handling patterns. Ask about failure modes.
+- **Complex**: Multiple systems, state machines, distributed transactions, failure recovery.
+  Deep exploration of all integration points, state management, and concurrency.
+  Ask about invariants, idempotency, ordering, and performance constraints.
+
 ### Step 2: Spawn Exploration Subagents
 Once you have initial requirements, use the Task tool to spawn these exploration agents.
 IMPORTANT: Pass the gathered requirements to each subagent so they know what to focus on.
@@ -422,6 +431,13 @@ structural skeleton of the solution WITHOUT implementing business logic.
   integration points (injection + call sites) must be in the existing code.
 - The Codebase Context section in requirements contains file paths and project structure.
   Prefer using these paths directly rather than re-exploring the project structure.
+
+## Stub Examples by Language
+
+**Kotlin**: `TODO("Implementation pending - tests first")`
+**TypeScript**: `throw new Error('TODO: Implementation pending - tests first');`
+**Python**: `raise NotImplementedError("TODO: Implementation pending - tests first")`
+**Go**: `panic("TODO: Implementation pending - tests first")`
 
 ## Important
 - Do NOT implement business logic
@@ -515,13 +531,22 @@ the business logic to make all tests pass.
   re-list the same directories repeatedly.
 
 ## Guidelines
-- The tests are your specification - make them pass
-- Implement the simplest solution that passes tests
-- If a test seems wrong, discuss with user before changing it
+- Your goal is to **fulfill the requirements** - tests are the primary way to verify that.
+- Implement the simplest correct solution that passes tests and satisfies the requirements.
 - Refactor for clarity after tests pass (if needed)
 
+## Critical: Test vs Requirements Conflicts
+- If a test contains a **provably incorrect assertion** that contradicts the requirements
+  or objective reality (e.g., wrong mathematical result, impossible timestamp conversion,
+  logically contradictory expectations), **stop and flag it to the user** rather than
+  implementing workarounds to force it to pass.
+- "Provably incorrect" means you can demonstrate the error objectively - not just that the
+  test seems unusual or tests an unexpected edge case.
+- When in doubt, implement the code to pass the test. Only flag tests you are certain are wrong.
+- Never silently modify tests to make them pass.
+
 ## Important
-- Focus on making tests pass, not on perfect code
+- Focus on making tests pass and fulfilling requirements, not on perfect code
 - Run tests after each significant change
 - When ALL tests pass, output exactly `---PHASE_COMPLETE---` on its own line to signal completion (no bold, no markdown - the supervisor parses this signal)
 """
@@ -724,30 +749,50 @@ Output ONLY the updated summary, no explanations or preamble.
 KNOWLEDGE_EXTRACTION_PROMPT = """
 Review the work done in this phase and identify knowledge worth capturing for future sessions.
 
-BE HIGHLY SELECTIVE. Most phases should result in NO_KNOWLEDGE_EXTRACTED. Only capture knowledge that:
+Capture knowledge that would save someone time or prevent mistakes 6 months from now. When in doubt, capture it — a slightly larger knowledge base is better than missing useful insights.
+
+Only capture knowledge that:
 - Would genuinely help someone 6 months from now
 - Is NOT obvious from reading the code
-- Represents reusable patterns, not one-time implementation details
+- Captures "why" not just "what"
+
+Do NOT capture:
+- Implementation code snippets (unless demonstrating a pattern)
+- Temporary workarounds as if they were permanent patterns
+- User preferences that aren't project-wide
 
 ## Categories
 
-**ARCHITECTURE**: High-level system patterns and component relationships
+**ARCHITECTURE**: System patterns, component relationships, and service behaviors
 - CAPTURE: Design patterns that span multiple components, data flow approaches, integration strategies
-- SKIP: How a specific service works (that's code documentation), implementation details of one feature
+- CAPTURE: Service integration patterns and data flows discovered during implementation
+- CAPTURE: Component responsibilities and boundaries that aren't obvious from code alone
+- SKIP: Implementation details of a single method or function
 
-**DECISIONS**: Significant architectural choices that affect the system broadly
+**DECISIONS**: Architectural and design choices with rationale
 - CAPTURE: Choices between fundamentally different approaches (REST vs GraphQL, sync vs async)
 - CAPTURE: Decisions that would be non-obvious to a new team member
+- CAPTURE: Service-specific design choices and their rationale
+- CAPTURE: Why a particular pattern was used over alternatives in this context
 - SKIP: Implementation details for a single feature (e.g., "chose < instead of <=")
-- SKIP: Service-specific choices that don't affect other parts of the system
 
-**LESSONS_LEARNED**: Non-obvious gotchas and surprises specific to THIS project
+**LESSONS_LEARNED**: Gotchas, surprises, and effective patterns specific to THIS project
 - CAPTURE: Framework quirks, library behaviors that surprised you, project-specific patterns
 - CAPTURE: Things that caused bugs or confusion that others might hit
+- CAPTURE: Patterns and approaches that worked well (not just gotchas)
+- CAPTURE: Configuration insights and setup requirements
+- CAPTURE: Testing patterns that proved effective for specific scenarios
 - SKIP: Basic language features (safe navigation, null handling, standard patterns)
 - SKIP: Specific code paths or class hierarchies (that duplicates code structure)
 - SKIP: General best practices everyone should already know
 - MUST include a technology tag like [Kotlin], [Quarkus], [Ditto], etc.
+
+## Phase-Specific Hints
+
+- After requirements/exploration: look for architectural decisions, external dependencies discovered
+- After interface design: look for interface design rationale, patterns chosen
+- After test writing: look for testing constraints, edge cases identified
+- After implementation: look for implementation gotchas, technology lessons
 
 ## Existing Project Knowledge (DO NOT REPEAT)
 {existing_knowledge}
@@ -770,24 +815,26 @@ LESSONS_LEARNED:
 - [Tag] Title: Description (must be non-obvious, project-specific)
 ```
 
-If nothing notable was discovered (this is expected for most phases), output ONLY:
+If nothing notable was discovered, output ONLY:
 ```
 NO_KNOWLEDGE_EXTRACTED
 ```
 
 ## Examples of What NOT to Capture
 
-BAD ARCHITECTURE: "MutingService uses Clock for time" (implementation detail)
+BAD ARCHITECTURE: "MutingService uses Clock for time" (implementation detail of one method)
 BAD DECISION: "Used < instead of <= for expiry check" (code-level detail)
 BAD LESSON: "[Kotlin] Use ?. for null safety" (basic language feature)
-BAD LESSON: "[Kotlin] Path is features.monitoring.muting.period.to" (duplicates code)
 
 ## Examples of What TO Capture
 
 GOOD ARCHITECTURE: "Services return AccumulativeResult for composable updates"
+GOOD ARCHITECTURE: "Service X validates input before forwarding to Service Y — downstream expects clean data"
 GOOD DECISION: "Event-driven processing supplements scheduled jobs for responsiveness"
+GOOD DECISION: "Chose event sourcing for audit trail because business requires full history"
 GOOD LESSON: "[WoT] Generator creates top-level DSL functions, not class methods"
 GOOD LESSON: "[Quarkus] @InjectMock requires the bean to be CDI-managed"
+GOOD LESSON: "[Kafka] Consumer deserializer must return null on failure to avoid blocking the topic"
 """
 
 

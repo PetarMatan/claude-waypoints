@@ -68,6 +68,7 @@ Create a markdown file in `~/.claude/waypoints/agents/` with this structure:
 ---
 name: Your Agent Name
 phases: [2, 3]
+mode: [cli, supervisor]
 ---
 
 # Your Agent Name
@@ -93,6 +94,13 @@ How this agent should interact (concise, detailed, questioning, etc.)
 ```
 
 The `phases` field is optional. If omitted, the agent won't auto-load but can still be manually referenced.
+
+The `mode` field specifies which modes the agent loads in. It's an array that can contain `cli`, `supervisor`, or both:
+- `mode: [cli]` — only loads in CLI (single-session) mode
+- `mode: [supervisor]` — only loads in Supervisor (multi-session) mode
+- `mode: [cli, supervisor]` — loads in both modes
+
+If `mode` is omitted, the agent loads in both modes by default.
 
 ## Examples
 
@@ -130,12 +138,13 @@ Expert in REST API design, focused on consistency and developer experience.
 Ask clarifying questions about edge cases before proposing designs.
 ```
 
-### Testing Specialist (Phase 3)
+### Testing Specialist (Phase 3, CLI only)
 
 ```markdown
 ---
 name: Testing Specialist
 phases: [3]
+mode: [cli]
 ---
 
 # Testing Specialist

@@ -7,9 +7,14 @@ Used by wp_agents.py to load phase-bound agents.
 """
 
 import json
+import logging
 import os
 import re
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+KNOWN_MODES = {'cli', 'supervisor'}
 
 
 def parse_frontmatter(filepath: str) -> Optional[dict]:
@@ -40,6 +45,16 @@ def parse_frontmatter(filepath: str) -> Optional[dict]:
         if phases_match:
             phases_str = phases_match.group(1)
             data['phases'] = [int(p.strip()) for p in phases_str.split(',') if p.strip().isdigit()]
+
+        # Parse mode: [cli, supervisor] or mode: [cli] (optional, omit for both)
+        mode_match = re.search(r'mode:\s*\[([^\]]*)\]', frontmatter)
+        if mode_match:
+            modes_str = mode_match.group(1)
+            modes = [m.strip().lower() for m in modes_str.split(',') if m.strip()]
+            for m in modes:
+                if m not in KNOWN_MODES:
+                    logger.warning("Unrecognized mode '%s' in %s (known modes: %s)", m, filepath, ', '.join(sorted(KNOWN_MODES)))
+            data['mode'] = modes
 
         return data if data else None
     except Exception:
@@ -107,17 +122,28 @@ def list_agents_data(agents_dir: str) -> list:
         frontmatter = parse_frontmatter(filepath)
         if frontmatter and 'phases' in frontmatter:
             name = frontmatter.get('name', filename.replace('.md', '').replace('-', ' ').title())
-            result.append({
+            agent_data = {
                 'name': name,
                 'file': filepath,
                 'phases': frontmatter['phases']
-            })
+            }
+            if 'mode' in frontmatter:
+                agent_data['mode'] = frontmatter['mode']
+            result.append(agent_data)
 
     return result
 
 
-def get_agents_for_phase(agents_dir: str, phase: int) -> list:
-    """Get agent file paths that match the given phase. Returns list of paths."""
+def get_agents_for_phase(agents_dir: str, phase: int, mode: str = None) -> list:
+    """Get agent file paths that match the given phase and optional mode filter.
+
+    Args:
+        agents_dir: Directory containing agent markdown files
+        phase: Phase number to filter by
+        mode: Optional mode filter ('cli' or 'supervisor'). If provided,
+              excludes agents whose mode list doesn't include it. Agents
+              without a mode field load in both modes.
+    """
     result = []
     if not os.path.isdir(agents_dir):
         return result
@@ -133,6 +159,9 @@ def get_agents_for_phase(agents_dir: str, phase: int) -> list:
         frontmatter = parse_frontmatter(filepath)
         if frontmatter and 'phases' in frontmatter:
             if phase in frontmatter['phases']:
+                agent_modes = frontmatter.get('mode')
+                if mode and agent_modes and mode not in agent_modes:
+                    continue
                 result.append(filepath)
 
     return result

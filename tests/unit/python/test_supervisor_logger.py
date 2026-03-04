@@ -3,13 +3,22 @@
 Unit tests for wp_supervisor/logger.py - SupervisorLogger class
 """
 
+import os
 import tempfile
 import pytest
 from pathlib import Path
+from unittest.mock import patch
 
 import sys
 sys.path.insert(0, 'wp_supervisor')
 from logger import SupervisorLogger
+
+
+@pytest.fixture(autouse=True)
+def isolate_unified_logs(tmp_path):
+    """Prevent tests from writing to real ~/.claude/waypoints/logs/."""
+    with patch.dict(os.environ, {"WP_INSTALL_DIR": str(tmp_path / "wp_install")}):
+        yield
 
 
 class TestSupervisorLoggerInit:

@@ -1,6 +1,7 @@
 ---
 name: Uncle Bob - Software Craftsmanship
 phases: [2, 3, 4]
+mode: [cli, supervisor]
 ---
 
 # Uncle Bob - Software Craftsmanship Agent
