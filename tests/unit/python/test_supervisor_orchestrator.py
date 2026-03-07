@@ -907,16 +907,16 @@ class TestSupervisorEndToEnd:
 
                 if "Phase 4:" in prompt or "Phase 4 of" in prompt:
                     phases_executed.append(4)
-                    text = "All tests passing! ---PHASE_COMPLETE---"
+                    text = "All tests passing!\n---PHASE_COMPLETE---"
                 elif "Phase 3:" in prompt or "Phase 3 of" in prompt:
                     phases_executed.append(3)
-                    text = "I've written the tests. ---PHASE_COMPLETE---"
+                    text = "I've written the tests.\n---PHASE_COMPLETE---"
                 elif "Phase 2:" in prompt or "Phase 2 of" in prompt:
                     phases_executed.append(2)
-                    text = "I've designed the interfaces. ---PHASE_COMPLETE---"
+                    text = "I've designed the interfaces.\n---PHASE_COMPLETE---"
                 elif "Phase 1:" in prompt or "Phase 1 of" in prompt:
                     phases_executed.append(1)
-                    text = "I understand you want to build a feature. ---PHASE_COMPLETE---"
+                    text = "I understand you want to build a feature.\n---PHASE_COMPLETE---"
                 elif "summary" in prompt.lower():
                     text = "# Summary\n- Item 1\n- Item 2"
                 else:
