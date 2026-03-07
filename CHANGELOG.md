@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - TBD
+
+### Fixed
+- **Phantom "Human:" messages in VS Code terminal** - CLI defaulted to Haiku which hallucinated conversation turns from leaked VS Code session context. All sessions now explicitly set model (default: Sonnet)
+- **Premature phase completion** - Signal detection now requires `PHASE_COMPLETE` on its own line, preventing false matches when Claude mentions the signal in prose
+
+### Added
+- **Configurable model selection** (Supervisor mode) - Set model via `WP_MODEL` env var or `model` field in `~/.claude/wp-override.json`. Valid values: `haiku`, `sonnet`, `opus`
+
+### Changed
+- **Exploration subagents upgraded to Sonnet** - Previously Haiku, now Sonnet for better codebase analysis quality
+
 ## [1.4.0] - 2026-02-25
 
 ### Added
