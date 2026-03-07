@@ -523,19 +523,33 @@ class TestCheckSignalBehavior:
                 logger=logger
             )
 
-    def test_check_signal_returns_true_when_pattern_found(self):
-        """_check_signal should return True when any pattern is found."""
+    def test_check_signal_returns_true_when_pattern_on_own_line(self):
+        """_check_signal should return True when pattern is on its own line."""
         with tempfile.TemporaryDirectory() as tmpdir:
             runner = self._create_runner(tmpdir)
 
             # when
             result = runner._check_signal(
-                "Some text ---PHASE_COMPLETE--- more text",
+                "Some text\n---PHASE_COMPLETE---\nmore text",
                 PHASE_COMPLETE_PATTERNS
             )
 
             # then
             assert result is True
+
+    def test_check_signal_returns_false_when_pattern_embedded_in_line(self):
+        """_check_signal should return False when pattern is embedded in other text."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # when
+            result = runner._check_signal(
+                "WAITING FOR ANSWERS BEFORE `---PHASE_COMPLETE---`",
+                PHASE_COMPLETE_PATTERNS
+            )
+
+            # then
+            assert result is False
 
     def test_check_signal_returns_false_when_no_pattern_found(self):
         """_check_signal should return False when no pattern is found."""
@@ -578,10 +592,16 @@ class TestCheckSignalBehavior:
         with tempfile.TemporaryDirectory() as tmpdir:
             runner = self._create_runner(tmpdir)
 
-            # then - all variants should be detected
+            # then - all variants should be detected (standalone lines)
             assert runner._check_signal("---PHASE_COMPLETE---", PHASE_COMPLETE_PATTERNS)
             assert runner._check_signal("**PHASE_COMPLETE**", PHASE_COMPLETE_PATTERNS)
             assert runner._check_signal("PHASE_COMPLETE", PHASE_COMPLETE_PATTERNS)
+
+            # also detected with surrounding lines
+            assert runner._check_signal("some text\n---PHASE_COMPLETE---\n", PHASE_COMPLETE_PATTERNS)
+
+            # with leading/trailing whitespace on the signal line
+            assert runner._check_signal("  ---PHASE_COMPLETE---  ", PHASE_COMPLETE_PATTERNS)
 
 
 class TestCheckRegenerationSignalBehavior:
@@ -619,7 +639,7 @@ class TestCheckRegenerationSignalBehavior:
 
             # when
             result = runner._check_regeneration_signal(
-                "Summary updated. ---REGENERATION_COMPLETE---",
+                "Summary updated.\n---REGENERATION_COMPLETE---",
                 REGENERATION_COMPLETE_PATTERNS,
                 REGENERATION_CANCELED_PATTERNS
             )
@@ -634,7 +654,7 @@ class TestCheckRegenerationSignalBehavior:
 
             # when
             result = runner._check_regeneration_signal(
-                "Changes reverted. ---REGENERATION_CANCELED---",
+                "Changes reverted.\n---REGENERATION_CANCELED---",
                 REGENERATION_COMPLETE_PATTERNS,
                 REGENERATION_CANCELED_PATTERNS
             )
@@ -884,7 +904,7 @@ class TestProcessStreamBehavior:
             msg = MockAssistantMessage()
             msg.session_id = "test"
             text_block = MagicMock()
-            text_block.text = "Done! ---PHASE_COMPLETE---"
+            text_block.text = "Done!\n---PHASE_COMPLETE---"
             msg.content = [text_block]
 
             async def mock_receive():
@@ -914,7 +934,7 @@ class TestProcessStreamBehavior:
             msg = MockAssistantMessage()
             msg.session_id = "test"
             text_block = MagicMock()
-            text_block.text = "Some text with ---PHASE_COMPLETE---"
+            text_block.text = "Some text with\n---PHASE_COMPLETE---"
             msg.content = [text_block]
 
             async def mock_receive():
@@ -1219,7 +1239,7 @@ class TestRunPhaseSessionBehavior:
             mock_message = MockAssistantMessage()
             mock_message.session_id = "test-session-abc123"
             text_block = MagicMock()
-            text_block.text = "Response ---PHASE_COMPLETE---"
+            text_block.text = "Response\n---PHASE_COMPLETE---"
             mock_message.content = [text_block]
 
             async def mock_receive():
@@ -1247,7 +1267,7 @@ class TestRunPhaseSessionBehavior:
             mock_message = MockAssistantMessage()
             mock_message.session_id = "test-session"
             text_block = MagicMock()
-            text_block.text = "Work done! ---PHASE_COMPLETE---"
+            text_block.text = "Work done!\n---PHASE_COMPLETE---"
             mock_message.content = [text_block]
 
             async def mock_receive():
@@ -1277,7 +1297,7 @@ class TestRunPhaseSessionBehavior:
             mock_assistant = MockAssistantMessage()
             mock_assistant.session_id = "test-session"
             text_block = MagicMock()
-            text_block.text = "Done! ---PHASE_COMPLETE---"
+            text_block.text = "Done!\n---PHASE_COMPLETE---"
             mock_assistant.content = [text_block]
 
             # Then a result message
@@ -1350,7 +1370,7 @@ class TestRunRegenerationSessionBehavior:
             mock_message = MockAssistantMessage()
             mock_message.session_id = "regen-session-123"
             text_block = MagicMock()
-            text_block.text = "Updated summary. ---REGENERATION_COMPLETE---"
+            text_block.text = "Updated summary.\n---REGENERATION_COMPLETE---"
             mock_message.content = [text_block]
 
             async def mock_receive():
@@ -1380,7 +1400,7 @@ class TestRunRegenerationSessionBehavior:
             mock_message = MockAssistantMessage()
             mock_message.session_id = "regen-session-456"
             text_block = MagicMock()
-            text_block.text = "Changes reverted. ---REGENERATION_CANCELED---"
+            text_block.text = "Changes reverted.\n---REGENERATION_CANCELED---"
             mock_message.content = [text_block]
 
             async def mock_receive():
@@ -1673,7 +1693,7 @@ class TestEdgeCases:
             msg2 = MockAssistantMessage()
             msg2.session_id = "test"
             text2 = MagicMock()
-            text2.text = "Done! ---PHASE_COMPLETE---"
+            text2.text = "Done!\n---PHASE_COMPLETE---"
             msg2.content = [text2]
 
             response_count = [0]
@@ -1711,7 +1731,7 @@ class TestEdgeCases:
             # No session_id attribute or it's None
             mock_message.session_id = None
             text_block = MagicMock()
-            text_block.text = "Response ---PHASE_COMPLETE---"
+            text_block.text = "Response\n---PHASE_COMPLETE---"
             mock_message.content = [text_block]
 
             async def mock_receive():

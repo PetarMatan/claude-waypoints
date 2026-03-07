@@ -110,7 +110,7 @@ class SubagentBuilder:
             description=BUSINESS_LOGIC_DESCRIPTION,
             prompt=prompt,
             tools=EXPLORATION_TOOLS,
-            model="haiku"
+            model="sonnet"
         )
 
     @staticmethod
@@ -126,7 +126,7 @@ class SubagentBuilder:
             description=DEPENDENCIES_DESCRIPTION,
             prompt=prompt,
             tools=EXPLORATION_TOOLS,
-            model="haiku"
+            model="sonnet"
         )
 
     @staticmethod
@@ -142,7 +142,7 @@ class SubagentBuilder:
             description=TEST_USECASE_DESCRIPTION,
             prompt=prompt,
             tools=EXPLORATION_TOOLS,
-            model="haiku"
+            model="sonnet"
         )
 
     @staticmethod
@@ -158,5 +158,5 @@ class SubagentBuilder:
             description=ARCHITECTURE_DESCRIPTION,
             prompt=prompt,
             tools=EXPLORATION_TOOLS,
-            model="haiku"
+            model="sonnet"
         )

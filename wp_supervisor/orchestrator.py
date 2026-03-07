@@ -7,6 +7,7 @@ managing context transfer between phases.
 """
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -52,12 +53,41 @@ from .review_coordinator import ReviewCoordinator, ReviewCoordinatorConfig
 # Orchestrator-specific signal constants
 PHASE_COMPLETE_SIGNAL = "---PHASE_COMPLETE---"
 
+DEFAULT_MODEL = "sonnet"
+VALID_MODELS = {"haiku", "sonnet", "opus"}
+
+
+def _resolve_model() -> str:
+    """Resolve model from WP_MODEL env var > wp-override.json > default."""
+    env_model = os.environ.get("WP_MODEL", "").strip().lower()
+    if env_model:
+        if env_model in VALID_MODELS:
+            return env_model
+        print(f"Warning: WP_MODEL='{env_model}' is not valid. Using default '{DEFAULT_MODEL}'.", file=sys.stderr)
+
+    override_file = os.path.join(
+        os.environ.get("CLAUDE_CONFIG_DIR", os.path.expanduser("~/.claude")),
+        "wp-override.json"
+    )
+    try:
+        with open(override_file, 'r') as f:
+            file_model = json.load(f).get("model", "").strip().lower()
+        if file_model:
+            if file_model in VALID_MODELS:
+                return file_model
+            print(f"Warning: model='{file_model}' in wp-override.json is not valid. Using default '{DEFAULT_MODEL}'.", file=sys.stderr)
+    except Exception:
+        pass
+
+    return DEFAULT_MODEL
+
 
 class WPOrchestrator:
     """Orchestrates Waypoints workflow across multiple Claude sessions."""
 
     def __init__(self, working_dir: Optional[str] = None):
         self.working_dir = Path(working_dir or os.getcwd()).resolve()
+        self._model = _resolve_model()
         self.markers = SupervisorMarkers()
         self.logger = SupervisorLogger(
             workflow_dir=self.markers.markers_dir,
@@ -96,6 +126,7 @@ class WPOrchestrator:
         try:
             self.markers.initialize()
             self.logger.log_workflow_start(initial_task or "")
+            self.logger.log_event("CONFIG", f"Model: {self._model}")
             self._knowledge_context = self._load_knowledge_context()
 
             await self._run_phase(1, initial_task)
@@ -332,6 +363,7 @@ class WPOrchestrator:
         self.display.supervisor_message(f"Initializing Phase {phase} session...")
 
         agent_options = ClaudeAgentOptions(
+            model=self._model,
             cwd=str(self.working_dir),
             env=env_vars,
             permission_mode="bypassPermissions",
@@ -433,6 +465,7 @@ class WPOrchestrator:
 
         async with ClaudeSDKClient(
             options=ClaudeAgentOptions(
+                model=self._model,
                 cwd=str(self.working_dir),
                 env=env_vars,
                 permission_mode="bypassPermissions",
@@ -565,6 +598,7 @@ class WPOrchestrator:
 
         async with ClaudeSDKClient(
             options=ClaudeAgentOptions(
+                model=self._model,
                 cwd=str(self.working_dir),
                 env=env_vars,
                 resume=session_id,

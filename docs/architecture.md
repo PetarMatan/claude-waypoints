@@ -167,6 +167,26 @@ Located in `~/.claude/tmp/`:
 3. `WP_DEFAULT_PROFILE` environment variable (optional)
 4. No fallback - hooks skip if no profile detected
 
+### Model Selection (Supervisor Mode)
+
+The Claude model used for supervisor sessions is configurable:
+
+1. `WP_MODEL` environment variable (one-off override)
+2. `model` field in `~/.claude/wp-override.json` (persistent)
+3. Default: `sonnet`
+
+Valid values: `haiku`, `sonnet`, `opus`
+
+Example override file:
+```json
+{
+  "activeProfile": "kotlin-maven",
+  "model": "opus"
+}
+```
+
+One-off: `WP_MODEL=opus wp-start`
+
 ### Source Pattern Matching
 
 Each profile defines patterns for:

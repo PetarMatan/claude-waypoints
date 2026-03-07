@@ -394,10 +394,14 @@ class SessionRunner:
         return signal
 
     def _check_signal(self, text: str, patterns: SignalPatterns) -> bool:
-        """Check if text contains any of the given signal patterns."""
+        """Check if text contains any of the given signal patterns on their own line."""
         if not text or not patterns:
             return False
-        return any(pattern in text for pattern in patterns)
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped in patterns:
+                return True
+        return False
 
     def _check_regeneration_signal(
         self,

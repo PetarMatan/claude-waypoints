@@ -168,6 +168,20 @@ wp-supervisor
 
 See [Supervisor Mode Guide](docs/supervisor-mode.md) for details.
 
+### Model Configuration
+
+Supervisor mode defaults to **Sonnet**. To change it, add `model` to `~/.claude/wp-override.json`:
+
+```json
+{
+  "model": "opus"
+}
+```
+
+Or use a one-off override: `WP_MODEL=opus wp-supervisor`
+
+Valid values: `haiku`, `sonnet`, `opus`. See [architecture docs](docs/architecture.md#model-selection-supervisor-mode) for details.
+
 ## The Four Phases
 
 ### Phase 1: Requirements Gathering
