@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.1] - TBD
+## [1.4.1] - 2026-03-07
 
 ### Fixed
 - **Phantom "Human:" messages in VS Code terminal** - CLI defaulted to Haiku which hallucinated conversation turns from leaked VS Code session context. All sessions now explicitly set model (default: Sonnet)
