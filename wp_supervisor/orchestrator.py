@@ -127,9 +127,19 @@ class WPOrchestrator:
             self.markers.initialize()
             self.logger.log_workflow_start(initial_task or "")
             self.logger.log_event("CONFIG", f"Model: {self._model}")
-            self._knowledge_context = self._load_knowledge_context()
+            # Load knowledge with initial task query for RAG [REQ-7 - Query 1]
+            self.display.supervisor_message("Loading project knowledge...")
+            self._knowledge_context = self._load_knowledge_context(query_text=initial_task)
 
             await self._run_phase(1, initial_task)
+
+            # Reload knowledge after Phase 1 with requirements query for RAG [REQ-7 - Query 2]
+            requirements_summary = self.markers.get_requirements_summary()
+            if requirements_summary:
+                self.display.supervisor_message("Reloading knowledge with requirements context...")
+                self._knowledge_context = self._load_knowledge_context(query_text=requirements_summary)
+                self.logger.log_event("KNOWLEDGE", "Reloaded knowledge context with Phase 1 requirements")
+
             await self._run_phase(2)
             await self._run_phase(3)
             await self._run_phase(4)
@@ -158,9 +168,35 @@ class WPOrchestrator:
             self.markers.cleanup()
             raise
 
-    def _load_knowledge_context(self) -> str:
-        """Load project knowledge for injection into phase contexts."""
-        return KnowledgeManager(str(self.working_dir)).load_knowledge_context()
+    def _load_knowledge_context(self, query_text: Optional[str] = None) -> str:
+        """
+        Load project knowledge for injection into phase contexts.
+
+        Args:
+            query_text: Optional query for RAG filtering of lessons [REQ-7]
+
+        Returns:
+            Formatted knowledge context string
+        """
+        manager = KnowledgeManager(str(self.working_dir))
+        context = manager.load_knowledge_context(query_text=query_text)
+
+        if manager.load_stats:
+            stats = manager.load_stats
+            mode = stats.get("mode", "unknown")
+            if stats.get("rag_used"):
+                self.logger.log_event(
+                    "KNOWLEDGE",
+                    f"Loaded via {mode}: {stats.get('relevant_lessons', 0)} relevant lessons "
+                    f"(out of {stats.get('total_lessons', 0)} total)"
+                )
+            else:
+                reason = f" ({stats['reason']})" if "reason" in stats else ""
+                total = stats.get("total_lessons")
+                lessons_info = f": {total} lessons" if total is not None else ""
+                self.logger.log_event("KNOWLEDGE", f"Loaded via {mode}{lessons_info}{reason}")
+
+        return context
 
     async def _extract_and_stage_knowledge(
         self,

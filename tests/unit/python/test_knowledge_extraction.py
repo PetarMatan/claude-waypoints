@@ -650,7 +650,7 @@ class TestKnowledgeManagerApplication:
                 arch_file.write_text("# Architecture\n\n## Existing Entry\nOld content")
 
                 with patch('wp_knowledge.ProjectIdentifier.get_project_id', return_value='test-project'):
-                    manager = KnowledgeManager(tmpdir)
+                    manager = KnowledgeManager(tmpdir, enable_graph=False)
                     staged = StagedKnowledge(
                         architecture=[StagedKnowledgeEntry("New Entry", "New content", 2)]
                     )

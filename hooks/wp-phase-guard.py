@@ -37,6 +37,10 @@ def block_response(reason: str, context: str) -> None:
 
 
 def main():
+    # Skip when running under supervisor control (SDK handles hooks)
+    if os.environ.get("WP_SUPERVISOR_ACTIVE") == "1":
+        return
+
     # Parse hook input
     hook = HookInput.from_stdin()
 

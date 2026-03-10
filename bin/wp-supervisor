@@ -70,5 +70,6 @@ if ! python3 -c "import rich" 2>/dev/null; then
     exit 1
 fi
 
-# Run the supervisor module
+# Run the supervisor module (unbuffered so output is visible when piped)
+export PYTHONUNBUFFERED=1
 exec python3 -m wp_supervisor "$@"
