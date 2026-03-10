@@ -541,77 +541,63 @@ class KnowledgeManager:
 
         sections = []
 
-        # Load graphs if graph enabled
-        if self._enable_graph:
-            self._load_graphs()
+        self._load_graphs()
 
-            # Check if graphs are empty and are real dicts (not mocks)
-            # If empty real graphs, fall back to markdown
-            if (isinstance(self._project_graph.nodes, dict) and
-                isinstance(self._global_graph.nodes, dict)):
-                total_nodes = len(self._project_graph.nodes) + len(self._global_graph.nodes)
-                if total_nodes == 0 and not (self._enable_rag and query_text):
-                    # No graph data, use legacy markdown loading
-                    self.load_stats = {"mode": "legacy_fallback", "rag_used": False, "reason": "empty graphs"}
-                    return self.load_knowledge_context_legacy()
+        # Check if graphs are empty and are real dicts (not mocks)
+        # If empty real graphs, fall back to markdown
+        if (isinstance(self._project_graph.nodes, dict) and
+            isinstance(self._global_graph.nodes, dict)):
+            total_nodes = len(self._project_graph.nodes) + len(self._global_graph.nodes)
+            if total_nodes == 0 and not (self._enable_rag and query_text):
+                # No graph data, use legacy markdown loading
+                self.load_stats = {"mode": "legacy_fallback", "rag_used": False, "reason": "empty graphs"}
+                return self.load_knowledge_context_legacy()
 
-            # Load architecture from graph [REQ-10]
-            arch_nodes = self._project_graph.get_nodes_by_category(KnowledgeCategory.ARCHITECTURE)
-            if arch_nodes:
-                arch_content = self._format_nodes_as_markdown(arch_nodes)
-                sections.append(f"## Architecture\n\n{arch_content}")
-            else:
-                sections.append("## Architecture\n\nNo architecture documented yet.")
+        # Load architecture from graph [REQ-10]
+        arch_nodes = self._project_graph.get_nodes_by_category(KnowledgeCategory.ARCHITECTURE)
+        if arch_nodes:
+            arch_content = self._format_nodes_as_markdown(arch_nodes)
+            sections.append(f"## Architecture\n\n{arch_content}")
+        else:
+            sections.append("## Architecture\n\nNo architecture documented yet.")
 
-            # Load decisions from graph [REQ-11]
-            dec_nodes = self._project_graph.get_nodes_by_category(KnowledgeCategory.DECISIONS)
-            if dec_nodes:
-                dec_content = self._format_nodes_as_markdown(dec_nodes)
-                sections.append(f"## Decisions\n\n{dec_content}")
-            else:
-                sections.append("## Decisions\n\nNo decisions documented yet.")
+        # Load decisions from graph [REQ-11]
+        dec_nodes = self._project_graph.get_nodes_by_category(KnowledgeCategory.DECISIONS)
+        if dec_nodes:
+            dec_content = self._format_nodes_as_markdown(dec_nodes)
+            sections.append(f"## Decisions\n\n{dec_content}")
+        else:
+            sections.append("## Decisions\n\nNo decisions documented yet.")
 
-            # Load lessons from RAG or graph
-            if self._enable_rag and query_text:
-                # Initialize RAG and query [REQ-7, REQ-8, REQ-12]
-                self._initialize_rag_service()
+        # Load lessons from RAG or graph
+        if self._enable_rag and query_text:
+            # Initialize RAG and query [REQ-7, REQ-8, REQ-12]
+            self._initialize_rag_service()
 
-            if self._enable_rag and query_text and self._rag_service is not None:
-                lessons_nodes = self._global_graph.get_nodes_by_category(KnowledgeCategory.LESSONS_LEARNED)
+        if self._enable_rag and query_text and self._rag_service is not None:
+            lessons_nodes = self._global_graph.get_nodes_by_category(KnowledgeCategory.LESSONS_LEARNED)
 
-                # Initialize RAG index
-                success = self._rag_service.initialize(lessons_nodes)
-                if success:
-                    # Query relevant lessons
-                    relevant_lessons = self._rag_service.query_relevant_lessons(query_text)
-                    lessons_count = len(relevant_lessons)
-                    self.load_stats = {
-                        "mode": "graph+rag", "rag_used": True,
-                        "total_lessons": len(lessons_nodes), "relevant_lessons": lessons_count,
-                    }
+            # Initialize RAG index
+            success = self._rag_service.initialize(lessons_nodes)
+            if success:
+                # Query relevant lessons
+                relevant_lessons = self._rag_service.query_relevant_lessons(query_text)
+                lessons_count = len(relevant_lessons)
+                self.load_stats = {
+                    "mode": "graph+rag", "rag_used": True,
+                    "total_lessons": len(lessons_nodes), "relevant_lessons": lessons_count,
+                }
 
-                    if relevant_lessons:
-                        lessons_content = self._format_nodes_as_markdown(relevant_lessons)
-                        sections.append(f"## Lessons Learned\n\n{lessons_content}")
-                    else:
-                        sections.append("## Lessons Learned\n\nNo relevant lessons found for this task.")
+                if relevant_lessons:
+                    lessons_content = self._format_nodes_as_markdown(relevant_lessons)
+                    sections.append(f"## Lessons Learned\n\n{lessons_content}")
                 else:
-                    # RAG initialization failed, fall back to all lessons
-                    self.load_stats = {
-                        "mode": "graph", "rag_used": False,
-                        "total_lessons": len(lessons_nodes), "reason": "RAG init failed",
-                    }
-                    if lessons_nodes:
-                        lessons_content = self._format_nodes_as_markdown(lessons_nodes)
-                        sections.append(f"## Lessons Learned\n\n{lessons_content}")
-                    else:
-                        sections.append("## Lessons Learned\n\nNo lessons learned documented yet.")
+                    sections.append("## Lessons Learned\n\nNo relevant lessons found for this task.")
             else:
-                # Load all lessons from graph (no RAG filtering)
-                lessons_nodes = self._global_graph.get_nodes_by_category(KnowledgeCategory.LESSONS_LEARNED)
+                # RAG initialization failed, fall back to all lessons
                 self.load_stats = {
                     "mode": "graph", "rag_used": False,
-                    "total_lessons": len(lessons_nodes),
+                    "total_lessons": len(lessons_nodes), "reason": "RAG init failed",
                 }
                 if lessons_nodes:
                     lessons_content = self._format_nodes_as_markdown(lessons_nodes)
@@ -619,8 +605,17 @@ class KnowledgeManager:
                 else:
                     sections.append("## Lessons Learned\n\nNo lessons learned documented yet.")
         else:
-            # Graph disabled, use legacy markdown loading
-            return self.load_knowledge_context_legacy()
+            # Load all lessons from graph (no RAG filtering)
+            lessons_nodes = self._global_graph.get_nodes_by_category(KnowledgeCategory.LESSONS_LEARNED)
+            self.load_stats = {
+                "mode": "graph", "rag_used": False,
+                "total_lessons": len(lessons_nodes),
+            }
+            if lessons_nodes:
+                lessons_content = self._format_nodes_as_markdown(lessons_nodes)
+                sections.append(f"## Lessons Learned\n\n{lessons_content}")
+            else:
+                sections.append("## Lessons Learned\n\nNo lessons learned documented yet.")
 
         return "# Project Knowledge\n\n" + "\n\n".join(sections)
 
@@ -732,51 +727,6 @@ class KnowledgeManager:
             except IOError:
                 return None
         return None
-
-    # --- Graph-Based Loading [NEW] ---
-
-    def _load_architecture_from_graph(self) -> str:
-        """
-        Load architecture entries from graph [REQ-10].
-
-        Returns:
-            Formatted markdown content or empty string if no entries
-        """
-        raise NotImplementedError("TODO: Implementation pending - tests first")
-
-    def _load_decisions_from_graph(self) -> str:
-        """
-        Load decisions entries from graph [REQ-11].
-
-        Returns:
-            Formatted markdown content or empty string if no entries
-        """
-        raise NotImplementedError("TODO: Implementation pending - tests first")
-
-    def _load_lessons_from_graph_all(self) -> str:
-        """
-        Load all lessons-learned entries from graph (no filtering).
-
-        Returns:
-            Formatted markdown content or empty string if no entries
-        """
-        raise NotImplementedError("TODO: Implementation pending - tests first")
-
-    def _load_lessons_from_rag(self, query_text: str) -> Tuple[str, int]:
-        """
-        Load lessons-learned entries via RAG semantic search [REQ-8, REQ-12].
-
-        Args:
-            query_text: Query for semantic search
-
-        Returns:
-            Tuple of (formatted_markdown, count_loaded)
-
-        Note:
-            [EDGE-1] If no results, returns ("", 0)
-        """
-        raise NotImplementedError("TODO: Implementation pending - tests first")
-
 
     # --- Knowledge Application [REQ-17, REQ-18, REQ-19, REQ-20, REQ-21] ---
 

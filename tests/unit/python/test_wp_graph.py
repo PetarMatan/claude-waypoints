@@ -487,6 +487,66 @@ class TestKnowledgeGraph:
         assert len(result) == 0
 
 
+    def test_from_dict_handles_legacy_pipe_delimited_dict_format(self):
+        # given - legacy format used pipe-delimited string keys
+        legacy_data = {
+            "nodes": {
+                "architecture|Event Sourcing|2026-03-09": {
+                    "node_id": {"category": "architecture", "title": "Event Sourcing", "date": "2026-03-09"},
+                    "title": "Event Sourcing",
+                    "content": "Store events, not state.",
+                    "category": "architecture",
+                    "date_added": "2026-03-09",
+                    "session_id": "s1",
+                    "tag": None,
+                    "relationships": []
+                },
+                "decisions|Use Kafka|2026-03-09": {
+                    "node_id": {"category": "decisions", "title": "Use Kafka", "date": "2026-03-09"},
+                    "title": "Use Kafka",
+                    "content": "Kafka for event streaming.",
+                    "category": "decisions",
+                    "date_added": "2026-03-09",
+                    "session_id": "s1",
+                    "tag": None,
+                    "relationships": []
+                }
+            }
+        }
+
+        # when
+        graph = KnowledgeGraph.from_dict(legacy_data)
+
+        # then
+        assert len(graph.nodes) == 2
+        assert graph.get_node(NodeId("architecture", "Event Sourcing", "2026-03-09")) is not None
+        assert graph.get_node(NodeId("decisions", "Use Kafka", "2026-03-09")) is not None
+
+    def test_from_dict_handles_new_list_format(self):
+        # given - new format uses a list of node dicts
+        new_data = {
+            "nodes": [
+                {
+                    "node_id": {"category": "architecture", "title": "CQRS", "date": "2026-03-09"},
+                    "title": "CQRS",
+                    "content": "Separate read and write.",
+                    "category": "architecture",
+                    "date_added": "2026-03-09",
+                    "session_id": "s1",
+                    "tag": None,
+                    "relationships": []
+                }
+            ]
+        }
+
+        # when
+        graph = KnowledgeGraph.from_dict(new_data)
+
+        # then
+        assert len(graph.nodes) == 1
+        assert graph.get_node(NodeId("architecture", "CQRS", "2026-03-09")) is not None
+
+
 class TestGraphStorage:
     """Tests for GraphStorage class - persistence layer for graphs."""
 

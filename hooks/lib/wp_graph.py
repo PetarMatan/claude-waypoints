@@ -217,20 +217,23 @@ class KnowledgeGraph:
     def to_dict(self) -> Dict:
         """Convert graph to JSON-serializable dict."""
         return {
-            "nodes": {
-                # Use string key for JSON serialization
-                f"{node_id.category}|{node_id.title}|{node_id.date}": node.to_dict()
-                for node_id, node in self.nodes.items()
-            }
+            "nodes": [node.to_dict() for node in self.nodes.values()]
         }
 
     @classmethod
     def from_dict(cls, data: Dict) -> "KnowledgeGraph":
         """Create graph from dict."""
         graph = cls()
-        for node_dict in data.get("nodes", {}).values():
-            node = KnowledgeNode.from_dict(node_dict)
-            graph.add_node(node)
+        nodes_data = data.get("nodes", {})
+        # Support both list format (new) and dict format (legacy)
+        if isinstance(nodes_data, list):
+            for node_dict in nodes_data:
+                node = KnowledgeNode.from_dict(node_dict)
+                graph.add_node(node)
+        else:
+            for node_dict in nodes_data.values():
+                node = KnowledgeNode.from_dict(node_dict)
+                graph.add_node(node)
         return graph
 
 

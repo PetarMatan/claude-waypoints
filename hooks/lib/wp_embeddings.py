@@ -44,20 +44,29 @@ class EmbeddingEntry:
         title: Entry title (for display)
         content: Entry content
         embedding: Vector representation of title + content
+        tag: Technology tag for lessons-learned (e.g., "Python", "Git")
+        session_id: Session that created this entry
     """
     node_id: NodeId
     title: str
     content: str
     embedding: List[float]  # Vector from sentence-transformers
+    tag: Optional[str] = None
+    session_id: str = ""
 
     def to_dict(self) -> dict:
         """Convert to JSON-serializable dict."""
-        return {
+        result = {
             "node_id": self.node_id.to_dict(),
             "title": self.title,
             "content": self.content,
             "embedding": self.embedding
         }
+        if self.tag is not None:
+            result["tag"] = self.tag
+        if self.session_id:
+            result["session_id"] = self.session_id
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "EmbeddingEntry":
@@ -66,7 +75,9 @@ class EmbeddingEntry:
             node_id=NodeId.from_dict(data["node_id"]),
             title=data["title"],
             content=data["content"],
-            embedding=data["embedding"]
+            embedding=data["embedding"],
+            tag=data.get("tag"),
+            session_id=data.get("session_id", "")
         )
 
 
@@ -248,7 +259,9 @@ class EmbeddingsIndex:
                 node_id=lesson.node_id,
                 title=lesson.title,
                 content=lesson.content,
-                embedding=embedding
+                embedding=embedding,
+                tag=lesson.tag,
+                session_id=lesson.session_id
             )
             for lesson, embedding in zip(lessons, embeddings)
         ]
@@ -291,8 +304,8 @@ class EmbeddingsIndex:
                     content=entry.content,
                     category="lessons-learned",
                     date_added=entry.node_id.date,
-                    session_id="",  # Not stored in embedding entry
-                    tag=None  # Not stored in embedding entry
+                    session_id=entry.session_id,
+                    tag=entry.tag
                 )
                 similarities.append((node, similarity))
 
@@ -307,6 +320,14 @@ class EmbeddingsIndex:
     def clear(self) -> None:
         """Clear all indexed entries."""
         self._entries = []
+
+    def get_entries(self) -> List[EmbeddingEntry]:
+        """Get all indexed entries."""
+        return self._entries
+
+    def set_entries(self, entries: List[EmbeddingEntry]) -> None:
+        """Set indexed entries (used for loading cached embeddings)."""
+        self._entries = entries
 
 
 class EmbeddingsStorage:
@@ -424,7 +445,7 @@ class RAGService:
 
         # Create a map of cached embeddings by node_id
         cached_map = {
-            f"{entry.node_id.category}|{entry.node_id.title}|{entry.node_id.date}": entry
+            entry.node_id: entry
             for entry in cached_entries
         }
 
@@ -435,8 +456,7 @@ class RAGService:
         else:
             # Check if all lessons have cached embeddings
             for lesson in lessons:
-                key = f"{lesson.node_id.category}|{lesson.node_id.title}|{lesson.node_id.date}"
-                if key not in cached_map:
+                if lesson.node_id not in cached_map:
                     needs_regeneration = True
                     break
 
@@ -446,12 +466,11 @@ class RAGService:
             self._index.index_lessons(lessons)
 
             # Save to cache
-            entries = self._index._entries
-            self._storage.save_embeddings(entries)
+            self._storage.save_embeddings(self._index.get_entries())
         else:
             # Use cached embeddings
             self._logger.info(f"Using cached embeddings for {len(cached_entries)} lessons")
-            self._index._entries = cached_entries
+            self._index.set_entries(cached_entries)
 
         return True
 
@@ -507,7 +526,7 @@ class RAGService:
             self._index.index_lessons(lessons)
 
             # Save to cache
-            self._storage.save_embeddings(self._index._entries)
+            self._storage.save_embeddings(self._index.get_entries())
 
             return True
         except Exception as e:

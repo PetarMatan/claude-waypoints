@@ -83,6 +83,43 @@ class TestEmbeddingEntry:
         assert len(entry.embedding) == 3
 
 
+    def test_embedding_entry_round_trip_preserves_tag_and_session_id(self):
+        # given
+        node_id = NodeId("lessons-learned", "Use Fixtures", "2026-03-09")
+        entry = EmbeddingEntry(
+            node_id=node_id,
+            title="Use Fixtures",
+            content="Prefer fixtures over inline setup.",
+            embedding=[0.1, 0.2, 0.3],
+            tag="Python",
+            session_id="session-42"
+        )
+
+        # when
+        restored = EmbeddingEntry.from_dict(entry.to_dict())
+
+        # then
+        assert restored.tag == "Python"
+        assert restored.session_id == "session-42"
+        assert restored.title == "Use Fixtures"
+
+    def test_embedding_entry_from_dict_defaults_missing_tag_and_session_id(self):
+        # given - old cache files without tag/session_id fields
+        data = {
+            "node_id": {"category": "lessons-learned", "title": "Old Entry", "date": "2026-03-09"},
+            "title": "Old Entry",
+            "content": "Legacy content.",
+            "embedding": [0.5, 0.6]
+        }
+
+        # when
+        entry = EmbeddingEntry.from_dict(data)
+
+        # then
+        assert entry.tag is None
+        assert entry.session_id == ""
+
+
 class TestEmbeddingsModel:
     """Tests for EmbeddingsModel - wrapper around sentence-transformers."""
 
@@ -278,6 +315,29 @@ class TestEmbeddingsIndex:
         assert len(results) == 2  # Both above threshold
         assert results[0][0].title == "Relevant Lesson"  # Most relevant first
         assert results[0][1] == 0.8  # Similarity score
+
+    def test_search_preserves_tag_and_session_id(self):
+        # given
+        mock_model = MagicMock(spec=EmbeddingsModel)
+        mock_model.encode.return_value = [0.5, 0.5]
+        mock_model.compute_similarity.return_value = 0.9
+
+        index = EmbeddingsIndex(mock_model)
+
+        node_id = NodeId("lessons-learned", "Tagged Lesson", "2026-03-09")
+        lessons = [
+            KnowledgeNode(node_id, "Tagged Lesson", "Content", "lessons-learned", "2026-03-09", "session-99", tag="Kotlin")
+        ]
+        mock_model.encode_batch.return_value = [[0.5, 0.5]]
+        index.index_lessons(lessons)
+
+        # when
+        results = index.search("query", top_k=10, min_similarity=0.3)
+
+        # then
+        assert len(results) == 1
+        assert results[0][0].tag == "Kotlin"
+        assert results[0][0].session_id == "session-99"
 
     def test_search_filters_by_min_similarity_threshold(self):
         # given
