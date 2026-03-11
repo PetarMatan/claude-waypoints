@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - TBD
+
+### Added
+- **Graph-based knowledge storage** — Knowledge entries stored as nodes with typed relationships (led_to, contradicts, supersedes, related_to, applies_to) in JSON graph files. Graph is source of truth; markdown files are generated materialized views.
+- **RAG semantic search for lessons-learned** — Local embeddings via sentence-transformers (all-MiniLM-L6-v2) for similarity-based retrieval. Only lessons-learned are embedded; architecture and decisions are always loaded in full.
+- **Embeddings persistence** — Computed embeddings cached to disk, regenerated only when lessons change.
+- **Knowledge migration CLI** — `scripts/migrate-knowledge.py` migrates existing markdown knowledge files to graph structure. Parses architecture, decisions, and lessons-learned formats with relationship extraction.
+- **Relationship parser** — Extracts bracket-notation relationships (`[led_to: "target"]`) from Claude's knowledge extraction output and resolves them to graph edges.
+- **WP_SUPERVISOR_ACTIVE skip guards** — Hooks skip execution when running inside supervisor mode to avoid double-processing.
+
+### Changed
+- **Phase 2 template: call-site completeness** — New step instructs agent to grep for ALL callers when modifying method signatures, preventing missed wiring points.
+- **Phase 3 template: data complexity** — New guideline to match test data complexity to production reality (nested/recursive structures).
+- **Phase 1 template: scope disambiguation** — Requirements summary now instructs precise scoping when marking items "out of scope" to prevent ambiguity cascading through phases.
+- **Phase 1 Architecture Explorer** — Integration points checklist now includes all callers of methods being modified.
+- Supervisor orchestrator reuses knowledge manager instance instead of creating new ones.
+- Markdown heading levels fixed (## for dates, ### for entries) in generated knowledge views.
+
+### Fixed
+- **Atomic write safety** — Graph and embeddings storage serialize JSON before creating temp files, preventing temp file leaks on serialization errors. Inner `try/except BaseException` ensures cleanup on any failure.
+- **Reviewer task callback** — `_handle_review_task_done` properly registered in review coordinator.
+- **ANSI reset in session output** — Prevents color bleeding in terminal.
+- **PYTHONUNBUFFERED** set in wp-supervisor bin script for reliable output streaming.
+
 ## [1.4.1] - 2026-03-07
 
 ### Fixed
