@@ -231,10 +231,8 @@ if [[ -f "$SETTINGS_FILE" ]]; then
         SKIP_SETTINGS=true
     else
         echo "Updating settings.json..."
-        # Backup existing settings
-        cp "$SETTINGS_FILE" "${SETTINGS_FILE}.backup.$(date +%Y%m%d%H%M%S)"
         update_settings
-        echo "Settings updated (backup created)."
+        echo "Settings updated."
     fi
 else
     echo "No settings.json found."

@@ -1926,10 +1926,11 @@ class TestOrchestratorRAGQueries:
 
                 mock_km = MagicMock()
                 mock_km.load_knowledge_context.return_value = "# Knowledge"
+                mock_km.load_stats = None
+                orchestrator._knowledge_manager = mock_km
 
                 # when
-                with patch('wp_supervisor.orchestrator.KnowledgeManager', return_value=mock_km):
-                    context = orchestrator._load_knowledge_context(query_text="implement authentication")
+                context = orchestrator._load_knowledge_context(query_text="implement authentication")
 
                 # then
                 assert context == "# Knowledge"
@@ -2005,10 +2006,11 @@ class TestOrchestratorRAGQueries:
 
                 mock_km = MagicMock()
                 mock_km.load_knowledge_context.return_value = "# Knowledge from markdown"
+                mock_km.load_stats = None
+                orchestrator._knowledge_manager = mock_km
 
                 # when
-                with patch('wp_supervisor.orchestrator.KnowledgeManager', return_value=mock_km):
-                    context = orchestrator._load_knowledge_context()
+                context = orchestrator._load_knowledge_context()
 
                 # then
                 assert context == "# Knowledge from markdown"

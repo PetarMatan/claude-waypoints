@@ -16,8 +16,10 @@ Embedding Model:
 
 import logging
 import json
+import math
 import os
 import sys
+import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from io import StringIO
@@ -118,6 +120,11 @@ class EmbeddingsModel:
         self.model = None
         self._logger = logging.getLogger(__name__)
 
+    @property
+    def is_loaded(self) -> bool:
+        """Whether the embeddings model is loaded and ready."""
+        return self.model is not None
+
     def load_model(self) -> bool:
         """
         Load the sentence-transformers model.
@@ -197,11 +204,16 @@ class EmbeddingsModel:
 
         Returns:
             Similarity score (0.0 to 1.0, higher = more similar)
-        """
-        # Cosine similarity: dot product / (norm1 * norm2)
-        import math
 
-        # Compute dot product
+        Raises:
+            ValueError: If embeddings have different dimensions
+        """
+        if len(embedding1) != len(embedding2):
+            raise ValueError(
+                f"Embedding dimension mismatch: {len(embedding1)} vs {len(embedding2)}"
+            )
+
+        # Cosine similarity: dot product / (norm1 * norm2)
         dot_product = sum(a * b for a, b in zip(embedding1, embedding2))
 
         # Compute norms
@@ -367,7 +379,7 @@ class EmbeddingsStorage:
 
     def save_embeddings(self, entries: List[EmbeddingEntry]) -> bool:
         """
-        Save embeddings to disk.
+        Save embeddings to disk (atomic write via temp file + rename).
 
         Args:
             entries: List of EmbeddingEntry to save
@@ -379,8 +391,25 @@ class EmbeddingsStorage:
             path = self._get_embeddings_path()
             path.parent.mkdir(parents=True, exist_ok=True)
 
-            data = [entry.to_dict() for entry in entries]
-            path.write_text(json.dumps(data, indent=2))
+            # Serialize before creating temp file to avoid leaking on TypeError/AttributeError
+            json_str = json.dumps([entry.to_dict() for entry in entries], indent=2)
+
+            # Atomic write via temp file + rename
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    'w', dir=path.parent, delete=False, suffix='.tmp'
+                ) as tmp:
+                    tmp_path = tmp.name
+                    tmp.write(json_str)
+                os.replace(tmp_path, str(path))
+            except BaseException:
+                if tmp_path:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                raise
             return True
         except (OSError, IOError) as e:
             self._logger.error(f"Failed to save embeddings: {e}")
@@ -430,13 +459,7 @@ class RAGService:
             Caller should handle gracefully (disable RAG, load all lessons).
         """
         # Load model if not already loaded
-        # Check if model has the attribute (for real models)
-        if hasattr(self._model, 'model'):
-            if self._model.model is None:
-                if not self._model.load_model():
-                    return False
-        else:
-            # For mocks or objects without .model attribute, still try to load
+        if not self._model.is_loaded:
             if not self._model.load_model():
                 return False
 
@@ -514,7 +537,7 @@ class RAGService:
         """
         try:
             # Ensure model is loaded (rebuild_index may be called without initialize)
-            if hasattr(self._model, 'model') and self._model.model is None:
+            if not self._model.is_loaded:
                 if not self._model.load_model():
                     self._logger.error("Cannot rebuild index: embeddings model failed to load")
                     return False

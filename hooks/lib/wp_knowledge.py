@@ -543,15 +543,11 @@ class KnowledgeManager:
 
         self._load_graphs()
 
-        # Check if graphs are empty and are real dicts (not mocks)
-        # If empty real graphs, fall back to markdown
-        if (isinstance(self._project_graph.nodes, dict) and
-            isinstance(self._global_graph.nodes, dict)):
-            total_nodes = len(self._project_graph.nodes) + len(self._global_graph.nodes)
-            if total_nodes == 0 and not (self._enable_rag and query_text):
-                # No graph data, use legacy markdown loading
-                self.load_stats = {"mode": "legacy_fallback", "rag_used": False, "reason": "empty graphs"}
-                return self.load_knowledge_context_legacy()
+        # Check if graphs are empty — fall back to legacy markdown if no graph data
+        total_nodes = len(self._project_graph.nodes) + len(self._global_graph.nodes)
+        if total_nodes == 0 and not (self._enable_rag and query_text):
+            self.load_stats = {"mode": "legacy_fallback", "rag_used": False, "reason": "empty graphs"}
+            return self.load_knowledge_context_legacy()
 
         # Load architecture from graph [REQ-10]
         arch_nodes = self._project_graph.get_nodes_by_category(KnowledgeCategory.ARCHITECTURE)
@@ -628,16 +624,16 @@ class KnowledgeManager:
         for node in nodes:
             by_date[node.date_added].append(node)
 
-        # Format as markdown
+        # Format as markdown (### for dates, #### for entries — nested under ## category)
         lines = []
         for date_key in sorted(by_date.keys(), reverse=True):
             date_nodes = by_date[date_key]
-            lines.append(f"## {date_key}")
+            lines.append(f"### {date_key}")
             for node in date_nodes:
                 if node.tag:
-                    lines.append(f"\n### [{node.tag}] {node.title}")
+                    lines.append(f"\n#### [{node.tag}] {node.title}")
                 else:
-                    lines.append(f"\n### {node.title}")
+                    lines.append(f"\n#### {node.title}")
                 lines.append(node.content)
             lines.append("")
 
@@ -819,8 +815,10 @@ class KnowledgeManager:
                 counts["lessons-learned"] = lessons_count
 
         # Save graphs [REQ-4]
-        self._graph_storage.save_project_graph(self.project_id, self._project_graph)
-        self._graph_storage.save_global_graph(self._global_graph)
+        if not self._graph_storage.save_project_graph(self.project_id, self._project_graph):
+            self._logger.warning("Failed to save project graph")
+        if not self._graph_storage.save_global_graph(self._global_graph):
+            self._logger.warning("Failed to save global graph")
 
         # Regenerate markdown views [REQ-15]
         self.regenerate_all_markdown_views()
@@ -1162,28 +1160,37 @@ class KnowledgeManager:
         if not nodes:
             return category.header
 
-        # Group by date and session
         from collections import defaultdict
-        by_session = defaultdict(list)
 
-        for node in nodes:
-            key = (node.date_added, node.session_id)
-            by_session[key].append(node)
-
-        # Generate markdown
         lines = [category.header.rstrip()]
 
-        for (date_str, session_id), session_nodes in sorted(by_session.items(), reverse=True):
-            lines.append(f"\n## {date_str} (Session: {session_id})\n")
+        if category == KnowledgeCategory.LESSONS_LEARNED:
+            # Lessons-learned: group by tag to match legacy format [REQ-14]
+            # Format: ## [Tag] / ### Title (YYYY-MM-DD)
+            by_tag = defaultdict(list)
+            for node in nodes:
+                tag = node.tag or "General"
+                by_tag[tag].append(node)
 
-            for node in session_nodes:
-                if node.tag:
-                    # Lessons-learned format with tag [REQ-14]
-                    lines.append(f"### [{node.tag}] {node.title}")
-                else:
+            for tag in sorted(by_tag.keys()):
+                lines.append(f"\n## [{tag}]\n")
+                for node in sorted(by_tag[tag], key=lambda n: n.date_added, reverse=True):
+                    lines.append(f"### {node.title} ({node.date_added})")
+                    lines.append(node.content)
+                    lines.append("")
+        else:
+            # Architecture/decisions: group by date and session
+            by_session = defaultdict(list)
+            for node in nodes:
+                key = (node.date_added, node.session_id)
+                by_session[key].append(node)
+
+            for (date_str, session_id), session_nodes in sorted(by_session.items(), reverse=True):
+                lines.append(f"\n## {date_str} (Session: {session_id})\n")
+                for node in session_nodes:
                     lines.append(f"### {node.title}")
-                lines.append(node.content)
-                lines.append("")
+                    lines.append(node.content)
+                    lines.append("")
 
         return '\n'.join(lines)
 
@@ -1209,11 +1216,13 @@ class KnowledgeManager:
 
             dec_path = self._get_knowledge_file_path(KnowledgeCategory.DECISIONS)
             dec_content = self.generate_markdown_from_graph(self._project_graph, KnowledgeCategory.DECISIONS)
+            dec_path.parent.mkdir(parents=True, exist_ok=True)
             dec_path.write_text(dec_content)
 
             # Regenerate global lessons-learned
             lessons_path = self._get_knowledge_file_path(KnowledgeCategory.LESSONS_LEARNED)
             lessons_content = self.generate_markdown_from_graph(self._global_graph, KnowledgeCategory.LESSONS_LEARNED)
+            lessons_path.parent.mkdir(parents=True, exist_ok=True)
             lessons_path.write_text(lessons_content)
 
             return True

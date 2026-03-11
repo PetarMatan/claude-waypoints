@@ -16,7 +16,9 @@ Storage [REQ-4]:
 
 import json
 import logging
+import os
 import re
+import tempfile
 from dataclasses import dataclass, field, asdict
 from datetime import date, datetime
 from pathlib import Path
@@ -352,9 +354,25 @@ class GraphStorage:
             # Create directory if it doesn't exist
             path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Save graph as JSON
-            data = graph.to_dict()
-            path.write_text(json.dumps(data, indent=2))
+            # Serialize before creating temp file to avoid leaking on TypeError/AttributeError
+            json_str = json.dumps(graph.to_dict(), indent=2)
+
+            # Atomic write via temp file + rename
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    'w', dir=path.parent, delete=False, suffix='.tmp'
+                ) as tmp:
+                    tmp_path = tmp.name
+                    tmp.write(json_str)
+                os.replace(tmp_path, str(path))
+            except BaseException:
+                if tmp_path:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                raise
             return True
         except (OSError, IOError) as e:
             self._logger.error(f"Failed to save graph to {path}: {e}")
@@ -440,26 +458,3 @@ class RelationshipParser:
         result = re.sub(r'\s+', ' ', result)
         return result.strip()
 
-    @staticmethod
-    def _parse_single_marker(marker: str) -> Optional[Tuple[RelationshipType, str]]:
-        """
-        Parse a single relationship marker.
-
-        Args:
-            marker: Marker text like 'led_to: "target title"'
-
-        Returns:
-            (RelationshipType, target_title) or None if invalid
-        """
-        # This is a helper method, main logic is in parse_relationships
-        pattern = r'(\w+):\s*"([^"]+)"'
-        match = re.match(pattern, marker)
-        if not match:
-            return None
-
-        try:
-            rel_type = RelationshipType(match.group(1))
-            target_title = match.group(2)
-            return (rel_type, target_title)
-        except ValueError:
-            return None

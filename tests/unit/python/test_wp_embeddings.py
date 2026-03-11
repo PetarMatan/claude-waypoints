@@ -8,7 +8,7 @@ import tempfile
 import pytest
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 
 # Add hooks/lib to path
 sys.path.insert(0, 'hooks/lib')
@@ -243,6 +243,36 @@ class TestEmbeddingsModel:
 
         # then
         assert result < 0.1  # Should be close to 0.0
+
+
+    def test_compute_similarity_raises_on_dimension_mismatch(self):
+        # given
+        model = EmbeddingsModel()
+        embedding1 = [1.0, 0.0, 0.0]
+        embedding2 = [0.0, 1.0]
+
+        # when/then
+        with pytest.raises(ValueError, match="dimension mismatch"):
+            model.compute_similarity(embedding1, embedding2)
+
+    def test_is_loaded_returns_false_before_loading(self):
+        # given
+        model = EmbeddingsModel()
+
+        # then
+        assert model.is_loaded is False
+
+    def test_is_loaded_returns_true_after_loading(self):
+        # given
+        model = EmbeddingsModel()
+        mock_sentence_transformer = MagicMock()
+
+        # when
+        with patch('wp_embeddings.SentenceTransformer', return_value=mock_sentence_transformer):
+            model.load_model()
+
+        # then
+        assert model.is_loaded is True
 
 
 class TestEmbeddingsIndex:
@@ -639,6 +669,7 @@ class TestRAGService:
         # given - [ERR-1] Embedding model download failure
         mock_model = MagicMock(spec=EmbeddingsModel)
         mock_model.load_model.return_value = False
+        type(mock_model).is_loaded = PropertyMock(return_value=False)
         mock_storage = MagicMock(spec=EmbeddingsStorage)
 
         service = RAGService(mock_model, mock_storage)

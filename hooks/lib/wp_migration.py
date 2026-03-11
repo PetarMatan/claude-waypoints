@@ -482,53 +482,6 @@ class KnowledgeMigrator:
                 return node_id
         return None
 
-    def _check_for_duplicates(
-        self,
-        entries: List[Dict],
-        existing_graph
-    ) -> List[Dict]:
-        """
-        Filter out entries that already exist in graph [ERR-3].
-
-        Args:
-            entries: List of parsed entry dicts
-            existing_graph: Existing KnowledgeGraph
-
-        Returns:
-            List of non-duplicate entries
-        """
-        non_duplicates = []
-        for entry in entries:
-            node_id = NodeId(
-                category=entry.get("category", ""),
-                title=entry["title"],
-                date=entry["date"]
-            )
-            if existing_graph.get_node(node_id) is None:
-                non_duplicates.append(entry)
-        return non_duplicates
-
-    def _backup_markdown_file(self, markdown_path: Path) -> bool:
-        """
-        Create backup of markdown file before migration.
-
-        Creates: {filename}.backup.{timestamp}
-
-        Args:
-            markdown_path: Path to markdown file
-
-        Returns:
-            True if successful, False on error
-        """
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup_path = markdown_path.parent / f"{markdown_path.name}.backup.{timestamp}"
-            backup_path.write_text(markdown_path.read_text())
-            return True
-        except Exception as e:
-            self._logger.error(f"Failed to backup {markdown_path}: {e}")
-            return False
-
 
 def migrate_knowledge_cli(
     knowledge_base_dir: Path,

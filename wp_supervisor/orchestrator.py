@@ -178,11 +178,10 @@ class WPOrchestrator:
         Returns:
             Formatted knowledge context string
         """
-        manager = KnowledgeManager(str(self.working_dir))
-        context = manager.load_knowledge_context(query_text=query_text)
+        context = self._knowledge_manager.load_knowledge_context(query_text=query_text)
 
-        if manager.load_stats:
-            stats = manager.load_stats
+        if self._knowledge_manager.load_stats:
+            stats = self._knowledge_manager.load_stats
             mode = stats.get("mode", "unknown")
             if stats.get("rag_used"):
                 self.logger.log_event(
@@ -246,7 +245,7 @@ class WPOrchestrator:
         try:
             counts = self.markers.apply_staged_knowledge(str(self.working_dir))
             if counts:
-                summary = KnowledgeManager(str(self.working_dir)).get_updated_files_summary(counts)
+                summary = self._knowledge_manager.get_updated_files_summary(counts)
                 self.display.knowledge_summary(summary)
             self.markers.clear_staged_knowledge()
         except Exception as e:
