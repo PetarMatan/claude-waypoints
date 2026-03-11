@@ -158,6 +158,7 @@ Where must new code hook into existing flows?
 - Interceptors or filters where validation occurs
 - Callbacks where state changes should be recorded
 - Completion handlers where cleanup should happen
+- ALL callers of methods being modified — not just the primary call site
 
 **Search patterns:**
 ```bash
@@ -419,6 +420,8 @@ structural skeleton of the solution WITHOUT implementing business logic.
      identify the consumer and add a stub for it
    - If new code needs to deliver data back to existing code,
      add the receiving stub in the existing file — not just the sending side
+7. Verify call-site completeness: when modifying a method's signature or adding
+   new parameters, grep for ALL callers and evaluate which ones need the change
 
 ## Guidelines
 - Focus on the PUBLIC API - what will consumers of this code use?
@@ -486,6 +489,8 @@ that define the expected behavior.
   the duplicated logic.
 - The Codebase Context section in requirements contains file paths and project structure.
   Prefer using these paths directly rather than re-exploring the project structure.
+- **Data complexity**: Match test data complexity to production reality. If the code
+  handles nested or recursive structures, test with multi-level inputs, not just flat ones.
 
 ## Important
 - Do NOT implement the actual code yet
@@ -577,6 +582,8 @@ Create a comprehensive requirements summary based on our discussion.
 - [EDGE-1] [Edge case and how it should be handled]
 - [ERR-1] [Error scenario and expected behavior]
 [Include ALL edge cases we discussed]
+[When scoping something as "out of scope," be precise about what is excluded
+to avoid ambiguity that cascades through later phases.]
 
 ## Constraints & Decisions
 - [Decision/constraint and rationale]
