@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.5.0] - TBD
+## [1.5.0] - 2026-03-11
 
 ### Added
 - **Graph-based knowledge storage** — Knowledge entries stored as nodes with typed relationships (led_to, contradicts, supersedes, related_to, applies_to) in JSON graph files. Graph is source of truth; markdown files are generated materialized views.
