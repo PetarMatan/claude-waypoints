@@ -55,6 +55,12 @@ UsageRecorder = Callable[[int, "ResultMessage"], None]
 
 def read_user_input(prompt: str = "") -> str:
     """Read user input, supporting file paths (@/path, ./path, ~/path)."""
+    # Reset ANSI state and force readline to recalculate terminal width.
+    # Without this, ANSI sequences from response streaming leave readline
+    # confused about cursor position, causing text to vanish on line wrap.
+    sys.stdout.write("\033[0m")
+    sys.stdout.flush()
+    readline.parse_and_bind("")  # force readline to re-query terminal size
     try:
         user_input = input(prompt)
     except (EOFError, KeyboardInterrupt):
@@ -247,13 +253,14 @@ class SessionRunner:
                     if signal:
                         phase_complete = True
 
-            # Pre-completion review gate: wait for in-flight reviews and inject feedback
+            # Pre-completion review gate: wait for in-flight reviews and inject feedback.
+            # Keep phase_complete=True so the loop skips user input and goes
+            # directly back to the gate on the next iteration.
             if review_coordinator:
                 gate_passed = await self._review_gate(
                     client_context_manager, phase, phase_checker, review_coordinator
                 )
                 if not gate_passed:
-                    phase_complete = False
                     continue
             break
 
@@ -398,7 +405,8 @@ class SessionRunner:
         if not text or not patterns:
             return False
         for line in text.splitlines():
-            stripped = line.strip()
+            # Strip whitespace, then strip markdown formatting (backticks, quotes, bold)
+            stripped = line.strip().strip('`\'"*_')
             if stripped in patterns:
                 return True
         return False

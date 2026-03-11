@@ -203,7 +203,18 @@ class ReviewCoordinator:
             self._logger.log_event("REVIEWER", "Review already in progress, changes will be included in follow-up")
             return
         self._is_reviewing = True
-        asyncio.create_task(self._run_review(event))
+        task = asyncio.create_task(self._run_review(event))
+        task.add_done_callback(self._handle_review_task_done)
+
+    def _handle_review_task_done(self, task: asyncio.Task) -> None:
+        """Suppress unhandled exceptions from review tasks (e.g. context exhaustion)."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            self._logger.log_event("REVIEWER", f"Review task failed: {exc}")
+            self._is_reviewing = False
+            self._review_pending.clear()
 
     async def _run_review(self, event: TriggerEvent) -> None:
         """Run review loop. Continues until no more changes accumulate."""

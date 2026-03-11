@@ -464,5 +464,88 @@ class TestKnowledgeIntegration:
             assert "Project Knowledge" in context
             assert "No architecture documented yet" in context
 
+
+class TestRAGIntegrationInActivation:
+    """Tests for RAG query integration in wp-activation hook."""
+
+    def test_init_command_can_accept_query_text_for_rag(self):
+        """Should support query_text parameter for RAG filtering of lessons."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given - [REQ-7] Query RAG at workflow start
+            knowledge_dir = Path(tmpdir) / ".claude" / "waypoints" / "knowledge"
+            knowledge_dir.mkdir(parents=True)
+
+            # Create lessons-learned with tags
+            (knowledge_dir / "lessons-learned.md").write_text("""# Lessons Learned
+
+## [Python]
+
+### Use Type Hints (2026-03-09)
+Always add type hints to function signatures.
+
+## [Go]
+
+### Use Interfaces (2026-03-09)
+Define interfaces for abstraction.
+""")
+
+            project_dir = Path(tmpdir) / "test-project"
+            project_dir.mkdir()
+            (project_dir / ".waypoints-project").write_text("test-project")
+
+            env = {"HOME": tmpdir, "WP_INSTALL_DIR": str(PROJECT_ROOT)}
+            # In real usage, query_text would come from task description
+            input_data = generate_bash_hook_input(
+                command="true # wp:init",
+                cwd=str(project_dir),
+                session_id="test-session"
+            )
+
+            # when
+            exit_code, stdout, stderr = run_hook("wp-activation", input_data, env)
+
+            # then
+            assert exit_code == 0
+            response = json.loads(stdout)
+            context = response.get("hookSpecificOutput", {}).get("additionalContext", "")
+            # Should include knowledge (filtered or unfiltered based on RAG availability)
+            assert "Project Knowledge" in context
+
+    def test_init_loads_lessons_from_markdown_when_rag_disabled(self):
+        """Should fallback to markdown loading when RAG is disabled."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            knowledge_dir = Path(tmpdir) / ".claude" / "waypoints" / "knowledge"
+            knowledge_dir.mkdir(parents=True)
+            (knowledge_dir / "lessons-learned.md").write_text("""# Lessons Learned
+
+## [Docker]
+
+### Multi-Stage Builds (2026-03-09)
+Use multi-stage builds to reduce image size.
+""")
+
+            project_dir = Path(tmpdir) / "test-project"
+            project_dir.mkdir()
+            (project_dir / ".waypoints-project").write_text("test-project")
+
+            env = {"HOME": tmpdir, "WP_INSTALL_DIR": str(PROJECT_ROOT)}
+            input_data = generate_bash_hook_input(
+                command="true # wp:init",
+                cwd=str(project_dir),
+                session_id="test-session"
+            )
+
+            # when
+            exit_code, stdout, stderr = run_hook("wp-activation", input_data, env)
+
+            # then
+            assert exit_code == 0
+            response = json.loads(stdout)
+            context = response.get("hookSpecificOutput", {}).get("additionalContext", "")
+            # Should include lessons from markdown
+            assert "[Docker]" in context or "Multi-Stage Builds" in context
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

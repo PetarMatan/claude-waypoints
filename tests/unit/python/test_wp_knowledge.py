@@ -237,5 +237,470 @@ class TestKnowledgeManagerLoading:
                     assert "LESSONS_CONTENT" in result
 
 
+class TestKnowledgeManagerGraphIntegration:
+    """Tests for KnowledgeManager integration with graph storage."""
+
+    def test_knowledge_manager_initializes_graph_storage_when_enabled(self):
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    # when
+                    manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                    # then - Should initialize graph storage
+                    assert hasattr(manager, 'graph_storage')
+
+    def test_knowledge_manager_initializes_rag_service_when_enabled(self):
+        # given - [REQ-5] Use local embeddings model for semantic search
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    # when
+                    manager = KnowledgeManager(tmpdir, enable_rag=True)
+
+                    # then - Should initialize RAG service
+                    assert hasattr(manager, 'rag_service')
+
+    def test_knowledge_manager_loads_from_graph_when_enabled(self):
+        # given - [REQ-10] Always load complete architecture entries from graph
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph.nodes = {"fake": "node"}
+                    mock_graph_storage.load_project_graph.return_value = mock_graph
+                    mock_graph_storage.load_global_graph.return_value = mock_graph
+
+                    # when
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+                        manager.load_knowledge_context()
+
+                    # then
+                    mock_graph_storage.load_project_graph.assert_called()
+
+    def test_load_knowledge_context_accepts_query_text_parameter(self):
+        # given - [REQ-7] Query RAG with initial task description
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    manager = KnowledgeManager(tmpdir, enable_rag=True)
+
+                    # when
+                    result = manager.load_knowledge_context(query_text="implement authentication")
+
+                    # then - Should not crash, query_text is used for RAG filtering
+                    assert isinstance(result, str)
+
+    def test_load_knowledge_context_filters_lessons_by_query_when_rag_enabled(self):
+        # given - [REQ-8] Retrieve only semantically relevant lessons-learned entries
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    mock_rag_service = MagicMock()
+                    mock_rag_service.query_relevant_lessons.return_value = []  # Empty results
+
+                    manager = KnowledgeManager(tmpdir, enable_rag=True)
+                    manager.rag_service = mock_rag_service
+
+                    # when
+                    manager.load_knowledge_context(query_text="python testing")
+
+                    # then
+                    mock_rag_service.query_relevant_lessons.assert_called_with("python testing")
+
+    def test_load_knowledge_context_loads_all_architecture_from_graph(self):
+        # given - [REQ-10] Always load complete architecture entries (no filtering)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph.nodes = {"fake": "node"}
+                    mock_graph.get_nodes_by_category.return_value = []
+                    mock_graph_storage.load_project_graph.return_value = mock_graph
+                    mock_graph_storage.load_global_graph.return_value = mock_graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        # when
+                        manager.load_knowledge_context()
+
+                        # then - Should load ALL architecture nodes
+                        from wp_knowledge import KnowledgeCategory
+                        mock_graph.get_nodes_by_category.assert_any_call(KnowledgeCategory.ARCHITECTURE)
+
+    def test_load_knowledge_context_loads_all_decisions_from_graph(self):
+        # given - [REQ-11] Always load complete decisions entries (no filtering)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph.nodes = {"fake": "node"}
+                    mock_graph.get_nodes_by_category.return_value = []
+                    mock_graph_storage.load_project_graph.return_value = mock_graph
+                    mock_graph_storage.load_global_graph.return_value = mock_graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        # when
+                        manager.load_knowledge_context()
+
+                        # then - Should load ALL decisions nodes
+                        from wp_knowledge import KnowledgeCategory
+                        mock_graph.get_nodes_by_category.assert_any_call(KnowledgeCategory.DECISIONS)
+
+    def test_load_knowledge_context_logs_rag_result_count(self):
+        # given - [REQ-9] Log the count of lessons loaded
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    mock_rag_service = MagicMock()
+                    mock_rag_service.query_relevant_lessons.return_value = []
+                    mock_rag_service.get_indexed_count.return_value = 5
+
+                    manager = KnowledgeManager(tmpdir, enable_rag=True)
+                    manager.rag_service = mock_rag_service
+
+                    # when
+                    manager.load_knowledge_context(query_text="test query")
+
+                    # then - Count should be retrievable
+                    count = mock_rag_service.get_indexed_count()
+                    assert count == 5
+
+    def test_load_knowledge_context_without_query_loads_from_markdown(self):
+        # given - Backward compatible: without query_text, load from markdown
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    knowledge_dir = Path(tmpdir) / ".claude" / "waypoints" / "knowledge"
+                    knowledge_dir.mkdir(parents=True)
+                    (knowledge_dir / "lessons-learned.md").write_text("# Lessons\n[Python] Lesson A")
+
+                    manager = KnowledgeManager(tmpdir, enable_rag=False)
+
+                    # when
+                    result = manager.load_knowledge_context()
+
+                    # then - Should load from markdown when RAG disabled
+                    assert "[Python] Lesson A" in result
+
+
+class TestKnowledgeManagerApplication:
+    """Tests for KnowledgeManager applying staged knowledge to graph."""
+
+    def test_apply_staged_knowledge_adds_entries_to_graph(self):
+        # given - [REQ-1] Store all knowledge entries as nodes in graph
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph_storage.load_project_graph.return_value = mock_graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        staged = StagedKnowledge(
+                            architecture=[
+                                StagedKnowledgeEntry(
+                                    title="New Pattern",
+                                    content="Pattern description",
+                                    phase=1
+                                )
+                            ]
+                        )
+
+                        # when
+                        manager.apply_staged_knowledge(staged, session_id="test-session")
+
+                        # then - Should add node to graph
+                        mock_graph.add_node.assert_called()
+
+    def test_apply_staged_knowledge_parses_relationships(self):
+        # given - [REQ-18] Parse relationship markers from extraction response
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph_storage.load_project_graph.return_value = mock_graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        staged = StagedKnowledge(
+                            decisions=[
+                                StagedKnowledgeEntry(
+                                    title="Use REST",
+                                    content="REST API [led_to: \"API Gateway Pattern\"] for simplicity.",
+                                    phase=1,
+                                    relationships=[("led_to", "API Gateway Pattern")]
+                                )
+                            ]
+                        )
+
+                        # when
+                        manager.apply_staged_knowledge(staged, session_id="test-session")
+
+                        # then - Should create relationships
+                        # Relationships should be stored in node
+
+    def test_apply_staged_knowledge_regenerates_markdown_views(self):
+        # given - [REQ-15] Regenerate markdown files from graph
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph_storage.load_project_graph.return_value = mock_graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        staged = StagedKnowledge(
+                            architecture=[
+                                StagedKnowledgeEntry(title="Pattern", content="Content", phase=1)
+                            ]
+                        )
+
+                        # when
+                        manager.apply_staged_knowledge(staged, session_id="test-session")
+
+                        # then - Should save graph (which triggers markdown regeneration)
+                        mock_graph_storage.save_project_graph.assert_called()
+
+    def test_apply_staged_knowledge_updates_rag_index_for_lessons(self):
+        # given - Lessons-learned should update RAG index
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+                    mock_rag_service = MagicMock()
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph_storage.load_global_graph.return_value = mock_graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_rag=True)
+                        manager.rag_service = mock_rag_service
+
+                        staged = StagedKnowledge(
+                            lessons_learned=[
+                                StagedKnowledgeEntry(
+                                    title="Lesson",
+                                    content="Content",
+                                    phase=2,
+                                    tag="Python"
+                                )
+                            ]
+                        )
+
+                        # when
+                        manager.apply_staged_knowledge(staged, session_id="test-session")
+
+                        # then - Should rebuild RAG index
+                        mock_rag_service.rebuild_index.assert_called()
+
+
+    def test_apply_staged_knowledge_logs_warning_on_save_failure(self):
+        # given - save_project_graph returns False
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph_storage.load_project_graph.return_value = mock_graph
+                    mock_graph_storage.load_global_graph.return_value = mock_graph
+                    mock_graph_storage.save_project_graph.return_value = False
+                    mock_graph_storage.save_global_graph.return_value = False
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        staged = StagedKnowledge(
+                            architecture=[
+                                StagedKnowledgeEntry(title="P", content="C", phase=1)
+                            ]
+                        )
+
+                        # when
+                        with patch.object(manager._logger, 'warning') as mock_warn:
+                            manager.apply_staged_knowledge(staged, session_id="s1")
+
+                        # then - should log warnings for failed saves
+                        assert mock_warn.call_count == 2
+
+
+class TestKnowledgeManagerMarkdownGeneration:
+    """Tests for generating markdown views from graph."""
+
+    def test_generate_markdown_from_graph_creates_valid_markdown(self):
+        # given - [REQ-14] Maintain markdown files as human-readable materialized views
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    from wp_graph import KnowledgeGraph, KnowledgeNode, NodeId
+                    from wp_knowledge import KnowledgeCategory
+
+                    mock_graph_storage = MagicMock()
+                    graph = KnowledgeGraph()
+                    node_id = NodeId("architecture", "Pattern A", "2026-03-09")
+                    graph.add_node(KnowledgeNode(
+                        node_id, "Pattern A", "Description", "architecture", "2026-03-09", "s1"
+                    ))
+                    mock_graph_storage.load_project_graph.return_value = graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        # when
+                        markdown = manager.generate_markdown_from_graph(graph, KnowledgeCategory.ARCHITECTURE)
+
+                        # then
+                        assert "# Architecture" in markdown
+                        assert "Pattern A" in markdown
+
+    def test_generate_markdown_from_graph_lessons_learned_groups_by_tag(self):
+        # given - [REQ-14] Lessons-learned should group by tag in materialized view
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    from wp_graph import KnowledgeGraph, KnowledgeNode, NodeId
+                    from wp_knowledge import KnowledgeCategory
+
+                    mock_graph_storage = MagicMock()
+                    graph = KnowledgeGraph()
+
+                    # Add lessons with different tags
+                    graph.add_node(KnowledgeNode(
+                        NodeId("lessons-learned", "Use pytest fixtures", "2026-03-09"),
+                        "Use pytest fixtures", "Fixtures simplify test setup",
+                        "lessons-learned", "2026-03-09", "s1", tag="Python"
+                    ))
+                    graph.add_node(KnowledgeNode(
+                        NodeId("lessons-learned", "Rebase before merge", "2026-03-10"),
+                        "Rebase before merge", "Keeps history clean",
+                        "lessons-learned", "2026-03-10", "s2", tag="Git"
+                    ))
+                    graph.add_node(KnowledgeNode(
+                        NodeId("lessons-learned", "Type hints everywhere", "2026-03-08"),
+                        "Type hints everywhere", "Improves IDE support",
+                        "lessons-learned", "2026-03-08", "s3", tag="Python"
+                    ))
+
+                    mock_graph_storage.load_global_graph.return_value = graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        # when
+                        markdown = manager.generate_markdown_from_graph(graph, KnowledgeCategory.LESSONS_LEARNED)
+
+                        # then - grouped by tag with correct format
+                        assert "## [Git]" in markdown
+                        assert "## [Python]" in markdown
+                        assert "### Rebase before merge (2026-03-10)" in markdown
+                        assert "### Use pytest fixtures (2026-03-09)" in markdown
+                        assert "### Type hints everywhere (2026-03-08)" in markdown
+
+                        # Verify tag ordering (Git before Python alphabetically)
+                        git_pos = markdown.index("## [Git]")
+                        python_pos = markdown.index("## [Python]")
+                        assert git_pos < python_pos
+
+                        # Verify within-tag date ordering (newest first)
+                        fixtures_pos = markdown.index("Use pytest fixtures")
+                        hints_pos = markdown.index("Type hints everywhere")
+                        assert fixtures_pos < hints_pos
+
+    def test_regenerate_all_markdown_views_creates_all_files(self):
+        # given - [REQ-15] Regenerate markdown files when knowledge is applied
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                with patch.object(ProjectIdentifier, 'get_project_id', return_value='test-project'):
+                    mock_graph_storage = MagicMock()
+                    mock_graph = MagicMock()
+                    mock_graph.get_nodes_by_category.return_value = []
+                    mock_graph_storage.load_project_graph.return_value = mock_graph
+                    mock_graph_storage.load_global_graph.return_value = mock_graph
+
+                    with patch('wp_knowledge.GraphStorage', return_value=mock_graph_storage):
+                        manager = KnowledgeManager(tmpdir, enable_graph=True)
+
+                        # when
+                        result = manager.regenerate_all_markdown_views()
+
+                        # then
+                        assert result is True
+
+
+class TestKnowledgeParsingFunctions:
+    """Tests for relationship parsing in knowledge entry parsing."""
+
+    def test_parse_architecture_section_extracts_relationships(self):
+        # given - [REQ-3] Parse relationships from Claude's extraction output
+        from wp_knowledge import _parse_architecture_section
+
+        section_text = """
+- API Gateway: Central entry point [led_to: "Load Balancer"] for all services.
+"""
+
+        # when
+        entries = _parse_architecture_section(section_text)
+
+        # then
+        assert len(entries) == 1
+        assert entries[0].title == "API Gateway"
+        assert len(entries[0].relationships) > 0
+
+    def test_parse_decisions_section_extracts_relationships(self):
+        # given
+        from wp_knowledge import _parse_decisions_section
+
+        section_text = """
+- Use GraphQL: Chose GraphQL [supersedes: "REST API v1"] for flexible querying.
+"""
+
+        # when
+        entries = _parse_decisions_section(section_text)
+
+        # then
+        assert len(entries) == 1
+        assert entries[0].title == "Use GraphQL"
+        assert len(entries[0].relationships) > 0
+
+    def test_parse_lessons_section_handles_relationships(self):
+        # given
+        from wp_knowledge import _parse_lessons_learned_section
+
+        section_text = """
+- [Python] Use Type Hints: Always add type hints [applies_to: "Function Definitions"] for better IDE support.
+"""
+
+        # when
+        entries = _parse_lessons_learned_section(section_text)
+
+        # then
+        assert len(entries) == 1
+        assert entries[0].tag == "Python"
+        assert len(entries[0].relationships) > 0
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

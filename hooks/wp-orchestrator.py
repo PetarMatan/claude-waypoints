@@ -77,6 +77,10 @@ Fix the failing tests and try again."""
 
 
 def main():
+    # Skip when running under supervisor control (SDK handles hooks)
+    if os.environ.get("WP_SUPERVISOR_ACTIVE") == "1":
+        return
+
     # Parse hook input
     hook = HookInput.from_stdin()
 

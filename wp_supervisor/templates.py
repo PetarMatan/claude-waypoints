@@ -301,8 +301,8 @@ Keep gathering until you have complete clarity on both business requirements and
 - Focus on understanding WHAT needs to be built (behavior), not HOW to build it (implementation)
 - Do NOT ask the user to confirm requirements - the supervisor will handle that
 - When YOU believe requirements are complete and unambiguous, output exactly `---PHASE_COMPLETE---` on its own line (no bold, no markdown - the supervisor parses this signal)
-- **CRITICAL**: Do NOT output `---PHASE_COMPLETE---` if you have just asked the user clarifying questions. Wait for the user to answer ALL your questions before signaling completion. NEVER emit the signal in the same turn where you ask questions.
 - The user will review and approve the requirements document before proceeding
+- **ABSOLUTE RULE**: If your output contains ANY questions, you MUST NOT include `---PHASE_COMPLETE---`. The signal and questions are mutually exclusive — NEVER in the same response. Ask your questions, wait for answers, THEN signal completion in a later turn.
 
 Begin by exploring the codebase, then ask the user about their requirements (if not already provided).
 """
@@ -374,10 +374,9 @@ Once exploration results return:
 ### Step 4: Complete Requirements
 When requirements are complete and unambiguous, output `---PHASE_COMPLETE---`
 
-**CRITICAL**: Do NOT output `---PHASE_COMPLETE---` if you have just asked the user clarifying questions.
-You MUST wait for the user to answer ALL your questions before signaling completion.
-Only emit the signal AFTER you have received and processed the user's responses and
-have no remaining questions or ambiguities.
+**ABSOLUTE RULE**: `---PHASE_COMPLETE---` and questions are mutually exclusive.
+If your response contains ANY questions, do NOT include the signal.
+Ask questions → wait for answers → THEN signal in a separate response.
 
 ## Output Style
 - Be concise. The user sees everything you print — minimize noise.
@@ -393,7 +392,7 @@ have no remaining questions or ambiguities.
 - Do NOT write any code in this phase
 - Focus on WHAT needs to be built (behavior), not HOW to build it
 - The subagents handle broad technical discovery; you handle business requirements and fill gaps
-- NEVER emit `---PHASE_COMPLETE---` in the same turn where you ask clarifying questions — wait for answers first
+- **ABSOLUTE RULE**: If your output contains ANY questions, you MUST NOT include `---PHASE_COMPLETE---`. The signal and questions are mutually exclusive — NEVER in the same response.
 """
 
 PHASE2_CONTEXT = """# Waypoints Workflow - Phase 2: Interface Design
@@ -443,6 +442,7 @@ structural skeleton of the solution WITHOUT implementing business logic.
 - Do NOT implement business logic
 - Method bodies should be stubs only
 - Code MUST compile successfully
+- Do NOT create documentation, summary, or markdown files in the repository — the supervisor handles all phase documentation
 - Do NOT ask the user to approve interfaces - the supervisor will handle that
 - When YOU believe interfaces are complete and compile successfully, output exactly `---PHASE_COMPLETE---` on its own line (no bold, no markdown - the supervisor parses this signal)
 - The user will review and approve the interfaces document before proceeding
@@ -491,6 +491,7 @@ that define the expected behavior.
 - Do NOT implement the actual code yet
 - Tests MUST compile
 - Tests SHOULD fail (they test unimplemented code)
+- Do NOT create documentation, summary, or markdown files in the repository — the supervisor handles all phase documentation
 - Do NOT ask the user to approve tests - the supervisor will handle that
 - When YOU believe test coverage is complete, output exactly `---PHASE_COMPLETE---` on its own line (no bold, no markdown - the supervisor parses this signal)
 - The user will review and approve the tests document before proceeding
@@ -548,6 +549,7 @@ the business logic to make all tests pass.
 ## Important
 - Focus on making tests pass and fulfilling requirements, not on perfect code
 - Run tests after each significant change
+- Do NOT create documentation, summary, or markdown files in the repository — the supervisor handles all phase documentation
 - When ALL tests pass, output exactly `---PHASE_COMPLETE---` on its own line to signal completion (no bold, no markdown - the supervisor parses this signal)
 """
 
@@ -753,13 +755,37 @@ Capture knowledge that would save someone time or prevent mistakes 6 months from
 
 Only capture knowledge that:
 - Would genuinely help someone 6 months from now
-- Is NOT obvious from reading the code
+- IS NOT obvious from reading the code
 - Captures "why" not just "what"
 
 Do NOT capture:
 - Implementation code snippets (unless demonstrating a pattern)
 - Temporary workarounds as if they were permanent patterns
 - User preferences that aren't project-wide
+
+## Relationships Between Entries [NEW]
+
+You can mark relationships between knowledge entries using inline bracket notation:
+
+**Format**: `[relationship_type: "target_entry_title"]`
+
+**Relationship Types**:
+- `led_to`: This decision/pattern led to another decision
+- `contradicts`: This contradicts or replaces previous knowledge
+- `supersedes`: This formally replaces previous knowledge
+- `related_to`: General relationship to another entry
+- `applies_to`: This lesson applies to a specific architecture/decision
+
+**Examples**:
+- "We chose REST over GraphQL [led_to: "API versioning strategy"] because..."
+- "Use event sourcing for audit trail [supersedes: "Database triggers for audit"] as it provides better isolation"
+- "Services use @Transactional [applies_to: "Service layer architecture"]"
+
+**Guidelines**:
+- Only add relationships if they add real value (don't force it)
+- Target must be an existing entry title (exact match)
+- You can add multiple relationships per entry
+- Relationships are optional
 
 ## Categories
 
@@ -806,14 +832,16 @@ If you identified knowledge worth capturing, output in this EXACT format:
 
 ```
 ARCHITECTURE:
-- Title: Description (1-3 sentences, focus on the pattern not specific classes)
+- Title: Description (1-3 sentences, focus on the pattern not specific classes). Optional: [relationship_type: "target_title"]
 
 DECISIONS:
-- Title: Description with rationale (must be architectural, not implementation detail)
+- Title: Description with rationale (must be architectural, not implementation detail). Optional: [relationship_type: "target_title"]
 
 LESSONS_LEARNED:
-- [Tag] Title: Description (must be non-obvious, project-specific)
+- [Tag] Title: Description (must be non-obvious, project-specific). Optional: [relationship_type: "target_title"]
 ```
+
+**Important**: Relationship markers can appear anywhere in the description text, not just at the end.
 
 If nothing notable was discovered, output ONLY:
 ```

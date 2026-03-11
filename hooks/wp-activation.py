@@ -41,6 +41,10 @@ def respond(message: str, additional: str = ""):
 
 
 def main():
+    # Skip when running under supervisor control (SDK handles hooks)
+    if os.environ.get("WP_SUPERVISOR_ACTIVE") == "1":
+        return
+
     hook = HookInput.from_stdin()
 
     # Only handle Bash tool
@@ -68,7 +72,8 @@ def main():
     # Handle: wp:init
     if 'wp:init' in command:
         knowledge = KnowledgeManager(hook.cwd)
-        knowledge_context = knowledge.load_knowledge_context()
+        # CLI mode doesn't have initial task at activation time, so no query for RAG [REQ-7]
+        knowledge_context = knowledge.load_knowledge_context(query_text=None)
         knowledge_section = f"\n\n## Project Knowledge\n\n{knowledge_context}" if knowledge_context else ""
 
         if not markers.is_wp_active():

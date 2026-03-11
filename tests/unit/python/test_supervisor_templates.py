@@ -27,8 +27,8 @@ class TestPhaseContextTemplates:
 
     def test_phase1_supervisor_fallback_has_guardrail(self):
         """Supervisor fallback context should warn against premature PHASE_COMPLETE."""
-        assert "CRITICAL" in templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT
-        assert "clarifying questions" in templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT
+        assert "ABSOLUTE RULE" in templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT
+        assert "questions" in templates.PHASE1_SUPERVISOR_FALLBACK_CONTEXT
 
     def test_phase1_task_section_exists(self):
         assert hasattr(templates, 'PHASE1_TASK_SECTION')
@@ -227,6 +227,95 @@ class TestTemplateConsistency:
         ]
         for context in contexts:
             assert "Your Task" in context or "## Your Task" in context
+
+
+class TestKnowledgeExtractionPrompt:
+    """Tests for knowledge extraction prompt with relationship notation."""
+
+    def test_extraction_prompt_exists(self):
+        # given - [REQ-17] Modify extraction prompt to instruct Claude
+        assert hasattr(templates, 'KNOWLEDGE_EXTRACTION_PROMPT')
+
+    def test_extraction_prompt_mentions_relationships(self):
+        # given - [REQ-17] Instruct Claude to mark relationships using bracket notation
+        prompt = templates.KNOWLEDGE_EXTRACTION_PROMPT
+
+        # then
+        assert "relationship" in prompt.lower()
+
+    def test_extraction_prompt_documents_bracket_notation(self):
+        # given - [REQ-3] Parse relationships using inline bracket notation
+        prompt = templates.KNOWLEDGE_EXTRACTION_PROMPT
+
+        # then - Should document the bracket syntax
+        assert "[led_to:" in prompt or "led_to:" in prompt
+
+    def test_extraction_prompt_lists_all_relationship_types(self):
+        # given - [REQ-2] Support all relationship types
+        prompt = templates.KNOWLEDGE_EXTRACTION_PROMPT
+
+        # then - Should document all 5 relationship types
+        relationship_types = ["led_to", "contradicts", "supersedes", "related_to", "applies_to"]
+        for rel_type in relationship_types:
+            assert rel_type in prompt
+
+    def test_extraction_prompt_provides_examples(self):
+        # given - Examples help Claude understand the format
+        prompt = templates.KNOWLEDGE_EXTRACTION_PROMPT
+
+        # then
+        assert "example" in prompt.lower() or "[" in prompt  # Bracket notation example
+
+    def test_extraction_prompt_mentions_optional_relationships(self):
+        # given - [REQ-20] Continue supporting entries without relationships
+        prompt = templates.KNOWLEDGE_EXTRACTION_PROMPT
+
+        # then
+        assert "optional" in prompt.lower() or "not required" in prompt.lower()
+
+
+class TestStagedKnowledgeFormatting:
+    """Tests for format_staged_knowledge_for_prompt function."""
+
+    def test_format_staged_knowledge_function_exists(self):
+        # given
+        assert hasattr(templates, 'format_staged_knowledge_for_prompt')
+        assert callable(templates.format_staged_knowledge_for_prompt)
+
+    def test_format_staged_knowledge_with_empty_returns_none_yet(self):
+        # given
+        sys.path.insert(0, 'hooks/lib')
+        from wp_knowledge import StagedKnowledge
+
+        staged = StagedKnowledge()
+
+        # when
+        result = templates.format_staged_knowledge_for_prompt(staged)
+
+        # then
+        assert result == "None yet"
+
+    def test_format_staged_knowledge_with_entries_returns_summary(self):
+        # given
+        sys.path.insert(0, 'hooks/lib')
+        from wp_knowledge import StagedKnowledge, StagedKnowledgeEntry
+
+        staged = StagedKnowledge(
+            architecture=[
+                StagedKnowledgeEntry(
+                    title="Service Mesh",
+                    content="Services communicate through a mesh.",
+                    phase=1
+                )
+            ]
+        )
+
+        # when
+        result = templates.format_staged_knowledge_for_prompt(staged)
+
+        # then
+        assert "Service Mesh" in result
+        assert result != "None yet"
 
 
 if __name__ == '__main__':
