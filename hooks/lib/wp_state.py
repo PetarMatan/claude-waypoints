@@ -557,6 +557,8 @@ class WPState:
 
     # --- Document Storage (Supervisor Mode) ---
 
+    TECHNICAL_DIGEST_NAME = "phase1-technical-digest.md"
+
     PHASE_DOC_NAMES = {
         1: "phase1-requirements.md",
         2: "phase2-interfaces.md",
@@ -683,6 +685,25 @@ class WPState:
             return None
         return self.state_dir / "context" / self.PHASE_CONTEXT_NAMES[phase]
 
+    def save_technical_digest(self, content: str) -> Optional[Path]:
+        """Save technical exploration digest from Phase 1."""
+        filepath = self.state_dir / self.TECHNICAL_DIGEST_NAME
+        try:
+            with open(filepath, 'w') as f:
+                f.write(content)
+            return filepath
+        except OSError:
+            return None
+
+    def get_technical_digest(self) -> str:
+        """Get technical exploration digest content."""
+        filepath = self.state_dir / self.TECHNICAL_DIGEST_NAME
+        try:
+            with open(filepath, 'r') as f:
+                return f.read()
+        except OSError:
+            return ""
+
     def list_documents(self) -> Dict[str, Path]:
         """
         List all existing documents in the workflow directory.
@@ -697,6 +718,11 @@ class WPState:
             filepath = self.state_dir / filename
             if filepath.exists():
                 docs[f"phase{phase}"] = filepath
+
+        # Technical digest
+        digest_path = self.state_dir / self.TECHNICAL_DIGEST_NAME
+        if digest_path.exists():
+            docs["technical_digest"] = digest_path
 
         # Context files
         context_dir = self.state_dir / "context"

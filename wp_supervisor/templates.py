@@ -54,6 +54,8 @@ Provide a concise summary of:
 - Common patterns used in the codebase
 - Relevant domain entities that might be involved
 - Existing code that could be reused or extended
+- **Actual method signatures** for key methods (copy from code, include file path)
+- **Class/type definitions** with field names and types (copy the actual definition)
 
 ## Guidelines
 - Focus on areas relevant to the user's requirements
@@ -73,9 +75,12 @@ API integrations, configuration files, and external service connections.
 
 ## What to Explore
 1. **External Dependencies**: What libraries/frameworks are used? (check pom.xml, package.json, requirements.txt, etc.)
-2. **API Integrations**: What external APIs or services does the code connect to?
-3. **Configuration**: How is the application configured? (application.yml, .env, config files)
-4. **Infrastructure**: Database connections, message queues, cache systems
+2. **Build Tool (VERIFY)**: Determine the PRIMARY build tool. Projects may have multiple build config
+   files. Check which build wrapper/lockfile is actually present in the project root and report the
+   verified compile and test commands.
+3. **API Integrations**: What external APIs or services does the code connect to?
+4. **Configuration**: How is the application configured? (application.yml, .env, config files)
+5. **Infrastructure**: Database connections, message queues, cache systems
 
 ## What to Report
 Provide a concise summary of:
@@ -83,6 +88,8 @@ Provide a concise summary of:
 - External service integrations and how they're accessed
 - Configuration patterns and environment variables
 - Any relevant infrastructure components
+- **Configuration snippets** relevant to the task (copy actual config entries with file path)
+- **DI/injection site signatures** (constructor parameters, @Inject fields — copy from code)
 
 ## Guidelines
 - Focus on dependencies relevant to the user's requirements
@@ -112,6 +119,7 @@ Provide a concise summary of:
 - Relevant existing tests that demonstrate similar functionality
 - Testing conventions that should be followed
 - Common test utilities or helpers available
+- **One representative test setup block** with actual code (~10-20 lines): imports, fixtures/mock creation, assertions (copy from code with file path)
 
 ## Guidelines
 - Focus on tests relevant to the user's requirements
@@ -224,12 +232,18 @@ Integration Points:
    Purpose: [Where to hook X]
    When invoked: [What triggers this point]
    Example: [How existing code uses this point]
+   Code: [5-15 lines of actual code showing the integration point]
 
 2. [Location]: [Class.method() - file path]
    Purpose: [Where to hook Y]
    When invoked: [What triggers this]
    Example: [Existing usage]
+   Code: [5-15 lines of actual code]
 ```
+
+### Key Method Signatures for Integration
+Copy the actual method signatures (with parameter types and return types) that new code
+must call or implement. Group by class, include file path.
 
 ### Framework Behavior (if relevant)
 ```
@@ -591,7 +605,7 @@ to avoid ambiguity that cascades through later phases.]
 
 ## Codebase Context
 - **Tech Stack**: [language, framework, build tool]
-- **Build Commands**: [compile command, test command]
+- **Build Commands**: [VERIFIED compile command, VERIFIED test command — must match the actual build tool wrapper present in the repo]
 - **Project Structure**: [key directories and their purpose]
 - **Key Files**: [important files discovered during exploration, with full paths]
 - **Existing Patterns**: [relevant patterns, conventions, or abstractions found in the codebase]
@@ -605,8 +619,69 @@ to avoid ambiguity that cascades through later phases.]
 - Be specific - avoid vague descriptions
 - If there are open questions, list them (we should resolve before proceeding)
 - Include ALL file paths you discovered during exploration in the Codebase Context section. Later phases will use these paths directly to avoid re-exploring the project structure.
+- **Build Commands**: Before writing Build Commands, list the project root to verify which build wrapper (./mvnw, ./gradlew, etc.) actually exists. Do NOT trust subagent reports — check the filesystem directly. Use the verified wrapper in the Build Commands.
 
 Output ONLY the summary in the format above.
+"""
+
+TECHNICAL_DIGEST_PROMPT = """
+Extract a Technical Exploration Digest from the Phase 1 exploration results.
+
+This digest will be passed to Phases 2-4 so they can start coding immediately
+without re-reading the same files that were already explored.
+
+## Required Sections (include only sections with relevant content)
+
+### 1. Type Definitions & Data Models
+Copy the actual class/type definitions with field names, types, and inheritance.
+Keep each excerpt to 5-15 lines. Include the EXACT file path.
+
+Example:
+```
+// src/main/kotlin/com/example/model/Device.kt
+data class Device(
+    val id: String,
+    val name: String,
+    val status: DeviceStatus,
+    val features: Features
+)
+```
+
+### 2. Key Method Signatures
+Group by class. Include parameter types and return types.
+Copy ACTUAL signatures from the code — do not paraphrase.
+
+Example:
+```
+// src/main/kotlin/com/example/service/DeviceService.kt
+class DeviceService {
+    suspend fun updateDevice(id: String, update: DeviceUpdate): Result<Device>
+    suspend fun getDevice(id: String): Device?
+}
+```
+
+### 3. Integration Points (Code Excerpts)
+5-15 line excerpts showing exactly where new code must hook in.
+Include surrounding context so the reader knows WHERE in the file this appears.
+
+### 4. Test Boilerplate & Patterns
+ONE representative test showing imports, setup, assertions (~10-20 lines).
+This lets later phases copy the pattern without re-reading test files.
+
+### 5. Configuration & Build
+Only include if there are non-obvious configuration entries relevant to the task.
+
+## Rules
+- Include EXACT file paths with every excerpt
+- Copy ACTUAL code — do NOT paraphrase or summarize signatures
+- Keep excerpts SHORT (5-20 lines each)
+- Only include code RELEVANT to implementing the requirements
+- Prefer signatures over full implementations
+- Do NOT include full file contents — only the relevant parts
+- Omit sections that have nothing relevant
+- If the exploration did not produce enough code-level detail, output what you have
+
+Output ONLY the digest content, no explanations or preamble.
 """
 
 INTERFACES_SUMMARY_PROMPT = """

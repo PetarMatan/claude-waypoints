@@ -77,6 +77,13 @@ class TestSummaryPromptTemplates:
         prompt = templates.REQUIREMENTS_SUMMARY_PROMPT
         assert "REQ-" in prompt or "number" in prompt.lower()
 
+    def test_requirements_prompt_instructs_build_tool_verification(self):
+        """Requirements prompt should instruct model to verify build tool from filesystem."""
+        prompt = templates.REQUIREMENTS_SUMMARY_PROMPT
+        assert "verify" in prompt.lower() or "Verify" in prompt
+        assert "build wrapper" in prompt.lower() or "build tool" in prompt.lower()
+        assert "subagent" in prompt.lower()
+
     def test_interfaces_prompt_requests_file_paths(self):
         """Interfaces prompt should request exact file paths."""
         prompt = templates.INTERFACES_SUMMARY_PROMPT
@@ -227,6 +234,42 @@ class TestTemplateConsistency:
         ]
         for context in contexts:
             assert "Your Task" in context or "## Your Task" in context
+
+
+class TestTechnicalDigestPrompt:
+    """Tests for TECHNICAL_DIGEST_PROMPT template."""
+
+    def test_technical_digest_prompt_exists(self):
+        assert hasattr(templates, 'TECHNICAL_DIGEST_PROMPT')
+        assert len(templates.TECHNICAL_DIGEST_PROMPT) > 0
+
+    def test_technical_digest_prompt_has_type_definitions_section(self):
+        prompt = templates.TECHNICAL_DIGEST_PROMPT
+        assert "Type Definitions" in prompt
+
+    def test_technical_digest_prompt_has_method_signatures_section(self):
+        prompt = templates.TECHNICAL_DIGEST_PROMPT
+        assert "Method Signatures" in prompt
+
+    def test_technical_digest_prompt_has_integration_points_section(self):
+        prompt = templates.TECHNICAL_DIGEST_PROMPT
+        assert "Integration Points" in prompt
+
+    def test_technical_digest_prompt_has_test_boilerplate_section(self):
+        prompt = templates.TECHNICAL_DIGEST_PROMPT
+        assert "Test Boilerplate" in prompt
+
+    def test_technical_digest_prompt_requires_file_paths(self):
+        prompt = templates.TECHNICAL_DIGEST_PROMPT
+        assert "file path" in prompt.lower() or "EXACT file path" in prompt
+
+    def test_technical_digest_prompt_discourages_full_file_dumps(self):
+        prompt = templates.TECHNICAL_DIGEST_PROMPT
+        assert "NOT" in prompt or "full file" in prompt.lower()
+
+    def test_technical_digest_prompt_requests_actual_code(self):
+        prompt = templates.TECHNICAL_DIGEST_PROMPT
+        assert "ACTUAL" in prompt or "Copy" in prompt
 
 
 class TestKnowledgeExtractionPrompt:

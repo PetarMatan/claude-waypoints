@@ -414,6 +414,45 @@ class TestUsageTracking:
                 assert "$0.0500" in summary
 
 
+class TestTechnicalDigestStorage:
+    """Tests for technical digest save/get methods."""
+
+    def test_save_and_get_technical_digest(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                markers = SupervisorMarkers("test")
+                digest = "### Type Definitions\n```kotlin\ndata class Foo(val x: Int)\n```"
+
+                path = markers.save_technical_digest(digest)
+                assert path != ""
+
+                retrieved = markers.get_technical_digest()
+                assert retrieved == digest
+
+    def test_get_technical_digest_returns_empty_when_not_set(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                markers = SupervisorMarkers("test")
+                assert markers.get_technical_digest() == ""
+
+    def test_save_technical_digest_overwrites_previous(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                markers = SupervisorMarkers("test")
+                markers.save_technical_digest("first")
+                markers.save_technical_digest("second")
+                assert markers.get_technical_digest() == "second"
+
+    def test_list_documents_includes_technical_digest(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                markers = SupervisorMarkers("test")
+                markers.save_technical_digest("digest content")
+
+                docs = markers.list_documents()
+                assert "technical_digest" in docs
+
+
 class TestDocumentStorage:
     """Tests for document storage methods."""
 

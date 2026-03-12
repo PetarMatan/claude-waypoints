@@ -79,6 +79,7 @@ class ContextBuilder:
     @staticmethod
     def build_phase2_context(
         requirements_summary: str,
+        technical_digest: str = "",
         knowledge_context: str = ""
     ) -> str:
         """
@@ -86,9 +87,14 @@ class ContextBuilder:
 
         Args:
             requirements_summary: Summary from Phase 1
+            technical_digest: Technical exploration digest from Phase 1
             knowledge_context: Project knowledge section to inject
         """
         context = PHASE2_CONTEXT.format(requirements_summary=requirements_summary)
+
+        # Inject technical digest if provided
+        if technical_digest:
+            context = f"{context}\n\n## Technical Exploration Digest\nThe following code excerpts were extracted from Phase 1 exploration. Use these directly instead of re-reading the same files.\n\n{technical_digest}"
 
         # Inject knowledge context if provided
         if knowledge_context:
@@ -100,6 +106,7 @@ class ContextBuilder:
     def build_phase3_context(
         requirements_summary: str,
         interfaces_list: str,
+        technical_digest: str = "",
         knowledge_context: str = ""
     ) -> str:
         """
@@ -108,12 +115,17 @@ class ContextBuilder:
         Args:
             requirements_summary: Summary from Phase 1
             interfaces_list: Interfaces created in Phase 2
+            technical_digest: Technical exploration digest from Phase 1
             knowledge_context: Project knowledge section to inject
         """
         context = PHASE3_CONTEXT.format(
             requirements_summary=requirements_summary,
             interfaces_list=interfaces_list
         )
+
+        # Inject technical digest if provided
+        if technical_digest:
+            context = f"{context}\n\n## Technical Exploration Digest\nThe following code excerpts were extracted from Phase 1 exploration. Use these directly instead of re-reading the same files.\n\n{technical_digest}"
 
         # Inject knowledge context if provided
         if knowledge_context:
@@ -126,6 +138,7 @@ class ContextBuilder:
         requirements_summary: str,
         interfaces_list: str,
         tests_list: str,
+        technical_digest: str = "",
         knowledge_context: str = ""
     ) -> str:
         """
@@ -135,6 +148,7 @@ class ContextBuilder:
             requirements_summary: Summary from Phase 1
             interfaces_list: Interfaces created in Phase 2
             tests_list: Tests created in Phase 3
+            technical_digest: Technical exploration digest from Phase 1
             knowledge_context: Project knowledge section to inject
         """
         context = PHASE4_CONTEXT.format(
@@ -142,6 +156,10 @@ class ContextBuilder:
             interfaces_list=interfaces_list,
             tests_list=tests_list
         )
+
+        # Inject technical digest if provided
+        if technical_digest:
+            context = f"{context}\n\n## Technical Exploration Digest\nThe following code excerpts were extracted from Phase 1 exploration. Use these directly instead of re-reading the same files.\n\n{technical_digest}"
 
         # Inject knowledge context if provided
         if knowledge_context:

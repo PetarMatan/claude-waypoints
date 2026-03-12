@@ -188,6 +188,37 @@ class TestBuildPhase2Context:
         assert "compile" in context.lower()
 
 
+class TestBuildPhase2ContextWithDigest:
+    """Tests for build_phase2_context with technical_digest parameter."""
+
+    def test_build_phase2_context_with_digest_includes_digest(self):
+        digest = "### Type Definitions\n```kotlin\ndata class Foo(val x: Int)\n```"
+        context = ContextBuilder.build_phase2_context("req", technical_digest=digest)
+        assert digest in context
+
+    def test_build_phase2_context_with_digest_has_section_header(self):
+        digest = "some digest content"
+        context = ContextBuilder.build_phase2_context("req", technical_digest=digest)
+        assert "## Technical Exploration Digest" in context
+
+    def test_build_phase2_context_without_digest_no_orphan_header(self):
+        context = ContextBuilder.build_phase2_context("req", technical_digest="")
+        assert "Technical Exploration Digest" not in context
+
+    def test_build_phase2_context_without_digest_no_raw_placeholder(self):
+        context = ContextBuilder.build_phase2_context("req")
+        assert "{technical_digest}" not in context
+
+    def test_build_phase2_context_with_digest_and_knowledge(self):
+        digest = "digest content"
+        knowledge = "# Architecture\nMicroservices"
+        context = ContextBuilder.build_phase2_context(
+            "req", technical_digest=digest, knowledge_context=knowledge
+        )
+        assert digest in context
+        assert knowledge in context
+
+
 class TestBuildPhase3Context:
     """Tests for build_phase3_context method."""
 
@@ -225,6 +256,28 @@ class TestBuildPhase3Context:
     def test_build_phase3_context_mentions_no_implementation(self):
         context = ContextBuilder.build_phase3_context("req", "interfaces")
         assert "Do NOT implement" in context
+
+
+class TestBuildPhase3ContextWithDigest:
+    """Tests for build_phase3_context with technical_digest parameter."""
+
+    def test_build_phase3_context_with_digest_includes_digest(self):
+        digest = "### Test Boilerplate\n```python\nimport pytest\n```"
+        context = ContextBuilder.build_phase3_context("req", "interfaces", technical_digest=digest)
+        assert digest in context
+
+    def test_build_phase3_context_without_digest_no_orphan_header(self):
+        context = ContextBuilder.build_phase3_context("req", "interfaces", technical_digest="")
+        assert "Technical Exploration Digest" not in context
+
+    def test_build_phase3_context_with_digest_and_knowledge(self):
+        digest = "digest content"
+        knowledge = "# Lessons\nSome lesson"
+        context = ContextBuilder.build_phase3_context(
+            "req", "interfaces", technical_digest=digest, knowledge_context=knowledge
+        )
+        assert digest in context
+        assert knowledge in context
 
 
 class TestBuildPhase4Context:
@@ -270,6 +323,33 @@ class TestBuildPhase4Context:
         # PHASE_COMPLETE may or may not be present in phase 4
         # The key is tests passing, which is mentioned
         assert "ALL tests pass" in context or "all tests pass" in context.lower()
+
+
+class TestBuildPhase4ContextWithDigest:
+    """Tests for build_phase4_context with technical_digest parameter."""
+
+    def test_build_phase4_context_with_digest_includes_digest(self):
+        digest = "### Key Method Signatures\n```\nclass Foo { fun bar(): Unit }\n```"
+        context = ContextBuilder.build_phase4_context(
+            "req", "interfaces", "tests", technical_digest=digest
+        )
+        assert digest in context
+
+    def test_build_phase4_context_without_digest_no_orphan_header(self):
+        context = ContextBuilder.build_phase4_context(
+            "req", "interfaces", "tests", technical_digest=""
+        )
+        assert "Technical Exploration Digest" not in context
+
+    def test_build_phase4_context_with_digest_and_knowledge(self):
+        digest = "digest content"
+        knowledge = "# Decisions\nSome decision"
+        context = ContextBuilder.build_phase4_context(
+            "req", "interfaces", "tests",
+            technical_digest=digest, knowledge_context=knowledge
+        )
+        assert digest in context
+        assert knowledge in context
 
 
 class TestGetSummaryPrompt:

@@ -1744,6 +1744,70 @@ class TestPhase1SupervisorModeContext:
                 assert "Service mesh" in context
 
 
+class TestTechnicalDigestInPhaseContext:
+    """Tests for technical digest injection into phase contexts."""
+
+    def test_phase2_context_includes_digest_when_saved(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.save_technical_digest("### Type Defs\nclass Foo")
+                orchestrator.markers.save_requirements_summary("some requirements")
+
+                context = orchestrator._build_phase_context(2)
+                assert "class Foo" in context
+                assert "Technical Exploration Digest" in context
+
+    def test_phase2_context_works_without_digest(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+
+                context = orchestrator._build_phase_context(2)
+                assert "Technical Exploration Digest" not in context
+                assert "{technical_digest}" not in context
+
+    def test_phase3_context_includes_digest_when_saved(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.save_technical_digest("test boilerplate code")
+                orchestrator.markers.save_requirements_summary("req")
+                orchestrator.markers.save_interfaces_list("interfaces")
+
+                context = orchestrator._build_phase_context(3)
+                assert "test boilerplate code" in context
+
+    def test_phase4_context_includes_digest_when_saved(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                orchestrator.markers.save_technical_digest("method signatures here")
+                orchestrator.markers.save_requirements_summary("req")
+                orchestrator.markers.save_interfaces_list("interfaces")
+                orchestrator.markers.save_tests_list("tests")
+
+                context = orchestrator._build_phase_context(4)
+                assert "method signatures here" in context
+
+    def test_orchestrator_has_generate_technical_digest_method(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                assert hasattr(orchestrator, '_generate_technical_digest')
+                import inspect
+                assert inspect.iscoroutinefunction(orchestrator._generate_technical_digest)
+
+    def test_orchestrator_imports_technical_digest_prompt(self):
+        from wp_supervisor.orchestrator import TECHNICAL_DIGEST_PROMPT
+        assert len(TECHNICAL_DIGEST_PROMPT) > 0
+
+
 class TestRunPhaseSessionWithSubagents:
 
     def test_run_phase_session_accepts_subagents_parameter(self):

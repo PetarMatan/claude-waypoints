@@ -271,6 +271,15 @@ class SupervisorMarkers:
         path = self._state.get_phase_context_path(phase)
         return str(path) if path else ""
 
+    def save_technical_digest(self, content: str) -> str:
+        """Save technical exploration digest from Phase 1."""
+        path = self._state.save_technical_digest(content)
+        return str(path) if path else ""
+
+    def get_technical_digest(self) -> str:
+        """Get technical exploration digest content."""
+        return self._state.get_technical_digest()
+
     def list_documents(self) -> dict:
         """List all existing documents in the workflow directory."""
         docs = self._state.list_documents()

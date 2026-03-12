@@ -116,6 +116,45 @@ class TestSubagentInstructions:
         assert "pattern" in TEST_USECASE_INSTRUCTIONS.lower() or "behavior" in TEST_USECASE_INSTRUCTIONS.lower()
 
 
+class TestSubagentCodeExcerptGuidance:
+    """Tests for enhanced subagent instructions requesting code excerpts."""
+
+    def test_business_logic_instructions_request_method_signatures(self):
+        """Business logic instructions should request actual method signatures."""
+        lower = BUSINESS_LOGIC_INSTRUCTIONS.lower()
+        assert "signature" in lower or "method signature" in lower
+
+    def test_business_logic_instructions_request_type_definitions(self):
+        """Business logic instructions should request class/type definitions."""
+        lower = BUSINESS_LOGIC_INSTRUCTIONS.lower()
+        assert "type definition" in lower or "class" in lower
+
+    def test_dependencies_instructions_request_config_snippets(self):
+        """Dependencies instructions should request configuration snippets."""
+        lower = DEPENDENCIES_INSTRUCTIONS.lower()
+        assert "configuration" in lower or "config" in lower
+
+    def test_dependencies_instructions_request_di_signatures(self):
+        """Dependencies instructions should request DI/injection site signatures."""
+        lower = DEPENDENCIES_INSTRUCTIONS.lower()
+        assert "inject" in lower or "di" in lower or "signature" in lower
+
+    def test_test_usecase_instructions_request_test_setup_block(self):
+        """Test/use case instructions should request a representative test setup block."""
+        lower = TEST_USECASE_INSTRUCTIONS.lower()
+        assert "representative" in lower or "setup" in lower or "actual code" in lower
+
+    def test_architecture_instructions_have_code_field_in_integration_points(self):
+        """Architecture instructions should have Code field in integration points format."""
+        from wp_supervisor.templates import ARCHITECTURE_INSTRUCTIONS
+        assert "Code:" in ARCHITECTURE_INSTRUCTIONS
+
+    def test_architecture_instructions_have_key_method_signatures_subsection(self):
+        """Architecture instructions should have key method signatures subsection."""
+        from wp_supervisor.templates import ARCHITECTURE_INSTRUCTIONS
+        assert "Key Method Signatures" in ARCHITECTURE_INSTRUCTIONS
+
+
 class TestSubagentDescriptions:
     """Tests for subagent descriptions (used by Claude for tool selection)."""
 
