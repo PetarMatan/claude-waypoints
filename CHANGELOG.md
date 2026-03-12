@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - TBD
+
+### Added
+- **Technical exploration digest** — Phase 1 now extracts curated code excerpts (type definitions, method signatures, integration points, test boilerplate) and injects them into Phases 2-4, eliminating redundant file re-reads across phases.
+- **Enhanced subagent instructions** — Business logic, dependencies, test/usecase, and architecture explorers now report actual code excerpts and method signatures alongside their findings.
+
+### Fixed
+- **Build tool misidentification** — Requirements summary prompt now instructs the model to verify the build wrapper from the filesystem directly, preventing incorrect build commands when multiple build configs coexist (e.g., both pom.xml and build.gradle).
+
 ## [1.5.0] - 2026-03-11
 
 ### Added
