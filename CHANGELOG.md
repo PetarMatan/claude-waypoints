@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.6.0] - TBD
+## [1.6.0] - 2026-03-12
 
 ### Added
 - **Technical exploration digest** — Phase 1 now extracts curated code excerpts (type definitions, method signatures, integration points, test boilerplate) and injects them into Phases 2-4, eliminating redundant file re-reads across phases.
