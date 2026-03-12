@@ -17,7 +17,7 @@ set -e
 #                         ./install.sh --dir ~/.claude-feature
 
 REPO_URL="https://github.com/PetarMatan/claude-waypoints.git"
-VERSION="v1.6.0"
+VERSION="main"
 
 # --- Interface: Functions ---
 
