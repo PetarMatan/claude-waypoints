@@ -90,10 +90,12 @@ info "  Waypoints Release: $VERSION_TAG"
 info "════════════════════════════════════════════════════════════════"
 info ""
 
-# Step 1: Update VERSION in install.sh
-info "Step 1: Updating VERSION in install.sh..."
+# Step 1: Update VERSION in install.sh and pyproject.toml
+info "Step 1: Updating VERSION in install.sh and pyproject.toml..."
 sed -i.bak "s/^VERSION=.*$/VERSION=\"$VERSION_TAG\"/" install.sh
 rm install.sh.bak
+sed -i.bak "s/^version = \".*\"/version = \"$VERSION_NUMBER\"/" pyproject.toml
+rm pyproject.toml.bak
 success "Updated VERSION to $VERSION_TAG"
 
 # Step 2: Update CHANGELOG.md date if TBD
@@ -114,7 +116,7 @@ fi
 
 # Step 3: Commit the release
 info "Step 3: Creating release commit..."
-git add install.sh CHANGELOG.md
+git add install.sh pyproject.toml CHANGELOG.md
 git commit -m "Release $VERSION_TAG"
 success "Created release commit"
 
@@ -153,7 +155,8 @@ curl -fsSL https://raw.githubusercontent.com/PetarMatan/claude-waypoints/main/in
 
 For Supervisor mode (parallel exploration):
 \`\`\`bash
-pip install claude-agent-sdk
+pip install claude-waypoints        # required dependencies
+pip install 'claude-waypoints[rag]' # optional: semantic knowledge search
 wp-supervisor
 \`\`\`
 

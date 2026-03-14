@@ -19,23 +19,24 @@ Supervisor mode runs each phase in a **fresh Claude session**. Instead of carryi
 ```
 Phase 1 (Requirements)
     │
-    └─► Generates requirements summary
+    ├─► Generates requirements summary
+    └─► Generates technical digest (code excerpts, signatures, patterns)
             │
             ▼
-Phase 2 (Interfaces) ◄─── Receives only the summary
+Phase 2 (Interfaces) ◄─── Receives summary + technical digest
     │
     └─► Generates interfaces list
             │
             ▼
-Phase 3 (Tests) ◄─── Receives requirements + interfaces
+Phase 3 (Tests) ◄─── Receives requirements + interfaces + technical digest
     │
     └─► Generates tests list
             │
             ▼
-Phase 4 (Implementation) ◄─── Receives all summaries
+Phase 4 (Implementation) ◄─── Receives all summaries + technical digest
 ```
 
-Each session gets distilled context (what was decided) rather than full history (how it was decided). The AI focuses entirely on the current phase's goals.
+Each session gets distilled context (what was decided) rather than full history (how it was decided). The technical digest provides curated code excerpts from Phase 1 exploration — type definitions, method signatures, integration points, and test patterns — so later phases can start coding immediately without re-reading the same files.
 
 ## When to Use Each Mode
 
@@ -52,10 +53,12 @@ Each session gets distilled context (what was decided) rather than full history 
 
 ## Prerequisites
 
-Supervisor mode requires the Claude Agent SDK:
+Supervisor mode requires the Claude Agent SDK and rich, which are **installed automatically** by the installer (`install.sh`). No manual pip install needed.
+
+For optional semantic knowledge search (~2GB download due to PyTorch):
 
 ```bash
-pip install claude-agent-sdk
+pip install 'claude-waypoints[rag]'
 ```
 
 The installer checks for this and will warn you if it's not installed.
@@ -200,13 +203,13 @@ Implementer (Opus)              Reviewer (Sonnet)
 ### "claude-agent-sdk not installed"
 
 ```bash
-pip install claude-agent-sdk
+pip install claude-waypoints
 ```
 
 Or if using a virtual environment:
 ```bash
 source your-venv/bin/activate
-pip install claude-agent-sdk
+pip install claude-waypoints
 ```
 
 ### Session interrupted

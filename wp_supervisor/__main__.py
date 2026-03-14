@@ -75,8 +75,8 @@ Environment Variables:
         from .orchestrator import run_supervisor
     except ImportError as e:
         print(f"Error importing orchestrator: {e}", file=sys.stderr)
-        print("\nMake sure claude-agent-sdk is installed:", file=sys.stderr)
-        print("  pip install claude-agent-sdk", file=sys.stderr)
+        print("\nMake sure dependencies are installed:", file=sys.stderr)
+        print("  pip install claude-waypoints", file=sys.stderr)
         sys.exit(1)
 
     # Run the supervisor

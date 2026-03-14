@@ -48,25 +48,16 @@ else
     export PYTHONPATH="${SUPERVISOR_DIR}:${PYTHONPATH:-}"
 fi
 
-# Check if claude-agent-sdk is installed
-if ! python3 -c "import claude_agent_sdk" 2>/dev/null; then
-    echo "Error: claude-agent-sdk not installed."
+# Check if required dependencies are installed
+if ! python3 -c "import claude_agent_sdk" 2>/dev/null || ! python3 -c "import rich" 2>/dev/null; then
+    echo "Error: Missing required dependencies."
     echo ""
     echo "Install with:"
-    echo "  pip install claude-agent-sdk"
+    echo "  pip install claude-waypoints"
     echo ""
     echo "Or if using a virtual environment:"
     echo "  source your-venv/bin/activate"
-    echo "  pip install claude-agent-sdk"
-    exit 1
-fi
-
-# Check if rich is installed
-if ! python3 -c "import rich" 2>/dev/null; then
-    echo "Error: rich not installed."
-    echo ""
-    echo "Install with:"
-    echo "  pip install rich"
+    echo "  pip install claude-waypoints"
     exit 1
 fi
 

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-waypoints"
+version = "1.6.0"
+description = "Structured AI-assisted development workflow for Claude Code"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk",
+    "rich",
+]
+
+[project.optional-dependencies]
+rag = ["sentence-transformers"]
+dev = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/PetarMatan/claude-waypoints"
+Documentation = "https://github.com/PetarMatan/claude-waypoints/tree/main/docs"
+
+[tool.setuptools.packages.find]
+include = ["wp_supervisor", "wp_supervisor.*"]

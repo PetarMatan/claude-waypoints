@@ -136,8 +136,8 @@ Advance Phase  Advance +Cleanup
               └────┬────┘   └────┬────┘   └────┬────┘   └────┬────┘
                    │             │             │             │
                    ▼             ▼             ▼             ▼
-              requirements  interfaces    tests         tests
-              -confirmed    -designed    -approved     -passing
+              requirements  interfaces     tests       implementation
+               complete      complete     complete       complete
                                                            │
                                                            ▼
                                                        Cleanup
@@ -145,18 +145,30 @@ Advance Phase  Advance +Cleanup
                                                        Inactive)
 ```
 
-## Marker Files
+## State Management
 
-Located in `~/.claude/tmp/`:
+All workflow state is consolidated in a single `state.json` file in `~/.claude/tmp/wp-<workflow-id>/`:
 
-| File | Purpose | Created By |
-|------|---------|------------|
-| `wp-mode` | Indicates Waypoints mode is active | `/wp-start` skill |
-| `wp-phase` | Contains current phase (1-4) | Orchestrator |
-| `wp-requirements-confirmed` | Phase 1 complete | User via Claude |
-| `wp-interfaces-designed` | Phase 2 complete | User via Claude |
-| `wp-tests-approved` | Phase 3 complete | User via Claude |
-| `wp-tests-passing` | Phase 4 complete | Orchestrator |
+```json
+{
+    "version": 1,
+    "active": true,
+    "phase": 2,
+    "mode": "cli",
+    "completedPhases": {
+        "requirements": true,
+        "interfaces": false,
+        "tests": false,
+        "implementation": false
+    },
+    "metadata": {
+        "startedAt": "2026-01-09T10:30:00Z",
+        "workflowId": "20260109-103000"
+    }
+}
+```
+
+Phase summaries are stored as dedicated document files alongside `state.json` (e.g., `phase1-requirements.md`, `phase1-technical-digest.md`) for human readability.
 
 ## Configuration
 

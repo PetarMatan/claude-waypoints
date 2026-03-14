@@ -22,6 +22,11 @@ __pycache__/
 *.pyo
 .hypothesis/
 
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+
 # Test artifacts
 /tests/.bats-run-*
 

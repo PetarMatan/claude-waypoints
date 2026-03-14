@@ -131,8 +131,10 @@ You are in **Phase 2 (Interfaces)**. Test files cannot be edited yet.
 **In Phase 2, you should:**
 1. Create class skeletons in main source
 2. Define method signatures with TODO bodies
-3. Ensure code compiles
-4. Present interfaces to user for approval
+3. If modifying existing code, add injection points and call site stubs
+4. Trace data flows end-to-end — add consumer stubs, not just producer stubs
+5. Ensure code compiles
+6. Present interfaces to user for approval
 5. Mark interfaces complete:
    ```bash
    {mark_cmd}
@@ -217,8 +219,11 @@ def format_phase2_compile_error(
 2. **Create empty classes** with proper package organization
 3. **Define method signatures** (parameters, return types)
 4. **Method bodies should throw** NOT_IMPLEMENTED or TODO
+5. **If modifying existing code**, add injection points and call site stubs — not just new standalone classes
+6. **Trace data flows end-to-end** — for every method that produces output, identify the consumer and add a stub for it
+7. **Verify call-site completeness** — when changing a method signature, grep for ALL callers
 
-5. **Ensure code compiles**: `{compile_cmd}`
+8. **Ensure code compiles**: `{compile_cmd}`
 
 **After code compiles, present interfaces to user for approval.**"""
 
@@ -281,8 +286,10 @@ def format_phase3_awaiting_approval(marker_dir: str, profile_name: str) -> str:
 
 1. **Write unit/integration tests** based on requirements:
    - Happy path tests (main success scenarios)
-   - Edge case tests
+   - Edge case tests and boundary conditions
    - Error handling tests
+   - **Integration tests** for existing code modified in Phase 2 (verify call sites work)
+   - Match test data complexity to production reality (nested structures, not just flat data)
 
 2. **Tests WILL FAIL** - that's expected (Red phase of TDD)
 
@@ -340,4 +347,6 @@ def format_phase4_orchestrator_test_failure(
 
 **Continue the loop:** Implement -> Compile -> Test -> Fix -> Repeat
 
-Review the failing tests, implement the missing logic, and try again."""
+Review the failing tests, implement the missing logic, and try again.
+Follow the Phase 2 architecture — use the method stubs from interfaces, do not inline logic in callers.
+If a test is provably incorrect (contradicts requirements), flag it instead of working around it."""

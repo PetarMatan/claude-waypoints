@@ -552,7 +552,11 @@ the business logic to make all tests pass.
 
 ## Guidelines
 - Your goal is to **fulfill the requirements** - tests are the primary way to verify that.
-- Implement the simplest correct solution that passes tests and satisfies the requirements.
+- Implement clean, well-structured code. Do not add unnecessary features or complexity
+  beyond what the requirements ask for.
+- **Follow the Phase 2 architecture**: Implement the method stubs from "Interfaces Created"
+  and wire them into existing code at the call sites. Do not inline logic directly in callers
+  when a method was created for it — that creates dead code with tests but no callers.
 - Refactor for clarity after tests pass (if needed)
 
 ## Critical: Test vs Requirements Conflicts

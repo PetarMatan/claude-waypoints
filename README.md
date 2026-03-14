@@ -158,7 +158,8 @@ For large features or multi-day projects, context accumulation in a single sessi
 Supervisor mode uses [claude-agent-sdk](https://github.com/anthropics/claude-code-sdk-python) to programmatically manage Claude sessions. This is **not required for CLI mode** - only install if you need supervisor features.
 
 ```bash
-pip install claude-agent-sdk
+pip install claude-waypoints          # required dependencies
+pip install 'claude-waypoints[rag]'   # optional: semantic knowledge search
 ```
 
 Then start the workflow:

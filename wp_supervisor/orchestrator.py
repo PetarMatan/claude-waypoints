@@ -16,8 +16,8 @@ from typing import Optional, Dict
 try:
     from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AgentDefinition
 except ImportError:
-    print("Error: claude-agent-sdk not installed.", file=sys.stderr)
-    print("Install with: pip install claude-agent-sdk", file=sys.stderr)
+    print("Error: Missing required dependencies.", file=sys.stderr)
+    print("Install with: pip install claude-waypoints", file=sys.stderr)
     sys.exit(1)
 
 # Add hooks/lib to path for agent loading

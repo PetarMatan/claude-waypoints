@@ -90,12 +90,12 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Check Python version (need 3.6+ for f-strings)
+# Check Python version (need 3.10+ for match statements and modern typing)
 python_version=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 python_major=$(echo "$python_version" | cut -d. -f1)
 python_minor=$(echo "$python_version" | cut -d. -f2)
-if [[ "$python_major" -lt 3 ]] || [[ "$python_major" -eq 3 && "$python_minor" -lt 6 ]]; then
-    echo "Error: Python 3.6+ is required. Found Python $python_version"
+if [[ "$python_major" -lt 3 ]] || [[ "$python_major" -eq 3 && "$python_minor" -lt 10 ]]; then
+    echo "Error: Python 3.10+ is required. Found Python $python_version"
     exit 1
 fi
 
@@ -193,25 +193,24 @@ mkdir -p "$INSTALL_DIR/bin"
 cp "$SOURCE_DIR/bin/wp-supervisor" "$INSTALL_DIR/bin/"
 chmod +x "$INSTALL_DIR/bin/wp-supervisor"
 
-# Check for claude-agent-sdk
-if python3 -c "import claude_agent_sdk" 2>/dev/null; then
+# Install Python dependencies from pyproject.toml
+echo "  Installing Python dependencies..."
+if python3 -m pip install "$SOURCE_DIR" --quiet 2>/dev/null; then
     SDK_INSTALLED="yes"
-    echo "  claude-agent-sdk: found"
+    echo "  Dependencies installed (claude-agent-sdk, rich)"
 else
     SDK_INSTALLED=""
-    echo "  claude-agent-sdk: NOT FOUND"
-    echo "  Supervisor Mode requires it. Install with: pip install claude-agent-sdk"
+    echo "  WARNING: Dependency installation failed."
+    echo "  Install manually: pip install claude-waypoints"
 fi
 
-# Check for rich (required for terminal UI)
-if python3 -c "import rich" 2>/dev/null; then
-    echo "  rich: found"
+# Check for optional RAG dependencies (not auto-installed due to size ~2GB)
+if python3 -c "import sentence_transformers" 2>/dev/null; then
+    echo "  sentence-transformers: found"
 else
-    echo "  rich: NOT FOUND (required)"
-    echo "  Installing rich..."
-    python3 -m pip install rich --quiet 2>/dev/null || {
-        echo "  WARNING: Auto-install failed. Install manually with: pip install rich"
-    }
+    echo "  sentence-transformers: NOT FOUND (optional)"
+    echo "  For semantic knowledge search, install with:"
+    echo "    pip install 'claude-waypoints[rag]'"
 fi
 
 echo "Supervisor Mode installed."
@@ -278,8 +277,8 @@ echo ""
 echo "  Then run: wp-supervisor"
 if [[ "$SDK_INSTALLED" != "yes" ]]; then
     echo ""
-    echo "  NOTE: Install claude-agent-sdk before using supervisor mode:"
-    echo "    pip install claude-agent-sdk"
+    echo "  NOTE: Install dependencies before using supervisor mode:"
+    echo "    pip install claude-waypoints"
 fi
 echo ""
 echo "Restart Claude Code to apply changes."
