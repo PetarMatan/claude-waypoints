@@ -1641,7 +1641,7 @@ class TestSubagentIntegrationWithPhaseSession:
                 assert len(captured_subagents) == 1
                 assert captured_subagents[0] is None
 
-    def test_phase4_does_not_build_subagents(self):
+    def test_phase4_builds_implementation_subagents(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -1661,7 +1661,9 @@ class TestSubagentIntegrationWithPhaseSession:
                 run_async(orchestrator._run_phase(4))
 
                 assert len(captured_subagents) == 1
-                assert captured_subagents[0] is None
+                assert captured_subagents[0] is not None
+                assert len(captured_subagents[0]) == 4
+                assert "implementer-1" in captured_subagents[0]
 
 
 class TestSubagentErrorHandling:

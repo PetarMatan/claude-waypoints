@@ -491,7 +491,7 @@ class TestOnBuildExecutedBehavior:
         return coordinator
 
     def test_on_build_executed_delegates_to_trigger(self):
-        """REQ-7: on_build_executed calls trigger.on_build_executed."""
+        """REQ-7: on_build_executed calls trigger.on_build_executed with command_output."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # given
             coordinator = self._create_started_coordinator(tmpdir)
@@ -500,7 +500,25 @@ class TestOnBuildExecutedBehavior:
             run_async(coordinator.on_build_executed("pytest tests/"))
 
             # then
-            coordinator._trigger.on_build_executed.assert_called_once_with("pytest tests/")
+            coordinator._trigger.on_build_executed.assert_called_once_with(
+                "pytest tests/", command_output=None
+            )
+
+    def test_on_build_executed_passes_command_output(self):
+        """REQ-3.1: on_build_executed passes command_output to trigger."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            coordinator = self._create_started_coordinator(tmpdir)
+
+            # when
+            run_async(coordinator.on_build_executed(
+                "pytest tests/", command_output="5 passed"
+            ))
+
+            # then
+            coordinator._trigger.on_build_executed.assert_called_once_with(
+                "pytest tests/", command_output="5 passed"
+            )
 
     def test_on_build_executed_returns_early_when_inactive(self):
         """ERR-2: Return early from on_build_executed() when not active."""
@@ -583,6 +601,269 @@ class TestOnBuildExecutedWithDebounce:
             # then - both calls should be made to trigger
             # (debounce happens inside _schedule_review, not on_build_executed)
             assert coordinator._trigger.on_build_executed.call_count == 2
+
+
+# =============================================================================
+# REQ-2.x, REQ-3.x, REQ-4.x: ReviewCoordinatorConfig Tests
+# =============================================================================
+
+class TestReviewCoordinatorConfigFeedbackCap:
+    """Tests for feedback cap configuration (REQ-2.3)."""
+
+    def test_config_has_feedback_cap(self):
+        """[REQ-2.3] Config should have feedback_cap field."""
+        config = ReviewCoordinatorConfig()
+        assert hasattr(config, 'feedback_cap')
+
+    def test_config_feedback_cap_default_is_20(self):
+        """[REQ-2.3] feedback_cap should default to 20."""
+        config = ReviewCoordinatorConfig()
+        assert config.feedback_cap == 20
+
+    def test_config_feedback_cap_configurable(self):
+        """[REQ-2.3] feedback_cap should be configurable."""
+        config = ReviewCoordinatorConfig(feedback_cap=15)
+        assert config.feedback_cap == 15
+
+
+class TestReviewCoordinatorConfigDebounce:
+    """Tests for debounce interval configuration (REQ-3.2)."""
+
+    def test_config_has_debounce_interval(self):
+        """[REQ-3.2] Config should have debounce_interval field."""
+        config = ReviewCoordinatorConfig()
+        assert hasattr(config, 'debounce_interval')
+
+    def test_config_debounce_interval_default_is_60(self):
+        """[REQ-3.2] debounce_interval should default to 60 seconds."""
+        config = ReviewCoordinatorConfig()
+        assert config.debounce_interval == 60.0
+
+    def test_config_debounce_interval_configurable(self):
+        """[REQ-3.2] debounce_interval should be configurable."""
+        config = ReviewCoordinatorConfig(debounce_interval=120.0)
+        assert config.debounce_interval == 120.0
+
+
+class TestReviewCoordinatorConfigCapping:
+    """Tests for capping enable/disable configuration (REQ-2.x)."""
+
+    def test_config_has_enable_capping(self):
+        """[REQ-2.x] Config should have enable_capping field."""
+        config = ReviewCoordinatorConfig()
+        assert hasattr(config, 'enable_capping')
+
+    def test_config_enable_capping_default_is_true(self):
+        """[REQ-2.x] enable_capping should default to True."""
+        config = ReviewCoordinatorConfig()
+        assert config.enable_capping is True
+
+    def test_config_enable_capping_can_disable(self):
+        """Capping should be disableable."""
+        config = ReviewCoordinatorConfig(enable_capping=False)
+        assert config.enable_capping is False
+
+
+class TestReviewCoordinatorConfigDeduplication:
+    """Tests for deduplication enable/disable configuration (REQ-4.x)."""
+
+    def test_config_has_enable_deduplication(self):
+        """[REQ-4.x] Config should have enable_deduplication field."""
+        config = ReviewCoordinatorConfig()
+        assert hasattr(config, 'enable_deduplication')
+
+    def test_config_enable_deduplication_default_is_true(self):
+        """[REQ-4.x] enable_deduplication should default to True."""
+        config = ReviewCoordinatorConfig()
+        assert config.enable_deduplication is True
+
+    def test_config_enable_deduplication_can_disable(self):
+        """Deduplication should be disableable."""
+        config = ReviewCoordinatorConfig(enable_deduplication=False)
+        assert config.enable_deduplication is False
+
+
+class TestReviewCoordinatorStartWithComponents:
+    """Tests for ReviewCoordinator.start() with capper and deduplicator."""
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_start_creates_capper_when_enabled(self):
+        """[REQ-2.x] start() should create FeedbackCapper when enabled."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            config = ReviewCoordinatorConfig(enable_capping=True)
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements",
+                config=config
+            )
+
+            # when
+            run_async(coordinator.start())
+
+            # then
+            assert coordinator._feedback_capper is not None
+
+    def test_start_skips_capper_when_disabled(self):
+        """start() should not create FeedbackCapper when disabled."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            config = ReviewCoordinatorConfig(enable_capping=False)
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements",
+                config=config
+            )
+
+            # when
+            run_async(coordinator.start())
+
+            # then
+            assert coordinator._feedback_capper is None
+
+    def test_start_creates_deduplicator_when_enabled(self):
+        """[REQ-4.x] start() should create FeedbackDeduplicator when enabled."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            config = ReviewCoordinatorConfig(enable_deduplication=True)
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements",
+                config=config
+            )
+
+            # when
+            run_async(coordinator.start())
+
+            # then
+            assert coordinator._feedback_deduplicator is not None
+
+    def test_start_skips_deduplicator_when_disabled(self):
+        """start() should not create FeedbackDeduplicator when disabled."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            config = ReviewCoordinatorConfig(enable_deduplication=False)
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements",
+                config=config
+            )
+
+            # when
+            run_async(coordinator.start())
+
+            # then
+            assert coordinator._feedback_deduplicator is None
+
+    def test_start_passes_capper_to_feedback_queue(self):
+        """start() should pass capper to FeedbackQueue."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            config = ReviewCoordinatorConfig(enable_capping=True)
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements",
+                config=config
+            )
+
+            # when
+            run_async(coordinator.start())
+
+            # then
+            assert coordinator._feedback_queue is not None
+            assert coordinator._feedback_queue._capper is coordinator._feedback_capper
+
+    def test_start_passes_deduplicator_to_feedback_queue(self):
+        """start() should pass deduplicator to FeedbackQueue."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            config = ReviewCoordinatorConfig(enable_deduplication=True)
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements",
+                config=config
+            )
+
+            # when
+            run_async(coordinator.start())
+
+            # then
+            assert coordinator._feedback_queue is not None
+            assert coordinator._feedback_queue._deduplicator is coordinator._feedback_deduplicator
+
+    def test_start_creates_trigger_with_debounce_interval(self):
+        """[REQ-3.2] start() should create ReviewTrigger with debounce_interval."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            config = ReviewCoordinatorConfig(debounce_interval=90.0)
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements",
+                config=config
+            )
+
+            # when
+            run_async(coordinator.start())
+
+            # then
+            assert coordinator._trigger is not None
+            assert coordinator._trigger.debounce_interval == 90.0
+
+
+class TestReviewCoordinatorStopCleansUp:
+    """Tests for ReviewCoordinator.stop() cleanup."""
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_stop_clears_capper(self):
+        """stop() should clear capper reference."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements"
+            )
+            run_async(coordinator.start())
+            assert coordinator._feedback_capper is not None
+
+            # when
+            run_async(coordinator.stop())
+
+            # then
+            assert coordinator._feedback_capper is None
+
+    def test_stop_clears_deduplicator(self):
+        """stop() should clear deduplicator reference."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # given
+            coordinator = ReviewCoordinator(
+                logger=self._create_mock_logger(),
+                working_dir=tmpdir,
+                requirements_summary="# Requirements"
+            )
+            run_async(coordinator.start())
+            assert coordinator._feedback_deduplicator is not None
+
+            # when
+            run_async(coordinator.stop())
+
+            # then
+            assert coordinator._feedback_deduplicator is None
 
 
 if __name__ == '__main__':

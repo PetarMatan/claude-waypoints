@@ -25,10 +25,23 @@ class ReviewerState(Enum):
 
 
 @dataclass
+class ParsedIssue:
+    """
+    A single parsed issue with severity.
+
+    Implements [REQ-2.1]: Reviewer categorizes each finding by severity.
+    """
+    content: str
+    severity: str  # "critical", "high", "medium", "low"
+    file_path: Optional[str] = None
+
+
+@dataclass
 class ReviewResult:
     """Result of a review cycle."""
     issues: List[str] = field(default_factory=list)
     files_reviewed: Set[str] = field(default_factory=set)
+    parsed_issues: List[ParsedIssue] = field(default_factory=list)
 
 
 @dataclass
@@ -122,6 +135,7 @@ class ReviewerAgent:
             prompt = self._build_review_prompt(context)
             response_text = await self._query_reviewer(prompt)
             issues = self._parse_issues(response_text)
+            parsed_issues = self._parse_issues_with_severity(response_text)
 
             self._logger.log_event(
                 "REVIEWER",
@@ -131,6 +145,7 @@ class ReviewerAgent:
             result = ReviewResult(
                 issues=issues,
                 files_reviewed=set(context.changed_files.keys()),
+                parsed_issues=parsed_issues,
             )
 
             self._state = ReviewerState.READY
@@ -223,6 +238,72 @@ class ReviewerAgent:
                 if len(parts) == 2 and parts[1].strip():
                     issues.append(parts[1].strip())
         return issues
+
+    def _parse_issues_with_severity(self, text: str) -> List[ParsedIssue]:
+        """
+        Parse reviewer response into issues with severity categorization.
+
+        Implements [REQ-2.1]: Extracts severity from issue text.
+        Implements [ERR-2]: Defaults to "medium" if severity cannot be parsed.
+
+        Expected format from reviewer:
+        - [CRITICAL] Missing null check on `deviceId`...
+        - [HIGH] `calculateDemand()` ignores the `roomSize` edge case...
+        - [MEDIUM] Consider adding logging for debugging...
+        - [LOW] Variable naming could be clearer...
+
+        Args:
+            text: Raw reviewer response text
+
+        Returns:
+            List of ParsedIssue objects with severity categorization
+        """
+        if not text or not text.strip():
+            return []
+
+        parsed_issues: List[ParsedIssue] = []
+
+        # First extract raw issue items
+        raw_issues = self._extract_issue_items(text)
+
+        for issue_text in raw_issues:
+            severity, clean_content = self._extract_severity_from_issue(issue_text)
+            parsed_issues.append(ParsedIssue(
+                content=clean_content,
+                severity=severity,
+                file_path=None  # Could be enhanced to extract file paths
+            ))
+
+        return parsed_issues
+
+    def _extract_severity_from_issue(self, issue_text: str) -> tuple[str, str]:
+        """
+        Extract severity tag and clean content from an issue string.
+
+        Implements [ERR-2]: Returns "medium" as default severity.
+
+        Args:
+            issue_text: Raw issue string potentially containing [SEVERITY] tag
+
+        Returns:
+            Tuple of (severity, clean_content) where severity is lowercase
+        """
+        import re
+
+        # Valid severity levels
+        valid_severities = {"critical", "high", "medium", "low"}
+
+        # Look for [SEVERITY] pattern at the start of the issue
+        match = re.match(r'\[(CRITICAL|HIGH|MEDIUM|LOW)\]\s*(.+)', issue_text, re.IGNORECASE)
+
+        if match:
+            severity = match.group(1).lower()
+            content = match.group(2).strip()
+            if severity in valid_severities:
+                return (severity, content)
+
+        # [ERR-2] Default to medium if no valid severity found
+        return ("medium", issue_text)
 
     def format_feedback(self, result: ReviewResult) -> str:
         """Format review result as feedback text for implementer injection."""

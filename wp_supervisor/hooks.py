@@ -231,63 +231,12 @@ class SupervisorHooks:
         tool_use_id: Optional[str],
         context: Any
     ) -> Dict[str, Any]:
-        """PostToolUse hook for triggering reviews when build/test/compile commands execute.
+        """Legacy PostToolUse hook — no longer registered in hooks config.
 
-        Detects keywords 'test', 'compile', 'build' (case-insensitive) in Bash commands.
-        Triggers a review if there are pending file changes.
-
-        Flow:
-        1. Extract command from input_data.tool_input.command
-        2. Check if command contains build keywords (case-insensitive)
-        3. If yes and Phase 4 and coordinator active:
-           - Call self._review_coordinator.on_build_executed(command)
-        4. Always return self._allow() (fail-open)
-
-        Error handling: Log errors and allow command through (fail-open per ERR-1).
+        Review triggering has moved to build_verify (Stop hook) which has access
+        to test results for REQ-3.1 pass/fail gating. Kept for backward compat.
         """
-        import asyncio
-
-        try:
-            # Only process Bash tool
-            tool_name = input_data.get("tool_name", "")
-            if tool_name != "Bash":
-                return self._allow()
-
-            # Extract command
-            tool_input = input_data.get("tool_input", {})
-            command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
-
-            # Skip if no command or no build keywords
-            if not command or not self._is_build_command(command):
-                return self._allow()
-
-            # Only trigger in Phase 4
-            loop = asyncio.get_running_loop()
-            phase = await loop.run_in_executor(None, self.markers.get_phase)
-            if phase != 4:
-                return self._allow()
-
-            # Call coordinator if set
-            if self._review_coordinator is not None:
-                try:
-                    await self._review_coordinator.on_build_executed(command)
-                except Exception as e:
-                    await loop.run_in_executor(
-                        None,
-                        self.logger.log_event,
-                        "REVIEWER",
-                        f"Build execution trigger error: {e}"
-                    )
-
-            return self._allow()
-
-        except Exception as e:
-            # ERR-1: Log errors and allow command through (fail-open)
-            try:
-                self.logger.log_event("HOOK_ERROR", f"track_build_execution exception: {e}")
-            except:
-                pass
-            return self._allow()
+        return self._allow()
 
     def _is_build_command(self, command: str) -> bool:
         """Check if command contains build/test/compile keywords (case-insensitive).
@@ -396,6 +345,20 @@ class SupervisorHooks:
                         return {"continue": False, "stopReason": format_test_failure(out, profile)}
                     await loop.run_in_executor(None, self.logger.log_wp, "Phase 4: Tests OK")
 
+                    # [REQ-3.1] Trigger review now that tests pass.
+                    # Stop hook is the ideal trigger point: we already have test
+                    # results, and it fires once per Claude turn (natural throttling).
+                    if self._review_coordinator is not None:
+                        try:
+                            await self._review_coordinator.on_build_executed(
+                                test_cmd, command_output=out
+                            )
+                        except Exception as e:
+                            await loop.run_in_executor(
+                                None, self.logger.log_event, "REVIEWER",
+                                f"Review trigger error: {e}"
+                            )
+
                 await loop.run_in_executor(None, self.logger.log_wp, "Phase 4 COMPLETE: All builds and tests passing")
 
             return self._allow()
@@ -421,7 +384,7 @@ class SupervisorHooks:
             self.logger.log_event("HOOK", "HookMatcher import FAILED - no hooks registered")
             return {}
 
-        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify, file_tracking, build_execution)")
+        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify, file_tracking)")
         return {
             "PreToolUse": [
                 HookMatcher(matcher="Write|Edit", hooks=[self.phase_guard]),
@@ -429,7 +392,6 @@ class SupervisorHooks:
             ],
             "PostToolUse": [
                 HookMatcher(matcher="Write|Edit", hooks=[self.track_file_change]),
-                HookMatcher(matcher="Bash", hooks=[self.track_build_execution]),
             ],
             "Stop": [
                 HookMatcher(hooks=[self.build_verify]),

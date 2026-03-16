@@ -218,5 +218,316 @@ class TestReviewerContextMinimalData:
         assert isinstance(context.changed_files["/path/to/file.py"], str)
 
 
+# =============================================================================
+# REQ-2.1: ParsedIssue and Severity Parsing Tests
+# =============================================================================
+
+from wp_supervisor.reviewer import ParsedIssue
+
+
+class TestParsedIssue:
+    """Tests for ParsedIssue dataclass."""
+
+    def test_parsed_issue_class_exists(self):
+        """ParsedIssue class should exist."""
+        assert ParsedIssue is not None
+
+    def test_parsed_issue_has_content(self):
+        """[REQ-2.1] ParsedIssue should have content field."""
+        issue = ParsedIssue(content="Missing null check", severity="critical")
+        assert issue.content == "Missing null check"
+
+    def test_parsed_issue_has_severity(self):
+        """[REQ-2.1] ParsedIssue should have severity field."""
+        issue = ParsedIssue(content="Issue", severity="high")
+        assert issue.severity == "high"
+
+    def test_parsed_issue_has_optional_file_path(self):
+        """ParsedIssue should have optional file_path field."""
+        issue = ParsedIssue(
+            content="Issue",
+            severity="medium",
+            file_path="/src/module.py"
+        )
+        assert issue.file_path == "/src/module.py"
+
+    def test_parsed_issue_file_path_defaults_to_none(self):
+        """file_path should default to None."""
+        issue = ParsedIssue(content="Issue", severity="low")
+        assert issue.file_path is None
+
+
+class TestReviewResultParsedIssues:
+    """Tests for ReviewResult.parsed_issues field."""
+
+    def test_review_result_has_parsed_issues(self):
+        """[REQ-2.1] ReviewResult should have parsed_issues field."""
+        result = ReviewResult()
+        assert hasattr(result, 'parsed_issues')
+
+    def test_review_result_parsed_issues_is_list(self):
+        """parsed_issues should be a list."""
+        result = ReviewResult()
+        assert isinstance(result.parsed_issues, list)
+
+    def test_review_result_parsed_issues_defaults_empty(self):
+        """parsed_issues should default to empty list."""
+        result = ReviewResult()
+        assert len(result.parsed_issues) == 0
+
+    def test_review_result_can_have_parsed_issues(self):
+        """ReviewResult should accept parsed_issues."""
+        parsed = [
+            ParsedIssue(content="Issue 1", severity="high"),
+            ParsedIssue(content="Issue 2", severity="low"),
+        ]
+        result = ReviewResult(parsed_issues=parsed)
+        assert len(result.parsed_issues) == 2
+
+
+class TestReviewerAgentParseIssuesWithSeverity:
+    """Tests for ReviewerAgent._parse_issues_with_severity method."""
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_parse_issues_with_severity_method_exists(self):
+        """[REQ-2.1] _parse_issues_with_severity method should exist."""
+        assert hasattr(ReviewerAgent, '_parse_issues_with_severity')
+
+    def test_parse_issues_with_severity_returns_list(self):
+        """Should return list of ParsedIssue."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+            text = "[CRITICAL] Missing null check"
+
+            # when
+            result = reviewer._parse_issues_with_severity(text)
+
+            # then
+            assert isinstance(result, list)
+
+    def test_parse_issues_with_severity_extracts_critical(self):
+        """[REQ-2.1] Should extract CRITICAL severity."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+            text = "- [CRITICAL] Missing null check on deviceId"
+
+            # when
+            result = reviewer._parse_issues_with_severity(text)
+
+            # then
+            assert len(result) >= 1
+            assert result[0].severity == "critical"
+
+    def test_parse_issues_with_severity_extracts_high(self):
+        """[REQ-2.1] Should extract HIGH severity."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+            text = "- [HIGH] calculateDemand() ignores edge case"
+
+            # when
+            result = reviewer._parse_issues_with_severity(text)
+
+            # then
+            assert len(result) >= 1
+            assert result[0].severity == "high"
+
+    def test_parse_issues_with_severity_extracts_medium(self):
+        """[REQ-2.1] Should extract MEDIUM severity."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+            text = "- [MEDIUM] Consider adding logging"
+
+            # when
+            result = reviewer._parse_issues_with_severity(text)
+
+            # then
+            assert len(result) >= 1
+            assert result[0].severity == "medium"
+
+    def test_parse_issues_with_severity_extracts_low(self):
+        """[REQ-2.1] Should extract LOW severity."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+            text = "- [LOW] Variable naming could be clearer"
+
+            # when
+            result = reviewer._parse_issues_with_severity(text)
+
+            # then
+            assert len(result) >= 1
+            assert result[0].severity == "low"
+
+    def test_parse_issues_with_severity_handles_multiple_issues(self):
+        """Should handle multiple issues with different severities."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+            text = """
+            - [CRITICAL] Missing null check
+            - [HIGH] Edge case not handled
+            - [MEDIUM] Add logging
+            - [LOW] Naming improvement
+            """
+
+            # when
+            result = reviewer._parse_issues_with_severity(text)
+
+            # then
+            assert len(result) == 4
+            severities = [issue.severity for issue in result]
+            assert "critical" in severities
+            assert "high" in severities
+            assert "medium" in severities
+            assert "low" in severities
+
+    def test_parse_issues_with_severity_defaults_to_medium(self):
+        """[ERR-2] Should default to 'medium' when no severity tag."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+            text = "- Issue without severity tag"
+
+            # when
+            result = reviewer._parse_issues_with_severity(text)
+
+            # then
+            assert len(result) >= 1
+            assert result[0].severity == "medium"
+
+    def test_parse_issues_with_severity_handles_empty_input(self):
+        """Should handle empty input."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+
+            # when
+            result = reviewer._parse_issues_with_severity("")
+
+            # then
+            assert result == []
+
+
+class TestReviewerAgentExtractSeverityFromIssue:
+    """Tests for ReviewerAgent._extract_severity_from_issue method."""
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_extract_severity_from_issue_method_exists(self):
+        """_extract_severity_from_issue method should exist."""
+        assert hasattr(ReviewerAgent, '_extract_severity_from_issue')
+
+    def test_extract_severity_returns_tuple(self):
+        """Should return tuple of (severity, clean_content)."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+
+            # when
+            result = reviewer._extract_severity_from_issue("[HIGH] Some issue")
+
+            # then
+            assert isinstance(result, tuple)
+            assert len(result) == 2
+
+    def test_extract_severity_extracts_tag(self):
+        """Should extract severity tag and return clean content."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+
+            # when
+            severity, content = reviewer._extract_severity_from_issue("[CRITICAL] Missing check")
+
+            # then
+            assert severity == "critical"
+            assert "Missing check" in content
+            assert "[CRITICAL]" not in content
+
+    def test_extract_severity_defaults_to_medium(self):
+        """[ERR-2] Should default to 'medium' when no tag found."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+
+            # when
+            severity, content = reviewer._extract_severity_from_issue("Issue without tag")
+
+            # then
+            assert severity == "medium"
+            assert content == "Issue without tag"
+
+    def test_extract_severity_handles_lowercase_tags(self):
+        """Should handle lowercase severity tags."""
+        # given
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reviewer = ReviewerAgent(
+                logger=self._create_mock_logger(),
+                requirements_summary="# Requirements",
+                working_dir=tmpdir
+            )
+
+            # when
+            severity, _ = reviewer._extract_severity_from_issue("[critical] Some issue")
+
+            # then
+            assert severity == "critical"
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

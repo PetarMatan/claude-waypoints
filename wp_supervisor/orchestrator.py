@@ -314,6 +314,13 @@ class WPOrchestrator:
             knowledge_context=self._knowledge_context
         )
 
+    def _build_implementation_subagents(self) -> Dict[str, AgentDefinition]:
+        """Build Phase 4 implementation subagent definitions."""
+        return SubagentBuilder.build_implementation_agents(
+            knowledge_context=self._knowledge_context,
+            requirements_summary=self.markers.get_requirements_summary() or ""
+        )
+
     async def _run_phase(self, phase: int, initial_task: Optional[str] = None) -> None:
         """Run a single Waypoints phase."""
         phase_name = PHASE_NAMES[phase]
@@ -335,6 +342,16 @@ class WPOrchestrator:
                 )
                 subagents = None
                 delegate_exploration = False
+        elif phase == 4:
+            try:
+                subagents = self._build_implementation_subagents()
+            except Exception as e:
+                self.logger.log_event(
+                    "SUBAGENTS",
+                    f"Failed to build implementation subagents, "
+                    f"continuing without delegation: {e}"
+                )
+                subagents = None
 
         context = self._build_phase_context(phase, initial_task, delegate_exploration=delegate_exploration)
         context_path = self.markers.save_phase_context(phase, context)
@@ -445,7 +462,7 @@ class WPOrchestrator:
             agent_options.agents = subagents
             self.logger.log_event(
                 "SUBAGENTS",
-                f"Configured {len(subagents)} exploration subagents: {list(subagents.keys())}"
+                f"Configured {len(subagents)} subagents: {list(subagents.keys())}"
             )
 
         async with ClaudeSDKClient(options=agent_options) as client:

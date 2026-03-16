@@ -434,6 +434,82 @@ class TestBuildVerifyHook:
             hooks._run_command.assert_not_called()
             assert result == {}
 
+    def test_phase4_triggers_review_after_tests_pass(self):
+        """REQ-3.1: build_verify triggers review with test output when tests pass."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            hooks.config.get_profile_name = MagicMock(return_value="python")
+            hooks.config.get_command = MagicMock(side_effect=lambda cmd: f"echo {cmd}")
+            hooks._run_command = MagicMock(return_value=(0, "5 passed"))
+
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {"cwd": tmpdir}
+            result = run_async(hooks.build_verify(input_data, None, None))
+
+            # then - review triggered with test command and output
+            mock_coordinator.on_build_executed.assert_called_once()
+            call_args = mock_coordinator.on_build_executed.call_args
+            assert call_args[0][0] == "echo test"  # test command
+            assert call_args[1]["command_output"] == "5 passed"
+            assert result == {}
+
+    def test_phase4_no_review_when_tests_fail(self):
+        """REQ-3.1: build_verify does NOT trigger review when tests fail."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            hooks.config.get_profile_name = MagicMock(return_value="python")
+            hooks.config.get_command = MagicMock(side_effect=lambda cmd: f"echo {cmd}")
+            hooks._run_command = MagicMock(side_effect=[(0, "OK"), (1, "2 failed")])
+
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock()
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {"cwd": tmpdir}
+            result = run_async(hooks.build_verify(input_data, None, None))
+
+            # then - no review (tests failed, hook returns error before review trigger)
+            mock_coordinator.on_build_executed.assert_not_called()
+            assert result.get("continue") is False
+
+    def test_phase4_no_review_without_coordinator(self):
+        """build_verify handles missing coordinator gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            hooks.config.get_profile_name = MagicMock(return_value="python")
+            hooks.config.get_command = MagicMock(side_effect=lambda cmd: f"echo {cmd}")
+            hooks._run_command = MagicMock(return_value=(0, "5 passed"))
+            # No coordinator set
+
+            input_data = {"cwd": tmpdir}
+            result = run_async(hooks.build_verify(input_data, None, None))
+
+            # then - no crash, still passes
+            assert result == {}
+
+    def test_phase4_review_error_does_not_block(self):
+        """Review trigger errors don't block phase completion."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hooks = self._create_hooks_with_config(4, tmpdir)
+            hooks.config.get_profile_name = MagicMock(return_value="python")
+            hooks.config.get_command = MagicMock(side_effect=lambda cmd: f"echo {cmd}")
+            hooks._run_command = MagicMock(return_value=(0, "5 passed"))
+
+            mock_coordinator = MagicMock()
+            mock_coordinator.on_build_executed = AsyncMock(
+                side_effect=Exception("Review error")
+            )
+            hooks.set_review_coordinator(mock_coordinator)
+
+            input_data = {"cwd": tmpdir}
+            result = run_async(hooks.build_verify(input_data, None, None))
+
+            # then - review error logged but phase still completes
+            assert result == {}
+
     def test_has_placeholder_detects_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             hooks = self._create_hooks_with_config(1, tmpdir)
@@ -667,8 +743,8 @@ class TestTrackBuildExecutionBehavior:
         hooks._test_logger = logger
         return hooks
 
-    def test_track_build_execution_calls_coordinator_on_build_executed(self):
-        """REQ-9: Hook calls review_coordinator.on_build_executed for build commands."""
+    def test_track_build_execution_is_legacy_noop(self):
+        """track_build_execution is now a legacy no-op (review moved to Stop hook)."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # given
             hooks = self._create_hooks_with_config(4, tmpdir)
@@ -685,9 +761,9 @@ class TestTrackBuildExecutionBehavior:
             # when
             result = run_async(hooks.track_build_execution(input_data, None, None))
 
-            # then
-            mock_coordinator.on_build_executed.assert_called_once_with("pytest tests/")
-            assert result == {}  # Always returns allow
+            # then - no longer calls coordinator (moved to build_verify)
+            mock_coordinator.on_build_executed.assert_not_called()
+            assert result == {}
 
     def test_track_build_execution_skips_non_bash_tools(self):
         """track_build_execution only processes Bash tool."""
@@ -830,7 +906,7 @@ class TestTrackBuildExecutionEdgeCases:
         return hooks
 
     def test_false_positive_keyword_in_path(self):
-        """EDGE-3: False positive keyword match (e.g., 'test' in path)."""
+        """EDGE-3: track_build_execution is legacy no-op, always returns allow."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # given
             hooks = self._create_hooks_with_config(4, tmpdir)
@@ -838,7 +914,6 @@ class TestTrackBuildExecutionEdgeCases:
             mock_coordinator.on_build_executed = AsyncMock()
             hooks.set_review_coordinator(mock_coordinator)
 
-            # 'test' appears in path, not as a command
             input_data = {
                 "hook_event_name": "PostToolUse",
                 "tool_name": "Bash",
@@ -848,9 +923,8 @@ class TestTrackBuildExecutionEdgeCases:
             # when
             result = run_async(hooks.track_build_execution(input_data, None, None))
 
-            # then - harmless false positive: review skips if no pending changes
-            # The hook will call on_build_executed, but coordinator handles the check
-            mock_coordinator.on_build_executed.assert_called_once()
+            # then - legacy no-op, never calls coordinator
+            mock_coordinator.on_build_executed.assert_not_called()
             assert result == {}
 
     def test_missing_command_in_tool_input(self):

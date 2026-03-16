@@ -11,14 +11,26 @@ if TYPE_CHECKING:
 
 from .reviewer import ReviewerAgent, ReviewerState, ReviewerContext, ReviewResult
 from .file_tracker import FileChangeTracker
-from .review_trigger import ReviewTrigger, TriggerEvent
+from .review_trigger import ReviewTrigger, TriggerEvent, DEFAULT_DEBOUNCE_INTERVAL
 from .feedback_queue import FeedbackQueue
+from .feedback_capping import FeedbackCapper, DEFAULT_FEEDBACK_CAP
+from .feedback_dedup import FeedbackDeduplicator
 
 
 @dataclass
 class ReviewCoordinatorConfig:
-    """Configuration for the review coordinator."""
+    """
+    Configuration for the review coordinator.
+
+    Implements configuration for:
+    - [REQ-2.3] Feedback cap (default: 20)
+    - [REQ-3.2] Debounce interval (default: 60 seconds)
+    """
     enabled: bool = True
+    feedback_cap: int = DEFAULT_FEEDBACK_CAP  # [REQ-2.3]
+    debounce_interval: float = DEFAULT_DEBOUNCE_INTERVAL  # [REQ-3.2]
+    enable_capping: bool = True  # [REQ-2.x]
+    enable_deduplication: bool = True  # [REQ-4.x]
 
 
 class ReviewCoordinator:
@@ -44,6 +56,8 @@ class ReviewCoordinator:
         self._file_tracker: Optional[FileChangeTracker] = None
         self._trigger: Optional[ReviewTrigger] = None
         self._feedback_queue: Optional[FeedbackQueue] = None
+        self._feedback_capper: Optional[FeedbackCapper] = None
+        self._feedback_deduplicator: Optional[FeedbackDeduplicator] = None
 
         self._is_active = False
         self._is_degraded = False
@@ -79,12 +93,29 @@ class ReviewCoordinator:
                 working_dir=self._working_dir
             )
 
-            self._feedback_queue = FeedbackQueue(logger=self._logger)
+            # Initialize capper and deduplicator based on config [REQ-2.x, REQ-4.x]
+            if self._config.enable_capping:
+                self._feedback_capper = FeedbackCapper(
+                    logger=self._logger,
+                    cap=self._config.feedback_cap
+                )
+
+            if self._config.enable_deduplication:
+                self._feedback_deduplicator = FeedbackDeduplicator(
+                    logger=self._logger
+                )
+
+            self._feedback_queue = FeedbackQueue(
+                logger=self._logger,
+                capper=self._feedback_capper,
+                deduplicator=self._feedback_deduplicator
+            )
 
             self._trigger = ReviewTrigger(
                 file_tracker=self._file_tracker,
                 logger=self._logger,
                 on_trigger=self._schedule_review,
+                debounce_interval=self._config.debounce_interval,  # [REQ-3.2]
             )
 
             self._reviewer = ReviewerAgent(
@@ -118,6 +149,8 @@ class ReviewCoordinator:
         self._file_tracker = None
         self._trigger = None
         self._feedback_queue = None
+        self._feedback_capper = None
+        self._feedback_deduplicator = None
 
         self._is_active = False
 
@@ -138,19 +171,16 @@ class ReviewCoordinator:
         except Exception as e:
             self._logger.log_event("REVIEWER", f"File change tracking error: {e}")
 
-    async def on_build_executed(self, command: str) -> None:
-        """Called when Bash executes a build/test/compile command.
+    async def on_build_executed(
+        self, command: str, command_output: Optional[str] = None
+    ) -> None:
+        """Called when build/test command completes (from Stop hook after tests pass).
 
         Triggers a review if there are pending file changes.
-        This is the primary trigger mechanism for reviews.
-
-        Flow:
-        1. Return early if not active or degraded (per ERR-2)
-        2. Return early if trigger is None
-        3. Delegate to self._trigger.on_build_executed(command)
 
         Args:
-            command: The Bash command that was executed.
+            command: The build/test command that was executed.
+            command_output: Test output for pass/fail detection [REQ-3.1].
         """
         # ERR-2: Return early when not active or degraded
         if not self._is_active or self._is_degraded:
@@ -160,7 +190,7 @@ class ReviewCoordinator:
             return
 
         try:
-            await self._trigger.on_build_executed(command)
+            await self._trigger.on_build_executed(command, command_output=command_output)
         except Exception as e:
             self._logger.log_event("REVIEWER", f"Build execution trigger error: {e}")
 
@@ -290,13 +320,13 @@ class ReviewCoordinator:
             return None
 
     async def _queue_feedback(self, result: ReviewResult) -> None:
-        """Queue feedback from review result."""
+        """Queue feedback from review result with capping and deduplication."""
         if self._feedback_queue is None or self._reviewer is None:
             return
 
         try:
             feedback = self._reviewer.format_feedback(result)
-            await self._feedback_queue.enqueue(feedback, result)
+            await self._feedback_queue.enqueue_with_processing(feedback, result)
 
         except Exception as e:
             self._logger.log_event("REVIEWER", f"Feedback queueing error: {e}")

@@ -131,6 +131,33 @@ Provide a concise summary of:
 {knowledge_context}
 """
 
+IMPLEMENTATION_SUBAGENT_INSTRUCTIONS = """# Implementation Subagent
+
+## Your Role
+You are a specialized implementation subagent. Your parent session will assign you a specific
+scope of work — implement exactly what is assigned, nothing more.
+
+## Feature Context
+{requirements_summary}
+
+## How to Work
+1. Read the test files and interface stubs for your assigned scope
+2. Implement the business logic to make the tests pass
+3. Run only the tests in your scope frequently to verify progress
+4. Follow existing patterns found in the codebase
+
+## Guidelines
+- Implement ONLY the scope assigned by the parent session
+- Do NOT modify files outside your assigned scope
+- Do NOT create documentation, summary, or markdown files
+- Follow existing code patterns and conventions
+- Minimal comments: do NOT reference requirement IDs in code comments
+- Run tests after each significant change
+- If tests pass, report completion to the parent session
+
+{knowledge_context}
+"""
+
 ARCHITECTURE_INSTRUCTIONS = """# Architecture & Flow Explorer
 
 ## Your Role
@@ -557,6 +584,9 @@ the business logic to make all tests pass.
 - **Follow the Phase 2 architecture**: Implement the method stubs from "Interfaces Created"
   and wire them into existing code at the call sites. Do not inline logic directly in callers
   when a method was created for it — that creates dead code with tests but no callers.
+- **Minimal comments**: Code should be self-documenting. Do NOT add comments referencing
+  requirement IDs (e.g., `// [REQ-1]`, `// EDGE-2`). Do NOT add comments that just restate
+  what the code does. Only comment non-obvious business logic or surprising edge cases.
 - Refactor for clarity after tests pass (if needed)
 
 ## Critical: Test vs Requirements Conflicts
@@ -574,6 +604,35 @@ the business logic to make all tests pass.
 - Run tests after each significant change
 - Do NOT create documentation, summary, or markdown files in the repository — the supervisor handles all phase documentation
 - When ALL tests pass, output exactly `---PHASE_COMPLETE---` on its own line to signal completion (no bold, no markdown - the supervisor parses this signal)
+
+## Delegation to Implementation Subagents
+You have up to 4 implementation subagents (`implementer-1` through `implementer-4`) available
+via the Task tool. However:
+
+**Default: do NOT delegate.** Most features are best implemented in a single session where you
+have full integration awareness.
+
+**Delegate ONLY when ALL of these are true:**
+- Modules are truly independent: no shared types, no cross-imports, no shared utility code
+- Each module can be implemented without knowing how the other modules are written
+- Integration afterward is trivial or unnecessary
+
+**Do NOT delegate when:**
+- Modules share DTOs, domain objects, or utility code
+- One module calls, imports, or wires into another
+- A coordinator/registry/factory needs to assemble modules together
+- The work is small enough for a single session (most features are)
+- You are unsure whether modules are truly independent
+
+**When in doubt, implement everything yourself.**
+
+**How to delegate** (if you choose to):
+- Before delegating, briefly explain why you're splitting and what each subagent will handle
+- Spawn subagents via the Task tool in a single message for parallel execution
+- Include in each task: specific file paths to implement, test file paths to run,
+  and the interface content for their scope
+- After subagents complete: review all work, run the full test suite, and fix any
+  integration issues yourself
 """
 
 
@@ -786,6 +845,9 @@ Output ONLY the summary in the format above.
 """
 
 
+# =============================================================================
+# MODULE ANALYSIS TEMPLATE (Phase 4 subagent splitting)
+# =============================================================================
 
 # =============================================================================
 # REGENERATION CONVERSATION TEMPLATES
@@ -1128,14 +1190,22 @@ Before evaluating anything else:
 
 If everything looks good, respond with exactly: "No issues found."
 
-If there ARE issues, output ONLY a bulleted list of problems. Example:
+If there ARE issues, output ONLY a bulleted list of problems WITH SEVERITY TAGS. Example:
 
-- Missing null check on `deviceId` parameter in `process()` — will throw NPE when called from GridProcessor
-- `calculateDemand()` ignores the `roomSize` edge case from REQ-3 (roomSize=0 should return 0)
+- [CRITICAL] Missing null check on `deviceId` parameter in `process()` — will throw NPE when called from GridProcessor
+- [HIGH] `calculateDemand()` ignores the `roomSize` edge case from REQ-3 (roomSize=0 should return 0)
+- [MEDIUM] Consider adding error logging in `handleRequest()` for debugging production issues
+- [LOW] Variable `x` in `calculate()` could have a more descriptive name
+
+**Severity Levels (REQUIRED for each issue):**
+- [CRITICAL]: Bugs that will cause crashes, data loss, or security vulnerabilities
+- [HIGH]: Missing functionality, broken requirements, edge cases not handled
+- [MEDIUM]: Code quality issues, maintainability concerns, missing error handling
+- [LOW]: Style issues, naming suggestions, minor improvements
 
 **Rules:**
-- Each bullet = one concrete, actionable problem
-- Start each bullet with the specific location (class, method, or line)
+- Each bullet MUST start with a severity tag: [CRITICAL], [HIGH], [MEDIUM], or [LOW]
+- Then specify the location (class, method, or line)
 - Explain WHY it's a problem, not just WHAT the code does
 - Do NOT describe what the code does correctly — only flag what's wrong
 - Do NOT output checklists, confirmations, summaries, or "✅" items
