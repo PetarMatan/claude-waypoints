@@ -195,13 +195,14 @@ class FeedbackQueue:
         categorized = self._to_categorized(parsed_issues)
         result = self._capper.apply_cap(categorized)
 
-        # Map surviving findings back to original ParsedIssues via identity
-        # (apply_cap preserves object instances through sort + slice)
-        cat_to_idx = {id(cat): i for i, cat in enumerate(categorized)}
-        capped_issues = [
-            parsed_issues[cat_to_idx[id(f)]]
-            for f in result.findings
-        ]
+        # Replicate apply_cap's deterministic sort on indices to map back
+        # to ParsedIssues without relying on object identity.
+        sorted_indices = sorted(
+            range(len(categorized)),
+            key=lambda i: categorized[i].severity.value
+        )
+        kept_indices = sorted_indices[:len(result.findings)]
+        capped_issues = [parsed_issues[i] for i in kept_indices]
 
         return (capped_issues, result.dropped_count)
 
@@ -224,14 +225,18 @@ class FeedbackQueue:
         categorized = self._to_categorized(parsed_issues, use_severity=False)
         result = self._deduplicator.deduplicate(categorized)
 
-        # Map surviving findings back to original ParsedIssues via identity
-        # (deduplicate preserves object instances from input list)
-        surviving_ids = set(id(f) for f in result.unique_findings)
-        deduped_issues = [
-            parsed_issues[i]
-            for i, cat in enumerate(categorized)
-            if id(cat) in surviving_ids
-        ]
+        # Map back via content hash instead of object identity.
+        surviving_hashes = {
+            self._deduplicator.compute_issue_hash(f.content, f.file_path)
+            for f in result.unique_findings
+        }
+        seen: set = set()
+        deduped_issues = []
+        for i, cat in enumerate(categorized):
+            h = self._deduplicator.compute_issue_hash(cat.content, cat.file_path)
+            if h in surviving_hashes and h not in seen:
+                deduped_issues.append(parsed_issues[i])
+                seen.add(h)
 
         return (deduped_issues, result.duplicate_count)
 
