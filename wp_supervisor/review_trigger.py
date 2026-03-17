@@ -28,9 +28,6 @@ class TriggerEvent:
 TriggerCallback = Callable[[TriggerEvent], None]
 
 
-# Keywords that trigger a review when found in Bash commands (case-insensitive)
-BUILD_KEYWORDS = ("test", "compile", "build")
-
 # Default debounce interval in seconds [REQ-3.2]
 DEFAULT_DEBOUNCE_INTERVAL = 60.0
 

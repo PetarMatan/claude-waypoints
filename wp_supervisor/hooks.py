@@ -225,29 +225,6 @@ class SupervisorHooks:
                 pass
             return self._allow()
 
-    async def track_build_execution(
-        self,
-        input_data: Dict[str, Any],
-        tool_use_id: Optional[str],
-        context: Any
-    ) -> Dict[str, Any]:
-        """Legacy PostToolUse hook — no longer registered in hooks config.
-
-        Review triggering has moved to build_verify (Stop hook) which has access
-        to test results for REQ-3.1 pass/fail gating. Kept for backward compat.
-        """
-        return self._allow()
-
-    def _is_build_command(self, command: str) -> bool:
-        """Check if command contains build/test/compile keywords (case-insensitive).
-
-        Keywords: 'test', 'compile', 'build' matched as substrings.
-        """
-        if not command:
-            return False
-        command_lower = command.lower()
-        return any(keyword in command_lower for keyword in ("test", "compile", "build"))
-
     def _run_command(self, cmd: str, cwd: str, timeout: int = 120) -> tuple:
         """Run a shell command and return (exit_code, output)."""
         import subprocess

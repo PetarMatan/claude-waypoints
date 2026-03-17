@@ -305,6 +305,101 @@ class TestFeedbackQueueEnqueueWithProcessing:
         assert 'review_result' in params
 
 
+class TestEnqueueWithProcessingIntegration:
+    """Integration tests for enqueue_with_processing with real capper and deduplicator."""
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_full_pipeline_caps_and_deduplicates(self):
+        """Pipeline should dedup then cap, producing a single clean message."""
+        from wp_supervisor.feedback_capping import FeedbackCapper
+        from wp_supervisor.feedback_dedup import FeedbackDeduplicator
+        from wp_supervisor.reviewer import ParsedIssue
+
+        logger = self._create_mock_logger()
+        capper = FeedbackCapper(logger=logger, cap=5)
+        deduplicator = FeedbackDeduplicator(logger=logger)
+
+        queue = FeedbackQueue(
+            logger=logger,
+            capper=capper,
+            deduplicator=deduplicator
+        )
+
+        # Build a review result with 8 issues (3 duplicates, 5 unique)
+        issues = [
+            ParsedIssue(content="Missing null check", severity="critical", file_path="a.py"),
+            ParsedIssue(content="Missing null check", severity="critical", file_path="a.py"),  # dup
+            ParsedIssue(content="Bad naming", severity="low", file_path="a.py"),
+            ParsedIssue(content="Bad naming", severity="low", file_path="a.py"),  # dup
+            ParsedIssue(content="No error handling", severity="high", file_path="b.py"),
+            ParsedIssue(content="No error handling", severity="high", file_path="b.py"),  # dup
+            ParsedIssue(content="Unused import", severity="low", file_path="b.py"),
+            ParsedIssue(content="Missing docstring", severity="medium", file_path="b.py"),
+        ]
+        result = ReviewResult(
+            issues=[i.content for i in issues],
+            files_reviewed={"a.py", "b.py"},
+            parsed_issues=issues,
+        )
+
+        original_message = "Original feedback message"
+        asyncio.run(queue.enqueue_with_processing(original_message, result))
+
+        # Should have 1 queued item
+        assert queue.pending_count == 1
+
+        items = asyncio.run(queue.dequeue_all())
+        item = items[0]
+
+        # 3 duplicates removed, so message should not be the original
+        assert item.deduplicated_count == 3
+        # Message should NOT contain double-listed issues
+        assert "Processed Issues:" not in item.message
+        # Message should contain stats note
+        assert "duplicate items removed" in item.message
+
+    def test_no_filtering_returns_original_message(self):
+        """When nothing is filtered, original message should be returned as-is."""
+        from wp_supervisor.feedback_capping import FeedbackCapper
+        from wp_supervisor.feedback_dedup import FeedbackDeduplicator
+        from wp_supervisor.reviewer import ParsedIssue
+
+        logger = self._create_mock_logger()
+        capper = FeedbackCapper(logger=logger, cap=20)
+        deduplicator = FeedbackDeduplicator(logger=logger)
+
+        queue = FeedbackQueue(
+            logger=logger,
+            capper=capper,
+            deduplicator=deduplicator
+        )
+
+        issues = [
+            ParsedIssue(content="Issue one", severity="high", file_path="a.py"),
+            ParsedIssue(content="Issue two", severity="medium", file_path="b.py"),
+        ]
+        result = ReviewResult(
+            issues=[i.content for i in issues],
+            files_reviewed={"a.py", "b.py"},
+            parsed_issues=issues,
+        )
+
+        original_message = "The original feedback text"
+        asyncio.run(queue.enqueue_with_processing(original_message, result))
+
+        items = asyncio.run(queue.dequeue_all())
+        item = items[0]
+
+        # No filtering happened, so original message should be preserved
+        assert item.message == original_message
+        assert item.dropped_count == 0
+        assert item.deduplicated_count == 0
+
+
 class TestFeedbackQueueApplyCapping:
     """Tests for FeedbackQueue._apply_capping method."""
 

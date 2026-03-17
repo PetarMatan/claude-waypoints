@@ -57,26 +57,13 @@ class TestFileReviewState:
         state = FileReviewState(file_path="/src/module.py")
         assert len(state.issue_hashes) == 0
 
-    def test_file_review_state_has_issue_contents(self):
-        """State should have issue_contents list."""
-        state = FileReviewState(file_path="/src/module.py")
-        assert isinstance(state.issue_contents, list)
-
-    def test_file_review_state_issue_contents_defaults_empty(self):
-        """issue_contents should default to empty list."""
-        state = FileReviewState(file_path="/src/module.py")
-        assert len(state.issue_contents) == 0
-
-    def test_file_review_state_can_add_issues(self):
-        """Should be able to track multiple issues."""
+    def test_file_review_state_can_add_hashes(self):
+        """Should be able to track multiple issue hashes."""
         state = FileReviewState(file_path="/src/module.py")
         state.issue_hashes.add("hash1")
         state.issue_hashes.add("hash2")
-        state.issue_contents.append("Issue 1")
-        state.issue_contents.append("Issue 2")
 
         assert len(state.issue_hashes) == 2
-        assert len(state.issue_contents) == 2
 
 
 # =============================================================================

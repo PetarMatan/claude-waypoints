@@ -14,7 +14,6 @@ from wp_supervisor.review_trigger import (
     ReviewTrigger,
     TriggerReason,
     TriggerEvent,
-    BUILD_KEYWORDS,
 )
 
 
@@ -66,29 +65,6 @@ class TestTriggerEvent:
         event = TriggerEvent(reason=TriggerReason.MANUAL, file_count=5)
         assert event.reason == TriggerReason.MANUAL
         assert event.file_count == 5
-
-
-# =============================================================================
-# BUILD_KEYWORDS Constant
-# =============================================================================
-
-class TestBuildKeywords:
-
-    def test_build_keywords_constant_exists(self):
-        """BUILD_KEYWORDS constant should be defined."""
-        assert BUILD_KEYWORDS is not None
-
-    def test_build_keywords_contains_test(self):
-        """REQ-1: Keywords include 'test'."""
-        assert "test" in BUILD_KEYWORDS
-
-    def test_build_keywords_contains_compile(self):
-        """REQ-1: Keywords include 'compile'."""
-        assert "compile" in BUILD_KEYWORDS
-
-    def test_build_keywords_contains_build(self):
-        """REQ-1: Keywords include 'build'."""
-        assert "build" in BUILD_KEYWORDS
 
 
 # =============================================================================
@@ -801,15 +777,19 @@ class TestReviewTriggerDebounceIntegration:
             debounce_interval=60.0
         )
 
-        # when - first trigger should work
-        run_async(trigger.on_build_executed("pytest"))
-        run_async(trigger.reset())  # Update timestamp
+        # when - first trigger should fire
+        first_result = run_async(trigger.on_build_executed("pytest"))
 
-        # Immediate second trigger should be debounced
-        # (This test will need implementation to properly work)
+        # then
+        assert first_result is True
+        assert callback.call_count == 1
 
-        # then - for now, verify the method exists and doesn't crash
-        assert True
+        # when - immediate second trigger should be debounced
+        second_result = run_async(trigger.on_build_executed("pytest"))
+
+        # then
+        assert second_result is False
+        assert callback.call_count == 1  # still only called once
 
     def test_changes_accumulate_during_debounce(self):
         """[EDGE-3] Changes during debounce should be picked up in next review."""

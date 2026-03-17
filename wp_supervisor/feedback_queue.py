@@ -133,13 +133,8 @@ class FeedbackQueue:
         """
         Enqueue feedback after applying capping and deduplication.
 
-        Implements:
-        - [REQ-2.x] Apply severity-based capping via FeedbackCapper
-        - [REQ-4.x] Apply deduplication via FeedbackDeduplicator
-        - [REQ-2.6] Log when items are dropped
-
         Args:
-            message: The formatted feedback message
+            message: The formatted feedback message (used as-is if no filtering)
             review_result: The full review result with parsed issues
         """
         parsed_issues = list(review_result.parsed_issues)  # Copy to avoid mutation
@@ -147,20 +142,19 @@ class FeedbackQueue:
         dedup_count = 0
 
         try:
-            # [REQ-4.x] Apply deduplication first (removes duplicates from previous reviews)
+            # Apply deduplication first (removes duplicates from previous reviews)
             if self._deduplicator and parsed_issues:
                 parsed_issues, dedup_count = self._apply_deduplication(parsed_issues)
 
-            # [REQ-2.x] Apply capping after deduplication (sort by severity, keep top 20)
+            # Apply capping after deduplication (sort by severity, keep top 20)
             if self._capper and parsed_issues:
                 parsed_issues, dropped_count = self._apply_capping(parsed_issues)
 
-            # Format final message
+            # Format final message — only rebuild if filtering actually removed items
+            files_text = ", ".join(review_result.files_reviewed) if review_result.files_reviewed else "reviewed files"
             final_message = self._format_processed_message(
-                message,
-                parsed_issues,
-                dropped_count,
-                dedup_count
+                message, parsed_issues, dropped_count, dedup_count,
+                files_text=files_text
             )
 
             # Record the processed findings for future deduplication
@@ -189,8 +183,6 @@ class FeedbackQueue:
         """
         Apply severity-based capping to issues.
 
-        Implements [REQ-2.3-2.6]: Cap at 20, sort by severity, log drops.
-
         Args:
             parsed_issues: List of parsed issues with severity
 
@@ -200,17 +192,14 @@ class FeedbackQueue:
         if not self._capper:
             return (parsed_issues, 0)
 
-        result = self._capper.apply_cap(self._to_categorized(parsed_issues))
+        categorized = self._to_categorized(parsed_issues)
+        result = self._capper.apply_cap(categorized)
 
-        # Convert back to ParsedIssue
-        from .reviewer import ParsedIssue
-
+        # Map surviving findings back to original ParsedIssues via identity
+        # (apply_cap preserves object instances through sort + slice)
+        cat_to_idx = {id(cat): i for i, cat in enumerate(categorized)}
         capped_issues = [
-            ParsedIssue(
-                content=f.content,
-                severity=f.severity.name.lower(),
-                file_path=f.file_path
-            )
+            parsed_issues[cat_to_idx[id(f)]]
             for f in result.findings
         ]
 
@@ -223,8 +212,6 @@ class FeedbackQueue:
         """
         Apply deduplication to issues.
 
-        Implements [REQ-4.1-4.3]: Track reviewed files and merge findings.
-
         Args:
             parsed_issues: List of parsed issues
 
@@ -234,20 +221,17 @@ class FeedbackQueue:
         if not self._deduplicator:
             return (parsed_issues, 0)
 
-        result = self._deduplicator.deduplicate(
-            self._to_categorized(parsed_issues, use_severity=False)
-        )
+        categorized = self._to_categorized(parsed_issues, use_severity=False)
+        result = self._deduplicator.deduplicate(categorized)
 
-        # Build a set of unique finding indices by matching content and file_path
-        unique_indices = set()
-        for finding in result.unique_findings:
-            for i, orig in enumerate(parsed_issues):
-                if i not in unique_indices and orig.content == finding.content and orig.file_path == finding.file_path:
-                    unique_indices.add(i)
-                    break
-
-        # Preserve original ParsedIssue objects in order
-        deduped_issues = [parsed_issues[i] for i in sorted(unique_indices)]
+        # Map surviving findings back to original ParsedIssues via identity
+        # (deduplicate preserves object instances from input list)
+        surviving_ids = set(id(f) for f in result.unique_findings)
+        deduped_issues = [
+            parsed_issues[i]
+            for i, cat in enumerate(categorized)
+            if id(cat) in surviving_ids
+        ]
 
         return (deduped_issues, result.duplicate_count)
 
@@ -256,24 +240,19 @@ class FeedbackQueue:
         original_message: str,
         processed_issues: List["ParsedIssue"],
         dropped_count: int,
-        dedup_count: int
+        dedup_count: int,
+        files_text: str = "reviewed files"
     ) -> str:
         """
-        Format the processed feedback message with statistics.
+        Format the final feedback message after capping/dedup.
 
-        Args:
-            original_message: Original feedback message
-            processed_issues: Processed (capped/deduped) issues
-            dropped_count: Number of issues dropped by capping
-            dedup_count: Number of duplicate issues removed
-
-        Returns:
-            Formatted message for injection
+        Returns the original message if nothing was filtered. Otherwise
+        rebuilds with only surviving issues to avoid double-listing.
         """
-        if not processed_issues:
+        if not processed_issues or (dropped_count == 0 and dedup_count == 0):
             return original_message
 
-        # Build issues list
+        # Rebuild with only surviving issues (avoids double-listing)
         issues_lines = []
         for issue in processed_issues:
             if issue.severity:
@@ -283,15 +262,17 @@ class FeedbackQueue:
 
         issues_text = "\n".join(issues_lines)
 
-        # Build stats note if anything was filtered
         stats_parts = []
         if dropped_count > 0:
             stats_parts.append(f"{dropped_count} low-priority items capped")
         if dedup_count > 0:
             stats_parts.append(f"{dedup_count} duplicate items removed")
 
-        stats_note = ""
-        if stats_parts:
-            stats_note = f"\n\n(Note: {', '.join(stats_parts)})"
+        stats_note = f"\n\n(Note: {', '.join(stats_parts)})"
 
-        return f"{original_message}\n\nProcessed Issues:\n{issues_text}{stats_note}"
+        from .templates import REVIEWER_FEEDBACK_TEMPLATE, REVIEWER_FEEDBACK_ACTION
+        return REVIEWER_FEEDBACK_TEMPLATE.format(
+            files_text=files_text,
+            issues_text=issues_text,
+            action_instruction=REVIEWER_FEEDBACK_ACTION,
+        ) + stats_note

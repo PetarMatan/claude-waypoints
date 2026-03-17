@@ -21,7 +21,6 @@ class FileReviewState:
     """Tracks review state for a single file."""
     file_path: str
     issue_hashes: Set[str] = field(default_factory=set)
-    issue_contents: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -180,13 +179,10 @@ class FeedbackDeduplicator:
                     self._file_states[finding.file_path] = FileReviewState(
                         file_path=finding.file_path,
                         issue_hashes=set(),
-                        issue_contents=[]
                     )
 
                 # Record the finding in file state
-                state = self._file_states[finding.file_path]
-                state.issue_hashes.add(issue_hash)
-                state.issue_contents.append(finding.content)
+                self._file_states[finding.file_path].issue_hashes.add(issue_hash)
 
             # Always add to global hashes for cross-file deduplication
             self._global_hashes.add(issue_hash)
