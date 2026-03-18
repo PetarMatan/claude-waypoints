@@ -1158,20 +1158,24 @@ Before evaluating anything else:
 
 ### Second Pass — Core Review Questions
 1. **Requirements Compliance**: Does the implementation match all requirements? Are edge cases handled?
-2. **Single Responsibility**: Does each class have too many reasons to change? (Not "exactly one" — too many is the problem)
-3. **Testability**: Can each component be tested in isolation without gymnastics?
-4. **Maintainability**: Will changes be easy to make? Will they be localized or ripple through the codebase?
-5. **Error Handling**: Are errors propagated properly or hidden? Can callers understand what went wrong?
-6. **Clarity**: Is it clear what this code does without extensive tracing?
+2. **Security**: Injection vulnerabilities (SQL, command, template)? Hardcoded credentials or secrets? Sensitive data exposed in logs or error messages? Missing input validation at system boundaries?
+3. **Correctness**: Race conditions in concurrent code? Resource leaks (unclosed files, connections)? Off-by-one errors? Null/None handling at boundaries?
+4. **Error Handling**: Are errors propagated properly or silently swallowed? Can callers understand what went wrong?
+5. **Performance**: N+1 queries or DB calls in loops? Blocking I/O in async code? O(n²) when O(n) is possible? (Only flag concrete issues, not hypothetical load concerns)
+6. **Maintainability**: Functions over 50 lines or nesting deeper than 3 levels? Dead code or unused imports? Copy-pasted blocks that should be shared? Does each class have too many reasons to change?
+7. **Testability**: Can each component be tested in isolation without gymnastics?
+8. **Clarity**: Is it clear what this code does without extensive tracing?
 
 ### When to Flag Issues
 - The implementation doesn't match the requirements
 - Required functionality is missing
 - Edge cases from requirements are not handled
+- Security vulnerabilities: injection, credential exposure, missing authorization checks
+- Race conditions, resource leaks, or incorrect concurrent access
+- Concrete performance issues: N+1 queries, blocking I/O in async paths, quadratic algorithms on unbounded input
 - The violation causes real maintainability issues
 - It prevents code reuse in logical contexts
 - It mixes unrelated concerns in a way that makes sense to separate
-- There are obvious scalability or performance concerns (but don't speculate about hypothetical load)
 
 ### When NOT to Flag
 - A small utility class with 2-3 light responsibilities
