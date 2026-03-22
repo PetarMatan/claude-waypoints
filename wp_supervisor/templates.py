@@ -437,15 +437,18 @@ Ask questions → wait for answers → THEN signal in a separate response.
 - **ABSOLUTE RULE**: If your output contains ANY questions, you MUST NOT include `---PHASE_COMPLETE---`. The signal and questions are mutually exclusive — NEVER in the same response.
 """
 
-PHASE2_CONTEXT = """# Waypoints Workflow - Phase 2: Interface Design
+PHASE2_CONTEXT = """# Waypoints Workflow - Phase 2: Interface Design & Implementation Plan
 
-You are in Phase 2 of the Waypoints workflow. Your goal is to design the
-structural skeleton of the solution WITHOUT implementing business logic.
+You are in Phase 2 of the Waypoints workflow. Your goal is to:
+1. Design the structural skeleton of the solution WITHOUT implementing business logic
+2. Think through how each component will be implemented and capture that plan
 
 ## Requirements from Phase 1
 {requirements_summary}
 
 ## Your Task
+
+### Part A: Interface Design (code output)
 1. Design class/interface signatures
 2. Design method signatures with parameter and return types
 3. Create the structural skeleton with:
@@ -464,6 +467,23 @@ structural skeleton of the solution WITHOUT implementing business logic.
 7. Verify call-site completeness: when modifying a method's signature or adding
    new parameters, grep for ALL callers and evaluate which ones need the change
 
+### Part B: Implementation Plan (captured in summary document)
+As you design interfaces, think through HOW each component will be implemented.
+For each class/module, consider:
+- **Approach**: What algorithm, pattern, or strategy will the implementation use?
+- **Data flow**: How does data move through this component? What transforms it?
+- **Integration**: How does this component connect to existing code? What calls what?
+- **Edge cases**: What boundary conditions, error scenarios, or tricky situations
+  should the implementation handle?
+- **Key decisions**: Any trade-offs or alternatives you considered and why you chose
+  this approach
+
+This plan helps Phase 3 write better tests (covering real behavior, not just API shape)
+and helps Phase 4 implement with clear guidance.
+
+Keep the plan concise — bullet points, not essays. Focus on non-obvious logic and
+decisions that would be hard to re-derive from the signatures alone.
+
 ## Guidelines
 - Focus on the PUBLIC API - what will consumers of this code use?
 - Consider separation of concerns
@@ -474,6 +494,8 @@ structural skeleton of the solution WITHOUT implementing business logic.
   integration points (injection + call sites) must be in the existing code.
 - The Codebase Context section in requirements contains file paths and project structure.
   Prefer using these paths directly rather than re-exploring the project structure.
+- The Code Reference section in requirements contains actual code excerpts —
+  prefer using these directly when available.
 
 ## Stub Examples by Language
 
@@ -489,7 +511,7 @@ structural skeleton of the solution WITHOUT implementing business logic.
 - Do NOT create documentation, summary, or markdown files in the repository — the supervisor handles all phase documentation
 - Do NOT ask the user to approve interfaces - the supervisor will handle that
 - When YOU believe interfaces are complete and compile successfully, output exactly `---PHASE_COMPLETE---` on its own line (no bold, no markdown - the supervisor parses this signal)
-- The user will review and approve the interfaces document before proceeding
+- The user will review and approve the interfaces and implementation plan before proceeding
 """
 
 PHASE3_CONTEXT = """# Waypoints Workflow - Phase 3: Test Writing
@@ -504,15 +526,18 @@ that define the expected behavior.
 {interfaces_list}
 
 ## Your Task
-1. Write unit tests based on the requirements
+1. Write unit tests based on the requirements and the Implementation Plan
 2. Cover:
    - Happy path scenarios
-   - Edge cases identified in requirements
+   - Edge cases identified in requirements AND in the Implementation Plan
    - Error scenarios and exception handling
    - Boundary conditions
 3. Tests should compile but FAIL when run (Red phase)
 4. If existing code was modified in Phase 2, also add tests in existing test files
    verifying that the modified code calls the new functionality at the right points
+5. Use the Implementation Plan section from Phase 2 to understand the intended
+   behavior of each method — write tests that verify the described logic,
+   data flows, and edge cases, not just API shape
 
 ## Guidelines
 - Each requirement should have at least one test
@@ -530,6 +555,8 @@ that define the expected behavior.
   the duplicated logic.
 - The Codebase Context section in requirements contains file paths and project structure.
   Prefer using these paths directly rather than re-exploring the project structure.
+- The Code Reference section in requirements contains actual code excerpts —
+  prefer using these directly when available.
 - **Data complexity**: Match test data complexity to production reality. If the code
   handles nested or recursive structures, test with multi-level inputs, not just flat ones.
 
@@ -560,8 +587,10 @@ the business logic to make all tests pass.
 ## Your Task
 1. Read the reference files from Key Files in Requirements to understand existing patterns
 2. Read the test files from "Tests to Pass" to understand expected behavior
-3. Read the interface stubs from "Interfaces Created"
-4. Implement business logic method by method
+3. Read the interface stubs and **Implementation Plan** from "Interfaces Created"
+4. Implement business logic method by method, following the approach described in the
+   Implementation Plan. The plan describes the intended algorithm, data flow, and edge
+   case handling for each component.
 5. Run tests frequently to verify progress
 6. Continue until ALL tests pass
 
@@ -570,6 +599,8 @@ the business logic to make all tests pass.
   relevant source files, reference implementations, and test patterns.
 - The Codebase Context section in requirements contains file paths and project structure.
   Prefer using these paths directly rather than re-exploring the project structure.
+- The Code Reference section in requirements contains actual code excerpts —
+  prefer using these directly when available.
 - The Interfaces Created and Tests to Pass sections list every file you need to
   modify or read.
 - Start by reading these files directly. Do not scan directories for files that
@@ -642,6 +673,9 @@ have full integration awareness.
 
 REQUIREMENTS_SUMMARY_PROMPT = """
 Create a comprehensive requirements summary based on our discussion.
+This document will be the PRIMARY reference for Phases 2-4 — include both
+business requirements AND code-level context so later phases can start
+coding immediately without re-reading the same files.
 
 ## Required Format
 
@@ -673,6 +707,37 @@ to avoid ambiguity that cascades through later phases.]
 - **Key Files**: [important files discovered during exploration, with full paths]
 - **Existing Patterns**: [relevant patterns, conventions, or abstractions found in the codebase]
 
+## Code Reference
+
+Extract code excerpts from the exploration above. Do NOT use tools to re-read
+files — all code was already explored by subagents or by you directly.
+Include only sections with relevant content.
+
+Later phases will use this section to avoid re-reading files. Include enough
+code that Phase 2/3/4 can work directly from these excerpts.
+
+### Type Definitions & Data Models
+Copy the actual class/type definitions with field names, types, and inheritance.
+Keep each excerpt to 5-15 lines. Include the EXACT file path as a comment.
+Include all types the new code will interact with, including intermediate types
+in navigation chains.
+
+### Key Method Signatures
+Group by class. Include parameter types and return types.
+Copy ACTUAL signatures from the code — do not paraphrase.
+
+### Reference Implementation
+If there is an existing class that the new code should follow as a pattern,
+include its full implementation (not just signatures).
+
+### Integration Points (Code Excerpts)
+5-15 line excerpts showing exactly where new code must hook in.
+Include surrounding context so the reader knows WHERE in the file this appears.
+
+### Test Boilerplate & Patterns
+ONE representative test showing imports, setup, assertions (~10-20 lines).
+This lets later phases copy the pattern without re-reading test files.
+
 ## Open Questions
 - [Any unresolved questions - should be empty if requirements are complete]
 
@@ -683,72 +748,13 @@ to avoid ambiguity that cascades through later phases.]
 - If there are open questions, list them (we should resolve before proceeding)
 - Include ALL file paths you discovered during exploration in the Codebase Context section. Later phases will use these paths directly to avoid re-exploring the project structure.
 - **Build Commands**: Before writing Build Commands, list the project root to verify which build wrapper (./mvnw, ./gradlew, etc.) actually exists. Do NOT trust subagent reports — check the filesystem directly. Use the verified wrapper in the Build Commands.
+- **Code Reference**: Extract from the conversation above — do NOT re-read files with tools. The subagent reports and your own exploration already contain all the code needed. Include EXACT file paths, ACTUAL code (not paraphrased), and keep excerpts SHORT (5-20 lines each).
 
 Output ONLY the summary in the format above.
 """
 
-TECHNICAL_DIGEST_PROMPT = """
-Extract a Technical Exploration Digest from the Phase 1 exploration results.
-
-This digest will be passed to Phases 2-4 so they can start coding immediately
-without re-reading the same files that were already explored.
-
-## Required Sections (include only sections with relevant content)
-
-### 1. Type Definitions & Data Models
-Copy the actual class/type definitions with field names, types, and inheritance.
-Keep each excerpt to 5-15 lines. Include the EXACT file path.
-
-Example:
-```
-// src/main/kotlin/com/example/model/Device.kt
-data class Device(
-    val id: String,
-    val name: String,
-    val status: DeviceStatus,
-    val features: Features
-)
-```
-
-### 2. Key Method Signatures
-Group by class. Include parameter types and return types.
-Copy ACTUAL signatures from the code — do not paraphrase.
-
-Example:
-```
-// src/main/kotlin/com/example/service/DeviceService.kt
-class DeviceService {
-    suspend fun updateDevice(id: String, update: DeviceUpdate): Result<Device>
-    suspend fun getDevice(id: String): Device?
-}
-```
-
-### 3. Integration Points (Code Excerpts)
-5-15 line excerpts showing exactly where new code must hook in.
-Include surrounding context so the reader knows WHERE in the file this appears.
-
-### 4. Test Boilerplate & Patterns
-ONE representative test showing imports, setup, assertions (~10-20 lines).
-This lets later phases copy the pattern without re-reading test files.
-
-### 5. Configuration & Build
-Only include if there are non-obvious configuration entries relevant to the task.
-
-## Rules
-- Include EXACT file paths with every excerpt
-- Copy ACTUAL code — do NOT paraphrase or summarize signatures
-- Keep excerpts SHORT (5-20 lines each)
-- Only include code RELEVANT to implementing the requirements
-- Prefer signatures over full implementations
-- Do NOT include full file contents — only the relevant parts
-- Omit sections that have nothing relevant
-- If the exploration did not produce enough code-level detail, output what you have
-
-Output ONLY the digest content, no explanations or preamble.
-"""
-
 INTERFACES_SUMMARY_PROMPT = """
-Document ALL interfaces you created with concrete details.
+Document ALL interfaces you created and your implementation plan.
 
 ## Required Format
 
@@ -788,9 +794,31 @@ class ClassName:
 ## Dependencies
 - [Any external dependencies introduced]
 
+## Implementation Plan
+
+For each class/module, describe HOW it will be implemented. Focus on non-obvious logic,
+algorithms, and decisions that are hard to derive from signatures alone.
+
+### `ClassName`
+- **Approach**: [algorithm/pattern/strategy for implementation]
+- **Key logic**: [what the core methods actually need to do]
+- **Data flow**: [how data moves through — inputs, transforms, outputs]
+- **Edge cases**: [boundary conditions and error scenarios to handle]
+
+### `ClassName2`
+- **Approach**: ...
+- **Key logic**: ...
+- **Data flow**: ...
+- **Edge cases**: ...
+
+[Repeat for each class/module. Keep it concise — bullet points, not essays.
+Skip sections that are obvious from the signatures.]
+
 ## Instructions
 - Include EXACT file paths you created
 - Copy ACTUAL method signatures from your code
+- The Implementation Plan is critical — Phase 3 uses it to write meaningful tests
+  and Phase 4 uses it as guidance for implementation
 - This will be used to verify files exist in the next phase
 
 Output ONLY the summary in the format above.

@@ -96,8 +96,8 @@ true # wp:mark-complete requirements
 - [ ] User confirmed understanding
 - [ ] No ambiguities remain
 
-### Phase 2: Interface Design
-**Goal**: Create the structural skeleton without business logic.
+### Phase 2: Interface Design & Implementation Plan
+**Goal**: Create the structural skeleton without business logic, and plan how each component will be implemented.
 
 **Activities**:
 - Design class structure based on requirements
@@ -106,6 +106,20 @@ true # wp:mark-complete requirements
 - Define input/output events if required
 - Add necessary imports and dependencies
 - Ensure code compiles (no implementation yet)
+- Think through the implementation approach for each component and document it
+
+**Implementation Planning**:
+As you design interfaces, think through HOW each component will be implemented.
+For each class/module, consider and document:
+- **Approach**: What algorithm, pattern, or strategy will the implementation use?
+- **Key logic**: What do the core methods actually need to do?
+- **Data flow**: How does data move through this component?
+- **Edge cases**: What boundary conditions or error scenarios should be handled?
+- **Key decisions**: Trade-offs or alternatives considered
+
+Keep it concise — bullet points, not essays. Focus on non-obvious logic that would
+be hard to re-derive from signatures alone. This plan helps Phase 3 write better
+tests and gives Phase 4 clear implementation guidance.
 
 **Guidelines**:
 - Follow existing codebase patterns
