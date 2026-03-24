@@ -2,7 +2,10 @@
 """
 Waypoints Supervisor - Subagent Definitions
 
-Defines specialized exploration subagents for Phase 1 parallel codebase exploration.
+Defines specialized subagents for:
+- Phase 1: Parallel codebase exploration
+- Phase 4: Implementation subagents (Claude-orchestrated via Task tool)
+
 Uses SDK's AgentDefinition with the `agents` parameter in ClaudeAgentOptions.
 """
 
@@ -14,6 +17,7 @@ from .templates import (
     DEPENDENCIES_INSTRUCTIONS,
     TEST_USECASE_INSTRUCTIONS,
     ARCHITECTURE_INSTRUCTIONS,
+    IMPLEMENTATION_SUBAGENT_INSTRUCTIONS,
 )
 
 try:
@@ -68,7 +72,7 @@ ARCHITECTURE_DESCRIPTION = (
 # =============================================================================
 
 class SubagentBuilder:
-    """Builds AgentDefinition instances for Phase 1 parallel exploration."""
+    """Builds AgentDefinition instances for Phase 1 exploration and Phase 4 implementation."""
 
     @staticmethod
     def _format_knowledge_section(knowledge_context: str) -> str:
@@ -160,3 +164,41 @@ class SubagentBuilder:
             tools=EXPLORATION_TOOLS,
             model="sonnet"
         )
+
+    @staticmethod
+    def build_implementation_agents(
+        knowledge_context: str = "",
+        requirements_summary: str = ""
+    ) -> Dict[str, AgentDefinition]:
+        """Build implementation subagents for Phase 4 Claude-orchestrated delegation."""
+        agents: Dict[str, AgentDefinition] = {}
+
+        for i in range(1, MAX_IMPLEMENTATION_SUBAGENTS + 1):
+            name = f"implementer-{i}"
+            prompt = IMPLEMENTATION_SUBAGENT_INSTRUCTIONS.format(
+                knowledge_context=SubagentBuilder._format_knowledge_section(knowledge_context),
+                requirements_summary=requirements_summary or "(Will be provided by parent session)"
+            )
+            agents[name] = AgentDefinition(
+                description=IMPLEMENTATION_SUBAGENT_DESCRIPTION,
+                prompt=prompt,
+                tools=IMPLEMENTATION_TOOLS,
+                model="sonnet"
+            )
+
+        return agents
+
+
+# =============================================================================
+# PHASE 4 IMPLEMENTATION SUBAGENTS
+# =============================================================================
+
+# Implementation tools for subagents - includes write capabilities
+IMPLEMENTATION_TOOLS = ["Read", "Grep", "Glob", "Bash", "Write", "Edit"]
+
+MAX_IMPLEMENTATION_SUBAGENTS = 4
+
+IMPLEMENTATION_SUBAGENT_DESCRIPTION = (
+    "Implements a specific scope of work assigned by the parent session. "
+    "Has write access to implement business logic and run tests."
+)

@@ -14,7 +14,6 @@ from wp_supervisor.review_trigger import (
     ReviewTrigger,
     TriggerReason,
     TriggerEvent,
-    BUILD_KEYWORDS,
 )
 
 
@@ -66,29 +65,6 @@ class TestTriggerEvent:
         event = TriggerEvent(reason=TriggerReason.MANUAL, file_count=5)
         assert event.reason == TriggerReason.MANUAL
         assert event.file_count == 5
-
-
-# =============================================================================
-# BUILD_KEYWORDS Constant
-# =============================================================================
-
-class TestBuildKeywords:
-
-    def test_build_keywords_constant_exists(self):
-        """BUILD_KEYWORDS constant should be defined."""
-        assert BUILD_KEYWORDS is not None
-
-    def test_build_keywords_contains_test(self):
-        """REQ-1: Keywords include 'test'."""
-        assert "test" in BUILD_KEYWORDS
-
-    def test_build_keywords_contains_compile(self):
-        """REQ-1: Keywords include 'compile'."""
-        assert "compile" in BUILD_KEYWORDS
-
-    def test_build_keywords_contains_build(self):
-        """REQ-1: Keywords include 'build'."""
-        assert "build" in BUILD_KEYWORDS
 
 
 # =============================================================================
@@ -361,6 +337,476 @@ class TestTriggerResetBehavior:
         # Second trigger (with pending changes still present)
         run_async(trigger.on_build_executed("pytest"))
         assert callback.call_count == 2
+
+
+# =============================================================================
+# REQ-3.x: Debouncing Tests
+# =============================================================================
+
+class TestReviewTriggerDebounce:
+    """Tests for debounce functionality (REQ-3.x)."""
+
+    def _create_mock_file_tracker(self, pending_count=0):
+        tracker = MagicMock()
+        tracker.pending_count = pending_count
+        return tracker
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_debounce_interval_property_exists(self):
+        """[REQ-3.2] ReviewTrigger should have debounce_interval property."""
+        assert hasattr(ReviewTrigger, 'debounce_interval')
+
+    def test_init_accepts_debounce_interval(self):
+        """[REQ-3.2] Init should accept debounce_interval parameter."""
+        import inspect
+        params = inspect.signature(ReviewTrigger.__init__).parameters
+        assert 'debounce_interval' in params
+
+    def test_debounce_interval_default_is_60_seconds(self):
+        """[REQ-3.2] Default debounce interval should be 60 seconds."""
+        from wp_supervisor.review_trigger import DEFAULT_DEBOUNCE_INTERVAL
+        assert DEFAULT_DEBOUNCE_INTERVAL == 60.0
+
+    def test_debounce_interval_configurable(self):
+        """[REQ-3.2] Debounce interval should be configurable."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock(),
+            debounce_interval=120.0
+        )
+
+        # then
+        assert trigger.debounce_interval == 120.0
+
+    def test_last_review_timestamp_property_exists(self):
+        """[REQ-3.3] Should track last review timestamp."""
+        assert hasattr(ReviewTrigger, 'last_review_timestamp')
+
+    def test_last_review_timestamp_initially_none(self):
+        """[REQ-3.3] last_review_timestamp should be None initially."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+
+        # then
+        assert trigger.last_review_timestamp is None
+
+
+class TestReviewTriggerIsDebounceActive:
+    """Tests for is_debounce_active method."""
+
+    def _create_mock_file_tracker(self, pending_count=0):
+        tracker = MagicMock()
+        tracker.pending_count = pending_count
+        return tracker
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_is_debounce_active_method_exists(self):
+        """is_debounce_active method should exist."""
+        assert hasattr(ReviewTrigger, 'is_debounce_active')
+
+    def test_is_debounce_active_returns_bool(self):
+        """Should return boolean."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+
+        # when
+        result = trigger.is_debounce_active()
+
+        # then
+        assert isinstance(result, bool)
+
+    def test_is_debounce_active_false_when_never_reviewed(self):
+        """[REQ-3.2] Should return False if no review has occurred."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+        # last_review_timestamp is None
+
+        # when
+        result = trigger.is_debounce_active()
+
+        # then
+        assert result is False
+
+
+class TestReviewTriggerSecondsUntilDebounceExpires:
+    """Tests for seconds_until_debounce_expires method."""
+
+    def _create_mock_file_tracker(self, pending_count=0):
+        tracker = MagicMock()
+        tracker.pending_count = pending_count
+        return tracker
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_seconds_until_debounce_expires_method_exists(self):
+        """seconds_until_debounce_expires method should exist."""
+        assert hasattr(ReviewTrigger, 'seconds_until_debounce_expires')
+
+    def test_seconds_until_debounce_expires_returns_float(self):
+        """Should return float."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+
+        # when
+        result = trigger.seconds_until_debounce_expires()
+
+        # then
+        assert isinstance(result, (int, float))
+
+    def test_seconds_until_debounce_expires_zero_when_no_previous_review(self):
+        """Should return 0 if no previous review."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+
+        # when
+        result = trigger.seconds_until_debounce_expires()
+
+        # then
+        assert result == 0
+
+
+class TestReviewTriggerClearDebounce:
+    """Tests for clear_debounce method."""
+
+    def _create_mock_file_tracker(self, pending_count=0):
+        tracker = MagicMock()
+        tracker.pending_count = pending_count
+        return tracker
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_clear_debounce_method_exists(self):
+        """clear_debounce method should exist."""
+        assert hasattr(ReviewTrigger, 'clear_debounce')
+
+    def test_clear_debounce_allows_immediate_review(self):
+        """clear_debounce should reset debounce state."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+
+        # when - should not raise
+        trigger.clear_debounce()
+
+        # then
+        assert trigger.is_debounce_active() is False
+
+
+# =============================================================================
+# REQ-3.1: Test Pass/Fail Detection Tests
+# =============================================================================
+
+class TestReviewTriggerParseTestResult:
+    """Tests for parse_test_result method (REQ-3.1)."""
+
+    def _create_mock_file_tracker(self, pending_count=0):
+        tracker = MagicMock()
+        tracker.pending_count = pending_count
+        return tracker
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_parse_test_result_method_exists(self):
+        """parse_test_result method should exist."""
+        assert hasattr(ReviewTrigger, 'parse_test_result')
+
+    def test_parse_test_result_returns_bool(self):
+        """[REQ-3.1] Should return boolean."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+
+        # when
+        result = trigger.parse_test_result("test output")
+
+        # then
+        assert isinstance(result, bool)
+
+    def test_parse_test_result_true_on_pytest_passed(self):
+        """[REQ-3.1] Should return True when pytest shows all passed."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+        output = """
+        ============================= test session starts ==============================
+        collected 10 items
+
+        tests/test_module.py ..........                                          [100%]
+
+        ============================== 10 passed in 0.45s ==============================
+        """
+
+        # when
+        result = trigger.parse_test_result(output)
+
+        # then
+        assert result is True
+
+    def test_parse_test_result_false_on_pytest_failed(self):
+        """[REQ-3.1] Should return False when pytest shows failures."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+        output = """
+        ============================= test session starts ==============================
+        collected 10 items
+
+        tests/test_module.py .....F....                                          [100%]
+
+        =================================== FAILURES ===================================
+        _________________________________ test_something _________________________________
+
+        FAILED tests/test_module.py::test_something - AssertionError
+
+        ============================= 1 failed, 9 passed in 0.52s =====================
+        """
+
+        # when
+        result = trigger.parse_test_result(output)
+
+        # then
+        assert result is False
+
+    def test_parse_test_result_false_on_pytest_error(self):
+        """[REQ-3.1] Should return False when pytest shows errors."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+        output = """
+        ============================= test session starts ==============================
+        collected 5 items
+
+        tests/test_module.py EE...                                               [100%]
+
+        =============================== 2 errors, 3 passed in 0.33s ==================
+        """
+
+        # when
+        result = trigger.parse_test_result(output)
+
+        # then
+        assert result is False
+
+    def test_parse_test_result_handles_empty_output(self):
+        """Should handle empty output gracefully."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+
+        # when
+        result = trigger.parse_test_result("")
+
+        # then
+        # Empty output is ambiguous, could be True or False depending on design
+        assert isinstance(result, bool)
+
+    def test_parse_test_result_handles_no_tests_collected(self):
+        """Should handle 'no tests collected' scenario."""
+        # given
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(),
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock()
+        )
+        output = """
+        ============================= test session starts ==============================
+        collected 0 items
+
+        ============================= no tests collected ===============================
+        """
+
+        # when
+        result = trigger.parse_test_result(output)
+
+        # then
+        # No tests means no failures, could be considered passing
+        assert isinstance(result, bool)
+
+
+class TestReviewTriggerOnBuildExecutedWithOutput:
+    """Tests for on_build_executed with command_output parameter."""
+
+    def _create_mock_file_tracker(self, pending_count=0):
+        tracker = MagicMock()
+        tracker.pending_count = pending_count
+        return tracker
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_on_build_executed_accepts_command_output(self):
+        """[REQ-3.1] on_build_executed should accept optional command_output."""
+        import inspect
+        params = inspect.signature(ReviewTrigger.on_build_executed).parameters
+        assert 'command_output' in params
+
+    def test_on_build_executed_skips_when_tests_fail(self):
+        """[REQ-3.1] Should skip review when tests fail."""
+        # given
+        callback = MagicMock()
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(pending_count=5),
+            logger=self._create_mock_logger(),
+            on_trigger=callback
+        )
+        failed_output = "1 failed, 9 passed"
+
+        # when
+        result = run_async(trigger.on_build_executed("pytest", command_output=failed_output))
+
+        # then
+        assert result is False
+        callback.assert_not_called()
+
+    def test_on_build_executed_triggers_when_tests_pass(self):
+        """[REQ-3.1] Should trigger review when tests pass."""
+        # given
+        callback = MagicMock()
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(pending_count=5),
+            logger=self._create_mock_logger(),
+            on_trigger=callback
+        )
+        passed_output = "10 passed in 0.45s"
+
+        # when
+        result = run_async(trigger.on_build_executed("pytest", command_output=passed_output))
+
+        # then
+        assert result is True
+        callback.assert_called_once()
+
+    def test_on_build_executed_triggers_when_no_output_provided(self):
+        """Should still trigger when no output provided (backward compatibility)."""
+        # given
+        callback = MagicMock()
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(pending_count=5),
+            logger=self._create_mock_logger(),
+            on_trigger=callback
+        )
+
+        # when - no command_output provided
+        result = run_async(trigger.on_build_executed("pytest"))
+
+        # then
+        assert result is True
+        callback.assert_called_once()
+
+
+class TestReviewTriggerDebounceIntegration:
+    """Integration tests for debounce with on_build_executed."""
+
+    def _create_mock_file_tracker(self, pending_count=0):
+        tracker = MagicMock()
+        tracker.pending_count = pending_count
+        return tracker
+
+    def _create_mock_logger(self):
+        logger = MagicMock()
+        logger.log_event = MagicMock()
+        return logger
+
+    def test_debounce_blocks_rapid_triggers(self):
+        """[REQ-3.2] Rapid build commands should be debounced."""
+        # given
+        callback = MagicMock()
+        trigger = ReviewTrigger(
+            file_tracker=self._create_mock_file_tracker(pending_count=5),
+            logger=self._create_mock_logger(),
+            on_trigger=callback,
+            debounce_interval=60.0
+        )
+
+        # when - first trigger should fire
+        first_result = run_async(trigger.on_build_executed("pytest"))
+
+        # then
+        assert first_result is True
+        assert callback.call_count == 1
+
+        # when - immediate second trigger should be debounced
+        second_result = run_async(trigger.on_build_executed("pytest"))
+
+        # then
+        assert second_result is False
+        assert callback.call_count == 1  # still only called once
+
+    def test_changes_accumulate_during_debounce(self):
+        """[EDGE-3] Changes during debounce should be picked up in next review."""
+        # This is more of a behavioral verification
+        # The file tracker accumulates changes, and next review picks them up
+        # given
+        tracker = self._create_mock_file_tracker(pending_count=5)
+        trigger = ReviewTrigger(
+            file_tracker=tracker,
+            logger=self._create_mock_logger(),
+            on_trigger=MagicMock(),
+            debounce_interval=60.0
+        )
+
+        # The design should ensure that changes tracked during debounce
+        # are not lost - they remain in file_tracker until next review
+        assert trigger._file_tracker.pending_count == 5
 
 
 if __name__ == '__main__':

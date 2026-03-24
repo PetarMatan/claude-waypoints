@@ -34,7 +34,6 @@ from .hooks import SupervisorHooks
 from .templates import (
     PHASE_NAMES,
     KNOWLEDGE_EXTRACTION_PROMPT,
-    TECHNICAL_DIGEST_PROMPT,
     format_staged_knowledge_for_prompt,
 )
 from .display import SupervisorDisplay
@@ -238,18 +237,6 @@ class WPOrchestrator:
             import traceback
             self.logger.log_error(f"Traceback: {traceback.format_exc()}")
 
-    async def _generate_technical_digest(self, session_id: Optional[str] = None) -> str:
-        """Generate technical exploration digest from Phase 1 session."""
-        self.logger.log_event("DIGEST", "Generating technical exploration digest")
-        try:
-            async with self.display.spinner("Generating technical digest"):
-                return await self._extract_text_response(
-                    TECHNICAL_DIGEST_PROMPT, session_id=session_id, phase=1
-                )
-        except Exception as e:
-            self.logger.log_error(f"Technical digest extraction failed: {e}")
-            return ""
-
     def _apply_knowledge_at_workflow_end(self) -> None:
         """Apply staged knowledge to permanent files after Phase 4."""
         if not self.markers.has_staged_knowledge():
@@ -281,14 +268,12 @@ class WPOrchestrator:
         elif phase == 2:
             context = ContextBuilder.build_phase2_context(
                 self.markers.get_requirements_summary(),
-                technical_digest=self.markers.get_technical_digest(),
                 knowledge_context=self._knowledge_context
             )
         elif phase == 3:
             context = ContextBuilder.build_phase3_context(
                 self.markers.get_requirements_summary(),
                 self.markers.get_interfaces_list(),
-                technical_digest=self.markers.get_technical_digest(),
                 knowledge_context=self._knowledge_context
             )
         elif phase == 4:
@@ -296,7 +281,6 @@ class WPOrchestrator:
                 self.markers.get_requirements_summary(),
                 self.markers.get_interfaces_list(),
                 self.markers.get_tests_list(),
-                technical_digest=self.markers.get_technical_digest(),
                 knowledge_context=self._knowledge_context
             )
         else:
@@ -312,6 +296,13 @@ class WPOrchestrator:
         """Build Phase 1 exploration subagent definitions."""
         return SubagentBuilder.build_exploration_agents(
             knowledge_context=self._knowledge_context
+        )
+
+    def _build_implementation_subagents(self) -> Dict[str, AgentDefinition]:
+        """Build Phase 4 implementation subagent definitions."""
+        return SubagentBuilder.build_implementation_agents(
+            knowledge_context=self._knowledge_context,
+            requirements_summary=self.markers.get_requirements_summary() or ""
         )
 
     async def _run_phase(self, phase: int, initial_task: Optional[str] = None) -> None:
@@ -335,6 +326,16 @@ class WPOrchestrator:
                 )
                 subagents = None
                 delegate_exploration = False
+        elif phase == 4:
+            try:
+                subagents = self._build_implementation_subagents()
+            except Exception as e:
+                self.logger.log_event(
+                    "SUBAGENTS",
+                    f"Failed to build implementation subagents, "
+                    f"continuing without delegation: {e}"
+                )
+                subagents = None
 
         context = self._build_phase_context(phase, initial_task, delegate_exploration=delegate_exploration)
         context_path = self.markers.save_phase_context(phase, context)
@@ -352,16 +353,10 @@ class WPOrchestrator:
                 await self._stop_review_coordinator()
 
         if phase < 4:
-            # Run extractions concurrently — each resumes the same session_id
-            # as independent subprocesses.
+            # Run knowledge extraction concurrently with summary generation
             knowledge_task = asyncio.create_task(
                 self._extract_and_stage_knowledge(phase, session_id)
             )
-            digest_task = None
-            if phase == 1:
-                digest_task = asyncio.create_task(
-                    self._generate_technical_digest(session_id)
-                )
 
             summary = await self._generate_summary(phase, session_id)
             doc_path = self.markers.save_phase_document(phase, summary)
@@ -369,27 +364,10 @@ class WPOrchestrator:
                 self.logger.log_phase_summary_saved(phase, doc_path)
                 self.display.supervisor_success(f"{phase_name} document saved: {doc_path}")
 
-            # Await remaining background tasks
-            pending_label = "Extracting knowledge"
-            if digest_task:
-                pending_label = "Extracting knowledge & technical digest"
-            has_pending = (not knowledge_task.done()) or (digest_task and not digest_task.done())
-            if has_pending:
-                async with self.display.spinner(pending_label):
+            # Await knowledge extraction if still running
+            if not knowledge_task.done():
+                async with self.display.spinner("Extracting knowledge"):
                     await knowledge_task
-                    if digest_task:
-                        await digest_task
-            else:
-                await knowledge_task
-                if digest_task:
-                    await digest_task
-
-            if digest_task:
-                digest = digest_task.result()
-                if digest:
-                    digest_path = self.markers.save_technical_digest(digest)
-                    if digest_path:
-                        self.logger.log_event("DIGEST", f"Technical digest saved: {digest_path}")
 
             while True:
                 action = await self._confirm_phase_completion(phase, doc_path, session_id)
@@ -445,7 +423,7 @@ class WPOrchestrator:
             agent_options.agents = subagents
             self.logger.log_event(
                 "SUBAGENTS",
-                f"Configured {len(subagents)} exploration subagents: {list(subagents.keys())}"
+                f"Configured {len(subagents)} subagents: {list(subagents.keys())}"
             )
 
         async with ClaudeSDKClient(options=agent_options) as client:

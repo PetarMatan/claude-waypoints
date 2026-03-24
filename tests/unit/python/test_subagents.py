@@ -554,5 +554,180 @@ class TestSubagentBuilderConsistency:
         assert bulk_agent.tools == individual_agent.tools
 
 
+# =============================================================================
+# Phase 4 Implementation Subagents Tests
+# =============================================================================
+
+from wp_supervisor.subagents import (
+    IMPLEMENTATION_TOOLS,
+    MAX_IMPLEMENTATION_SUBAGENTS,
+    IMPLEMENTATION_SUBAGENT_DESCRIPTION,
+)
+from wp_supervisor.templates import IMPLEMENTATION_SUBAGENT_INSTRUCTIONS
+
+
+class TestImplementationTools:
+    """Tests for IMPLEMENTATION_TOOLS constant."""
+
+    def test_implementation_tools_defined(self):
+        """IMPLEMENTATION_TOOLS constant should be defined."""
+        assert IMPLEMENTATION_TOOLS is not None
+
+    def test_implementation_tools_includes_write(self):
+        """Implementation subagents should have Write tool."""
+        assert "Write" in IMPLEMENTATION_TOOLS
+
+    def test_implementation_tools_includes_edit(self):
+        """Implementation subagents should have Edit tool."""
+        assert "Edit" in IMPLEMENTATION_TOOLS
+
+    def test_implementation_tools_includes_read(self):
+        """Implementation subagents should have Read tool."""
+        assert "Read" in IMPLEMENTATION_TOOLS
+
+    def test_implementation_tools_includes_bash(self):
+        """Implementation subagents should have Bash tool."""
+        assert "Bash" in IMPLEMENTATION_TOOLS
+
+    def test_implementation_tools_includes_grep(self):
+        """Implementation subagents should have Grep tool."""
+        assert "Grep" in IMPLEMENTATION_TOOLS
+
+    def test_implementation_tools_includes_glob(self):
+        """Implementation subagents should have Glob tool."""
+        assert "Glob" in IMPLEMENTATION_TOOLS
+
+
+class TestMaxImplementationSubagents:
+    """Tests for MAX_IMPLEMENTATION_SUBAGENTS constant."""
+
+    def test_max_implementation_subagents_equals_four(self):
+        """MAX_IMPLEMENTATION_SUBAGENTS should equal 4."""
+        assert MAX_IMPLEMENTATION_SUBAGENTS == 4
+
+
+class TestImplementationSubagentInstructions:
+    """Tests for IMPLEMENTATION_SUBAGENT_INSTRUCTIONS template."""
+
+    def test_instructions_defined(self):
+        """IMPLEMENTATION_SUBAGENT_INSTRUCTIONS should be defined."""
+        assert len(IMPLEMENTATION_SUBAGENT_INSTRUCTIONS) > 0
+
+    def test_instructions_has_knowledge_placeholder(self):
+        """Should have {knowledge_context} placeholder."""
+        assert "{knowledge_context}" in IMPLEMENTATION_SUBAGENT_INSTRUCTIONS
+
+    def test_instructions_has_requirements_placeholder(self):
+        """Should have {requirements_summary} placeholder."""
+        assert "{requirements_summary}" in IMPLEMENTATION_SUBAGENT_INSTRUCTIONS
+
+    def test_instructions_mentions_implement(self):
+        """Should mention implementation."""
+        lower = IMPLEMENTATION_SUBAGENT_INSTRUCTIONS.lower()
+        assert "implement" in lower
+
+    def test_instructions_mentions_tests(self):
+        """Should mention tests."""
+        lower = IMPLEMENTATION_SUBAGENT_INSTRUCTIONS.lower()
+        assert "test" in lower
+
+
+class TestSubagentBuilderBuildImplementationAgents:
+    """Tests for SubagentBuilder.build_implementation_agents method."""
+
+    def test_returns_dict_with_four_agents(self):
+        """Should return dict with 4 agents."""
+        # when
+        agents = SubagentBuilder.build_implementation_agents()
+
+        # then
+        assert isinstance(agents, dict)
+        assert len(agents) == 4
+
+    def test_keys_are_implementer_1_through_4(self):
+        """Keys should be implementer-1 through implementer-4."""
+        # when
+        agents = SubagentBuilder.build_implementation_agents()
+
+        # then
+        for i in range(1, 5):
+            assert f"implementer-{i}" in agents
+
+    def test_all_have_implementation_tools(self):
+        """All agents should have IMPLEMENTATION_TOOLS including Write and Edit."""
+        # when
+        agents = SubagentBuilder.build_implementation_agents()
+
+        # then
+        for name, agent in agents.items():
+            assert agent.tools == IMPLEMENTATION_TOOLS, f"{name} should have IMPLEMENTATION_TOOLS"
+            assert "Write" in agent.tools
+            assert "Edit" in agent.tools
+
+    def test_all_have_descriptions(self):
+        """All agents should have descriptions."""
+        # when
+        agents = SubagentBuilder.build_implementation_agents()
+
+        # then
+        for name, agent in agents.items():
+            assert agent.description is not None, f"{name} should have description"
+            assert len(agent.description) > 0, f"{name} should have non-empty description"
+
+    def test_knowledge_context_injected_into_prompts(self):
+        """Knowledge context should be injected into all agent prompts."""
+        # given
+        knowledge = "# Architecture\nMicroservices with Kafka"
+
+        # when
+        agents = SubagentBuilder.build_implementation_agents(
+            knowledge_context=knowledge
+        )
+
+        # then
+        for name, agent in agents.items():
+            assert knowledge in agent.prompt, f"{name} should have knowledge in prompt"
+
+    def test_empty_knowledge_context_no_placeholder(self):
+        """Empty knowledge context should not leave placeholder in prompts."""
+        # when
+        agents = SubagentBuilder.build_implementation_agents(
+            knowledge_context=""
+        )
+
+        # then
+        for name, agent in agents.items():
+            assert "{knowledge_context}" not in agent.prompt, (
+                f"{name} should not have raw placeholder"
+            )
+
+    def test_requirements_summary_injected_into_prompts(self):
+        """Requirements summary should be injected into all agent prompts."""
+        # given
+        requirements = "# Requirements\n- Build muting expiration service"
+
+        # when
+        agents = SubagentBuilder.build_implementation_agents(
+            requirements_summary=requirements
+        )
+
+        # then
+        for name, agent in agents.items():
+            assert requirements in agent.prompt, f"{name} should have requirements in prompt"
+
+    def test_empty_requirements_summary_has_fallback(self):
+        """Empty requirements summary should not leave placeholder in prompts."""
+        # when
+        agents = SubagentBuilder.build_implementation_agents(
+            requirements_summary=""
+        )
+
+        # then
+        for name, agent in agents.items():
+            assert "{requirements_summary}" not in agent.prompt, (
+                f"{name} should not have raw placeholder"
+            )
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
