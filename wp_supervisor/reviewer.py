@@ -66,7 +66,6 @@ class ReviewerAgent:
         self._requirements_summary = requirements_summary
         self._working_dir = working_dir
         self._state = ReviewerState.INITIALIZING
-        self._client: Optional["ClaudeSDKClient"] = None
         self._options = None
         self._session_id: Optional[str] = None
 
@@ -113,7 +112,6 @@ class ReviewerAgent:
                 hooks=self._build_hooks_config(),
             )
 
-            self._client = ClaudeSDKClient(self._options)
             self._state = ReviewerState.READY
             self._logger.log_event("REVIEWER", "Reviewer agent ready")
 
@@ -322,7 +320,6 @@ class ReviewerAgent:
     async def stop(self) -> None:
         """Stop the reviewer agent and clean up resources."""
         self._logger.log_event("REVIEWER", "Stopping reviewer agent")
-        self._client = None
         self._options = None
         self._session_id = None
         self._state = ReviewerState.DEGRADED

@@ -368,8 +368,6 @@ class WPOrchestrator:
             if not knowledge_task.done():
                 async with self.display.spinner("Extracting knowledge"):
                     await knowledge_task
-            else:
-                await knowledge_task
 
             while True:
                 action = await self._confirm_phase_completion(phase, doc_path, session_id)

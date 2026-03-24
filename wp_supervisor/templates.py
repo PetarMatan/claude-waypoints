@@ -672,10 +672,15 @@ have full integration awareness.
 # =============================================================================
 
 REQUIREMENTS_SUMMARY_PROMPT = """
-Create a comprehensive requirements summary based on our discussion.
+Create a comprehensive requirements document based on our discussion.
 This document will be the PRIMARY reference for Phases 2-4 — include both
 business requirements AND code-level context so later phases can start
 coding immediately without re-reading the same files.
+
+IMPORTANT: Preserve detailed reference material the user provided — configuration
+snippets, schemas, examples, templates, setup instructions. Do not compress these
+into one-line summaries. Later phases need the actual content, not a mention that
+it exists.
 
 ## Required Format
 
@@ -709,12 +714,11 @@ to avoid ambiguity that cascades through later phases.]
 
 ## Code Reference
 
-Extract code excerpts from the exploration above. Do NOT use tools to re-read
-files — all code was already explored by subagents or by you directly.
+Include code excerpts from exploration AND from the user's input. Do NOT use
+tools to re-read files — use what was already explored or provided.
 Include only sections with relevant content.
 
-Later phases will use this section to avoid re-reading files. Include enough
-code that Phase 2/3/4 can work directly from these excerpts.
+Later phases will use this section to work directly from these excerpts.
 
 ### Type Definitions & Data Models
 Copy the actual class/type definitions with field names, types, and inheritance.
