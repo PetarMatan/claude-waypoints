@@ -153,14 +153,7 @@ For large features or multi-day projects, context accumulation in a single sessi
 - Multi-day projects
 - When you notice AI getting "confused" in long sessions
 
-**Additional dependency required:**
-
-Supervisor mode uses [claude-agent-sdk](https://github.com/anthropics/claude-code-sdk-python) to programmatically manage Claude sessions. This is **not required for CLI mode** - only install if you need supervisor features.
-
-```bash
-pip install claude-waypoints          # required dependencies
-pip install 'claude-waypoints[rag]'   # optional: semantic knowledge search
-```
+**Dependencies:** Supervisor mode uses [claude-agent-sdk](https://github.com/anthropics/claude-code-sdk-python) to programmatically manage Claude sessions. The install script automatically creates a managed Python environment and installs all required dependencies. No manual pip install needed.
 
 Then start the workflow:
 ```bash
