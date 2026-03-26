@@ -43,7 +43,8 @@ from .session import (
     SIGNAL_COMPLETE,
     SIGNAL_CANCELED,
 )
-from .review_coordinator import ReviewCoordinator, ReviewCoordinatorConfig
+from .reviewer import ReviewerAgent, ReviewerContext, ReviewResult
+from .feedback_capping import FeedbackCapper, CategorizedFinding
 
 # Orchestrator-specific signal constants
 PHASE_COMPLETE_SIGNAL = "---PHASE_COMPLETE---"
@@ -105,7 +106,6 @@ class WPOrchestrator:
         )
         self._knowledge_manager = KnowledgeManager(project_dir=str(self.working_dir))
         self._knowledge_context: str = ""
-        self._review_coordinator: Optional[ReviewCoordinator] = None
 
         if not self.working_dir.is_dir():
             raise ValueError(f"Working directory does not exist: {self.working_dir}")
@@ -337,15 +337,12 @@ class WPOrchestrator:
         if context_path:
             self.logger.log_phase_context_saved(phase, context_path)
 
-        if phase == 4:
-            async with self.display.spinner("Starting code reviewer"):
-                await self._start_review_coordinator()
+        session_id = await self._run_phase_session(context, phase, subagents=subagents)
 
-        try:
-            session_id = await self._run_phase_session(context, phase, subagents=subagents)
-        finally:
-            if phase == 4:
-                await self._stop_review_coordinator()
+        if phase == 4:
+            # End-of-phase review: max 2 rounds, top 20 issues by severity each
+            self.display.supervisor_message("Running end-of-phase code review...")
+            await self._perform_end_of_phase_review(session_id)
 
         if phase < 4:
             # Run knowledge extraction concurrently with summary generation
@@ -428,7 +425,6 @@ class WPOrchestrator:
                 initial_prompt=initial_context,
                 phase=phase,
                 signal_patterns=PHASE_COMPLETE_PATTERNS,
-                review_coordinator=self._review_coordinator,
             )
 
     def _mark_phase_complete(self, phase: int) -> None:
@@ -572,63 +568,165 @@ class WPOrchestrator:
             self.display.supervisor_warning("Regeneration failed, keeping current summary.")
             return current_summary
 
-    async def _start_review_coordinator(self) -> None:
-        """Start the concurrent reviewer for Phase 4."""
-        try:
-            self.logger.log_event("ORCHESTRATOR", "Starting review coordinator for Phase 4")
+    async def _perform_end_of_phase_review(
+        self,
+        session_id: Optional[str],
+        max_rounds: int = 2
+    ) -> None:
+        """
+        Run end-of-phase code review. Max 2 rounds, top 20 issues by severity each.
 
-            self._review_coordinator = self._create_review_coordinator()
-            await self._review_coordinator.start()
-
-            self.hooks.set_review_coordinator(self._review_coordinator)
-
-            if self._review_coordinator.is_degraded:
-                self.logger.log_event(
-                    "ORCHESTRATOR",
-                    "Review coordinator started in degraded mode"
-                )
-            else:
-                self.logger.log_event(
-                    "ORCHESTRATOR",
-                    "Review coordinator ready"
-                )
-
-        except Exception as e:
-            self.logger.log_event("ORCHESTRATOR", f"Review coordinator failed to start: {e}")
-            self._review_coordinator = None
-
-    async def _stop_review_coordinator(self) -> None:
-        """Stop the review coordinator and clean up resources."""
-        try:
-            if self._review_coordinator is not None:
-                self.logger.log_event("ORCHESTRATOR", "Stopping review coordinator")
-                await self._review_coordinator.stop()
-                self._review_coordinator = None
-
-            self.hooks.set_review_coordinator(None)
-
-        except Exception as e:
-            self.logger.log_event("ORCHESTRATOR", f"Error stopping review coordinator: {e}")
-            self._review_coordinator = None
-
-    def _create_review_coordinator(self) -> ReviewCoordinator:
-        """Create a new ReviewCoordinator for Phase 4."""
-        requirements_summary = self.markers.get_phase_document(1) or "# Requirements\n(Not available)"
+        Flow per round:
+        1. Get changed files via git diff
+        2. ReviewerAgent (Sonnet) reviews them
+        3. Cap to top 20 issues by severity
+        4. If issues found: resume Opus session with feedback, Claude fixes
+        5. If no issues: done
+        """
+        requirements_summary = self.markers.get_phase_document(1) or ""
         interfaces_summary = self.markers.get_phase_document(2) or ""
         tests_summary = self.markers.get_phase_document(3) or ""
 
-        config = ReviewCoordinatorConfig(
-            enabled=True
-        )
-
-        return ReviewCoordinator(
+        reviewer = ReviewerAgent(
             logger=self.logger,
-            working_dir=str(self.working_dir),
             requirements_summary=requirements_summary,
-            interfaces_summary=interfaces_summary,
-            tests_summary=tests_summary,
-            config=config
+            working_dir=str(self.working_dir)
         )
+        await reviewer.start()
+
+        if reviewer.state.value == "degraded":
+            self.logger.log_event("REVIEWER", "Reviewer failed to initialize, skipping review")
+            return
+
+        capper = FeedbackCapper(logger=self.logger)
+
+        for round_num in range(1, max_rounds + 1):
+            self.logger.log_event("REVIEWER", f"Starting review round {round_num}/{max_rounds}")
+
+            changed_files = self._get_changed_files()
+            if not changed_files:
+                self.logger.log_event("REVIEWER", "No changed files to review")
+                break
+
+            context = ReviewerContext(
+                requirements_summary=requirements_summary,
+                changed_files=changed_files,
+                interfaces_summary=interfaces_summary,
+                tests_summary=tests_summary,
+            )
+
+            async with self.display.spinner(f"Reviewing code (round {round_num})"):
+                result = await reviewer.review(context)
+
+            if not result.issues:
+                self.logger.log_event("REVIEWER", f"Review round {round_num}: no issues found")
+                break
+
+            # Cap to top 20 by severity
+            categorized = [
+                CategorizedFinding(
+                    content=issue.content,
+                    severity=capper.parse_severity(issue.severity),
+                    file_path=issue.file_path
+                )
+                for issue in result.parsed_issues
+            ]
+            cap_result = capper.apply_cap(categorized)
+
+            dropped = cap_result.dropped_count
+            self.logger.log_event(
+                "REVIEWER",
+                f"Review round {round_num}: {len(cap_result.findings)} issues"
+                + (f" ({dropped} low-priority dropped)" if dropped else "")
+            )
+
+            # Build feedback from capped findings
+            capped_issues = [
+                f"[{f.severity.name}] {f.content}" for f in cap_result.findings
+            ]
+            capped_result = ReviewResult(
+                issues=capped_issues,
+                files_reviewed=result.files_reviewed,
+            )
+            feedback = reviewer.format_feedback(capped_result)
+            if dropped > 0:
+                feedback += f"\n\n(Note: {dropped} low-priority items omitted)"
+
+            self.display.feedback_injection(feedback)
+
+            if round_num == max_rounds:
+                self.logger.log_event("REVIEWER", f"Max review rounds ({max_rounds}) reached, proceeding")
+                break
+
+            # Resume Opus session with feedback
+            self.logger.log_event("REVIEWER", "Injecting feedback into implementation session")
+            await self._resume_session_with_feedback(session_id, feedback)
+
+        await reviewer.stop()
+
+    async def _resume_session_with_feedback(
+        self,
+        session_id: Optional[str],
+        feedback: str
+    ) -> None:
+        """Resume the Phase 4 Opus session with reviewer feedback."""
+        env_vars = self.markers.get_env_vars()
+
+        async with ClaudeSDKClient(
+            options=ClaudeAgentOptions(
+                model=self._model,
+                cwd=str(self.working_dir),
+                env=env_vars,
+                resume=session_id,
+                permission_mode="bypassPermissions",
+                hooks=self.hooks.get_hooks_config(),
+            )
+        ) as client:
+            await client.query(feedback)
+            await self._session_runner.run_phase_session(
+                client_context_manager=client,
+                initial_prompt=feedback,
+                phase=4,
+                signal_patterns=PHASE_COMPLETE_PATTERNS,
+            )
+
+    def _get_changed_files(self) -> Dict[str, str]:
+        """Get files changed during Phase 4 via git status. Returns dict of path -> content."""
+        import subprocess
+
+        try:
+            # Use git status --porcelain to catch both modified and new untracked files
+            result = subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(self.working_dir)
+            )
+            if result.returncode != 0:
+                return {}
+
+            changed: Dict[str, str] = {}
+            for line in result.stdout.strip().split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                # git status --porcelain format: "XY path" or "XY orig -> path"
+                # Skip deleted files (first char 'D' or second char 'D')
+                if line[0] == 'D' or (len(line) > 1 and line[1] == 'D'):
+                    continue
+                path = line[2:].strip().lstrip(' ')
+                # Handle renames: "R  old -> new"
+                if ' -> ' in path:
+                    path = path.split(' -> ')[-1]
+                full_path = self.working_dir / path
+                if full_path.is_file():
+                    try:
+                        changed[path] = full_path.read_text()
+                    except Exception:
+                        pass
+            return changed
+        except Exception as e:
+            self.logger.log_event("REVIEWER", f"Failed to get changed files: {e}")
+            return {}
 
     async def _extract_text_response(
         self,

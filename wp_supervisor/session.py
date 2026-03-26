@@ -18,9 +18,6 @@ try:
 except ImportError:
     pass
 
-if TYPE_CHECKING:
-    from .review_coordinator import ReviewCoordinator
-
 from .markers import SupervisorMarkers
 from .hooks import SupervisorHooks
 from .logger import SupervisorLogger
@@ -190,7 +187,6 @@ class SessionRunner:
         initial_prompt: str,
         phase: int,
         signal_patterns: SignalPatterns,
-        review_coordinator: Optional["ReviewCoordinator"] = None,
     ) -> Optional[str]:
         """
         Run an interactive Claude session for a phase. Returns session_id.
@@ -206,63 +202,38 @@ class SessionRunner:
         )
         phase_complete = signal is not None
 
-        if not phase_complete and review_coordinator:
-            signal = await self._inject_feedback(
-                client_context_manager, phase, phase_checker, review_coordinator
+        first_input = True
+        while not phase_complete:
+            if first_input:
+                self.display.tip("For structured input, provide a file path: @/path/to/file.md")
+                first_input = False
+
+            user_input = read_user_input("\nYou: ").strip()
+
+            if not user_input:
+                continue
+
+            self.logger.log_user_input(user_input)
+
+            if user_input.lower() in ['/done', '/complete', '/next']:
+                self.logger.log_user_command(user_input.lower())
+                phase_complete = True
+                break
+
+            if user_input.lower() in ['/quit', '/exit', '/abort']:
+                self.logger.log_user_command(user_input.lower())
+                raise KeyboardInterrupt("User requested abort")
+
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            await client_context_manager.query(user_input)
+
+            _, signal = await self._process_stream(
+                client_context_manager, phase, phase_checker,
+                show_thinking=True
             )
             if signal:
                 phase_complete = True
-
-        first_input = True
-        while True:
-            while not phase_complete:
-                if first_input:
-                    self.display.tip("For structured input, provide a file path: @/path/to/file.md")
-                    first_input = False
-
-                user_input = read_user_input("\nYou: ").strip()
-
-                if not user_input:
-                    continue
-
-                self.logger.log_user_input(user_input)
-
-                if user_input.lower() in ['/done', '/complete', '/next']:
-                    self.logger.log_user_command(user_input.lower())
-                    phase_complete = True
-                    break
-
-                if user_input.lower() in ['/quit', '/exit', '/abort']:
-                    self.logger.log_user_command(user_input.lower())
-                    raise KeyboardInterrupt("User requested abort")
-
-                sys.stdout.write("\n")
-                sys.stdout.flush()
-                await client_context_manager.query(user_input)
-
-                _, signal = await self._process_stream(
-                    client_context_manager, phase, phase_checker,
-                    show_thinking=True
-                )
-                if signal:
-                    phase_complete = True
-                elif review_coordinator:
-                    signal = await self._inject_feedback(
-                        client_context_manager, phase, phase_checker, review_coordinator
-                    )
-                    if signal:
-                        phase_complete = True
-
-            # Pre-completion review gate: wait for in-flight reviews and inject feedback.
-            # Keep phase_complete=True so the loop skips user input and goes
-            # directly back to the gate on the next iteration.
-            if review_coordinator:
-                gate_passed = await self._review_gate(
-                    client_context_manager, phase, phase_checker, review_coordinator
-                )
-                if not gate_passed:
-                    continue
-            break
 
         return session_id
 
@@ -343,62 +314,6 @@ class SessionRunner:
             pass
 
         return collected_text
-
-    async def _review_gate(
-        self,
-        client: "ClaudeSDKClient",
-        phase: int,
-        signal_checker: Optional[SignalChecker],
-        review_coordinator: "ReviewCoordinator"
-    ) -> bool:
-        """Wait for in-flight reviews and inject feedback. Returns True if gate passed."""
-        if getattr(review_coordinator, '_is_reviewing', False):
-            async with self.display.spinner("Waiting for in-flight review"):
-                await review_coordinator.wait_for_pending_reviews(timeout=60.0)
-        else:
-            await review_coordinator.wait_for_pending_reviews(timeout=60.0)
-
-        if not review_coordinator.has_pending_feedback():
-            self.logger.log_event("REVIEWER", "Review gate passed (no feedback)")
-            return True
-
-        self.logger.log_event("REVIEWER", "Review gate: feedback pending, injecting into session")
-        signal = await self._inject_feedback(
-            client, phase, signal_checker, review_coordinator
-        )
-        if signal:
-            self.logger.log_event("REVIEWER", "Review gate passed (implementer acknowledged feedback)")
-            return True
-
-        self.logger.log_event("REVIEWER", "Review gate: implementer did not re-signal completion")
-        return False
-
-    async def _inject_feedback(
-        self,
-        client: "ClaudeSDKClient",
-        phase: int,
-        signal_checker: Optional[SignalChecker],
-        review_coordinator: "ReviewCoordinator"
-    ) -> Optional[str]:
-        """Inject pending reviewer feedback into implementer session."""
-        if not review_coordinator.has_pending_feedback():
-            return None
-
-        feedback = await review_coordinator.get_pending_feedback()
-        if not feedback:
-            return None
-
-        import time as _time
-        issue_count = feedback.count("- ") if feedback else 0
-        self.logger.log_event("REVIEWER", f"Injecting feedback ({issue_count} items) into implementer session")
-        self.display.feedback_injection(feedback)
-
-        inject_start = _time.monotonic()
-        await client.query(feedback)
-        _, signal = await self._process_stream(client, phase, signal_checker, show_thinking=True)
-        elapsed = _time.monotonic() - inject_start
-        self.logger.log_event("REVIEWER", f"Implementer responded in {elapsed:.0f}s (re-completed: {signal is not None})")
-        return signal
 
     def _check_signal(self, text: str, patterns: SignalPatterns) -> bool:
         """Check if text contains any of the given signal patterns on their own line."""
