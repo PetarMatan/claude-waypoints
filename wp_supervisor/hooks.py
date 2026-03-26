@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
 """Hook callbacks for SDK-spawned Claude sessions."""
 
-import sys
-from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
-
-# Add hooks/lib to path for imports
-_hooks_lib = Path(__file__).parent.parent / "hooks" / "lib"
-if str(_hooks_lib) not in sys.path:
-    sys.path.insert(0, str(_hooks_lib))
 
 from wp_config import WPConfig
 from .hook_messages import (

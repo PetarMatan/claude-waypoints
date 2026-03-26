@@ -10,13 +10,8 @@ Also manages knowledge staging for supervisor-controlled knowledge extraction.
 
 import json
 import logging
-import sys
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-
-# Add hooks/lib to path for WPState import
-hooks_lib = Path(__file__).parent.parent / "hooks" / "lib"
-sys.path.insert(0, str(hooks_lib))
 
 from wp_state import WPState
 from wp_knowledge import (

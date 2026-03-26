@@ -6,14 +6,8 @@ All prompt templates used throughout the supervisor workflow.
 Separated for maintainability and easy customization.
 """
 
-import sys
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-# Add hooks/lib to path for imports (use __file__ so it works from any cwd)
-_hooks_lib = str(Path(__file__).parent.parent / "hooks" / "lib")
-if _hooks_lib not in sys.path:
-    sys.path.insert(0, _hooks_lib)
 from wp_knowledge import KnowledgeCategory
 
 if TYPE_CHECKING:

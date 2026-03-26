@@ -193,24 +193,34 @@ mkdir -p "$INSTALL_DIR/bin"
 cp "$SOURCE_DIR/bin/wp-supervisor" "$INSTALL_DIR/bin/"
 chmod +x "$INSTALL_DIR/bin/wp-supervisor"
 
-# Install Python dependencies from pyproject.toml
-echo "  Installing Python dependencies..."
-if python3 -m pip install "$SOURCE_DIR" --quiet 2>/dev/null; then
-    SDK_INSTALLED="yes"
-    echo "  Dependencies installed (claude-agent-sdk, rich)"
+# Create managed venv and install Python dependencies
+VENV_DIR="$INSTALL_DIR/.venv"
+echo "  Setting up Python environment..."
+if python3 -m venv "$VENV_DIR" 2>/dev/null; then
+    VENV_PIP="$VENV_DIR/bin/pip"
+    VENV_PYTHON="$VENV_DIR/bin/python"
+
+    if "$VENV_PIP" install "$SOURCE_DIR" --quiet 2>/dev/null; then
+        SDK_INSTALLED="yes"
+        echo "  Dependencies installed (claude-agent-sdk, rich)"
+    else
+        SDK_INSTALLED=""
+        echo "  WARNING: Dependency installation failed."
+        echo "  Try manually: $VENV_PIP install claude-agent-sdk rich"
+    fi
+
+    # Check for optional RAG dependencies (not auto-installed due to size ~2GB)
+    if "$VENV_PYTHON" -c "import sentence_transformers" 2>/dev/null; then
+        echo "  sentence-transformers: found"
+    else
+        echo "  sentence-transformers: NOT FOUND (optional)"
+        echo "  For semantic knowledge search, install with:"
+        echo "    $VENV_PIP install sentence-transformers"
+    fi
 else
     SDK_INSTALLED=""
-    echo "  WARNING: Dependency installation failed."
-    echo "  Install manually: pip install claude-waypoints"
-fi
-
-# Check for optional RAG dependencies (not auto-installed due to size ~2GB)
-if python3 -c "import sentence_transformers" 2>/dev/null; then
-    echo "  sentence-transformers: found"
-else
-    echo "  sentence-transformers: NOT FOUND (optional)"
-    echo "  For semantic knowledge search, install with:"
-    echo "    pip install 'claude-waypoints[rag]'"
+    echo "  WARNING: Failed to create Python virtual environment."
+    echo "  Ensure python3-venv is installed (e.g., apt install python3-venv)"
 fi
 
 echo "Supervisor Mode installed."
@@ -277,8 +287,8 @@ echo ""
 echo "  Then run: wp-supervisor"
 if [[ "$SDK_INSTALLED" != "yes" ]]; then
     echo ""
-    echo "  NOTE: Install dependencies before using supervisor mode:"
-    echo "    pip install claude-waypoints"
+    echo "  NOTE: Dependencies missing. Re-run installer or install manually:"
+    echo "    $INSTALL_DIR/.venv/bin/pip install claude-agent-sdk rich"
 fi
 echo ""
 echo "Restart Claude Code to apply changes."

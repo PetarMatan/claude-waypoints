@@ -11,3 +11,6 @@ try:
     __version__ = version("claude-waypoints")
 except PackageNotFoundError:
     __version__ = "dev"
+
+# Ensure shared modules from hooks/lib/ are importable
+from . import _paths  # noqa: F401

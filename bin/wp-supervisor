@@ -48,19 +48,26 @@ else
     export PYTHONPATH="${SUPERVISOR_DIR}:${PYTHONPATH:-}"
 fi
 
+# Use managed venv if it exists (created by install.sh)
+VENV_PYTHON="$SUPERVISOR_DIR/.venv/bin/python"
+if [[ -x "$VENV_PYTHON" ]]; then
+    PYTHON="$VENV_PYTHON"
+else
+    PYTHON="python3"
+fi
+
 # Check if required dependencies are installed
-if ! python3 -c "import claude_agent_sdk" 2>/dev/null || ! python3 -c "import rich" 2>/dev/null; then
+if ! "$PYTHON" -c "import claude_agent_sdk" 2>/dev/null || ! "$PYTHON" -c "import rich" 2>/dev/null; then
     echo "Error: Missing required dependencies."
     echo ""
-    echo "Install with:"
-    echo "  pip install claude-waypoints"
+    echo "Re-run the installer to fix:"
+    echo "  cd <claude-waypoints-repo> && ./install.sh"
     echo ""
-    echo "Or if using a virtual environment:"
-    echo "  source your-venv/bin/activate"
-    echo "  pip install claude-waypoints"
+    echo "Or install manually:"
+    echo "  $SUPERVISOR_DIR/.venv/bin/pip install claude-agent-sdk rich"
     exit 1
 fi
 
 # Run the supervisor module (unbuffered so output is visible when piped)
 export PYTHONUNBUFFERED=1
-exec python3 -m wp_supervisor "$@"
+exec "$PYTHON" -m wp_supervisor "$@"

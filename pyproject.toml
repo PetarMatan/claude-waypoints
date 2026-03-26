@@ -18,6 +18,9 @@ dependencies = [
 rag = ["sentence-transformers"]
 dev = ["pytest"]
 
+[project.scripts]
+wp-supervisor = "wp_supervisor.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/PetarMatan/claude-waypoints"
 Documentation = "https://github.com/PetarMatan/claude-waypoints/tree/main/docs"

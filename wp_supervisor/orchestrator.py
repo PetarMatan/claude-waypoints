@@ -20,11 +20,6 @@ except ImportError:
     print("Install with: pip install claude-waypoints", file=sys.stderr)
     sys.exit(1)
 
-# Add hooks/lib to path for agent loading
-_hooks_lib = Path(__file__).parent.parent / "hooks" / "lib"
-if str(_hooks_lib) not in sys.path:
-    sys.path.insert(0, str(_hooks_lib))
-
 from wp_agents import AgentLoader
 from wp_knowledge import KnowledgeManager, extract_from_text, ExtractionResult
 from .markers import SupervisorMarkers
