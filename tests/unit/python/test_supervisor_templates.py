@@ -78,9 +78,9 @@ class TestSummaryPromptTemplates:
         assert "REQ-" in prompt or "number" in prompt.lower()
 
     def test_requirements_prompt_instructs_build_tool_verification(self):
-        """Requirements prompt should instruct model to verify build tool from filesystem."""
+        """Requirements prompt should instruct model to use build tool from subagent reports."""
         prompt = templates.REQUIREMENTS_SUMMARY_PROMPT
-        assert "verify" in prompt.lower() or "Verify" in prompt
+        assert "verification" in prompt.lower() or "verify" in prompt.lower()
         assert "build wrapper" in prompt.lower() or "build tool" in prompt.lower()
         assert "subagent" in prompt.lower()
 
