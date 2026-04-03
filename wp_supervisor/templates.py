@@ -745,7 +745,7 @@ This lets later phases copy the pattern without re-reading test files.
 - Be specific - avoid vague descriptions
 - If there are open questions, list them (we should resolve before proceeding)
 - Include ALL file paths you discovered during exploration in the Codebase Context section. Later phases will use these paths directly to avoid re-exploring the project structure.
-- **Build Commands**: Before writing Build Commands, list the project root to verify which build wrapper (./mvnw, ./gradlew, etc.) actually exists. Do NOT trust subagent reports — check the filesystem directly. Use the verified wrapper in the Build Commands.
+- **Build Commands**: Use the build wrapper that subagents reported (./mvnw, ./gradlew, etc.). If subagents did not report one, state that it needs verification — do NOT use tools to check.
 - **Code Reference**: Extract from the conversation above — do NOT re-read files with tools. The subagent reports and your own exploration already contain all the code needed. Include EXACT file paths, ACTUAL code (not paraphrased), and keep excerpts SHORT (5-20 lines each).
 
 Output ONLY the summary in the format above.

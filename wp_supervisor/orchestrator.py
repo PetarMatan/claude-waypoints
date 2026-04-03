@@ -633,7 +633,7 @@ class WPOrchestrator:
     async def _extract_text_response(
         self,
         prompt: str,
-        timeout: float = 300.0,
+        timeout: float = 900.0,
         session_id: Optional[str] = None,
         phase: Optional[int] = None
     ) -> str:
@@ -647,6 +647,8 @@ class WPOrchestrator:
                 env=env_vars,
                 resume=session_id,
                 permission_mode="bypassPermissions",
+                max_turns=0,
+                disallowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob", "Agent"],
                 hooks=self.hooks.get_extraction_hooks_config(),
             )
         ) as client:
