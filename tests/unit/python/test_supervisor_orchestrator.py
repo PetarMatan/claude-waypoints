@@ -312,9 +312,13 @@ class TestRunPhase:
                     async def mock_confirm(*args, **kwargs):
                         return 'proceed'
 
+                    async def mock_review(*args, **kwargs):
+                        pass
+
                     orchestrator._run_phase_session = mock_run_session
                     orchestrator._generate_summary = mock_generate_summary
                     orchestrator._confirm_phase_completion = mock_confirm
+                    orchestrator._perform_end_of_phase_review = mock_review
 
                     run_async(orchestrator._run_phase(phase, "test task" if phase == 1 else None))
 
@@ -408,7 +412,11 @@ class TestRunPhase:
                 async def mock_run_session(*args, **kwargs):
                     pass
 
+                async def mock_review(*args, **kwargs):
+                    pass
+
                 orchestrator._run_phase_session = mock_run_session
+                orchestrator._perform_end_of_phase_review = mock_review
 
                 run_async(orchestrator._run_phase(4))
 
@@ -432,7 +440,11 @@ class TestRunPhase:
                 async def mock_run_session(*args, **kwargs):
                     pass
 
+                async def mock_review(*args, **kwargs):
+                    pass
+
                 orchestrator._run_phase_session = mock_run_session
+                orchestrator._perform_end_of_phase_review = mock_review
 
                 run_async(orchestrator._run_phase(4))
 
@@ -817,7 +829,11 @@ class TestContextPassing:
                     nonlocal captured_context
                     captured_context = context
 
+                async def mock_review(*args, **kwargs):
+                    pass
+
                 orchestrator._run_phase_session = capture_context
+                orchestrator._perform_end_of_phase_review = mock_review
 
                 run_async(orchestrator._run_phase(4))
 
@@ -1656,7 +1672,11 @@ class TestSubagentIntegrationWithPhaseSession:
                     captured_subagents.append(subagents)
                     return None
 
+                async def mock_review(*args, **kwargs):
+                    pass
+
                 orchestrator._run_phase_session = capture_session
+                orchestrator._perform_end_of_phase_review = mock_review
 
                 run_async(orchestrator._run_phase(4))
 
@@ -1871,81 +1891,35 @@ class TestOrchestratorSessionRunnerUsage:
                 assert usage.get("phase1", {}).get("input_tokens", 0) > 0
 
 
-# --- Phase 4 Reviewer Integration ---
+# --- Phase 4 End-of-Phase Review ---
 
 
-class TestOrchestratorReviewCoordinatorIntegration:
+class TestEndOfPhaseReview:
 
-    def test_orchestrator_has_start_review_coordinator_method(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert hasattr(orchestrator, '_start_review_coordinator')
-
-    def test_orchestrator_has_stop_review_coordinator_method(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert hasattr(orchestrator, '_stop_review_coordinator')
-
-    def test_orchestrator_has_create_review_coordinator_method(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert hasattr(orchestrator, '_create_review_coordinator')
-
-    def test_start_review_coordinator_is_async(self):
+    def test_orchestrator_has_perform_end_of_phase_review(self):
         import inspect
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert inspect.iscoroutinefunction(orchestrator._start_review_coordinator)
+                assert hasattr(orchestrator, '_perform_end_of_phase_review')
+                assert inspect.iscoroutinefunction(orchestrator._perform_end_of_phase_review)
 
-    def test_stop_review_coordinator_is_async(self):
+    def test_orchestrator_has_get_changed_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(Path, 'home', return_value=Path(tmpdir)):
+                from wp_supervisor.orchestrator import WPOrchestrator
+                orchestrator = WPOrchestrator(working_dir=tmpdir)
+                assert hasattr(orchestrator, '_get_changed_files')
+
+    def test_orchestrator_has_resume_session_with_feedback(self):
         import inspect
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
                 orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert inspect.iscoroutinefunction(orchestrator._stop_review_coordinator)
-
-
-class TestOrchestratorReviewerLifecycle:
-
-    def test_review_coordinator_started_during_phase4(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert callable(getattr(orchestrator, '_start_review_coordinator', None))
-
-    def test_review_coordinator_stopped_after_phase4(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert callable(getattr(orchestrator, '_stop_review_coordinator', None))
-
-    def test_create_review_coordinator_returns_coordinator(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert callable(getattr(orchestrator, '_create_review_coordinator', None))
-
-
-class TestOrchestratorHooksReviewCoordinatorSetting:
-
-    def test_hooks_has_set_review_coordinator_method(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch.object(Path, 'home', return_value=Path(tmpdir)):
-                from wp_supervisor.orchestrator import WPOrchestrator
-                orchestrator = WPOrchestrator(working_dir=tmpdir)
-                assert hasattr(orchestrator.hooks, 'set_review_coordinator')
+                assert hasattr(orchestrator, '_resume_session_with_feedback')
+                assert inspect.iscoroutinefunction(orchestrator._resume_session_with_feedback)
 
 
 class TestOrchestratorRAGQueries:

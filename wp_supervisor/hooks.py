@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hook callbacks for SDK-spawned Claude sessions."""
 
-from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from wp_config import WPConfig
 from .hook_messages import (
@@ -14,10 +14,7 @@ from .hook_messages import (
 if TYPE_CHECKING:
     from .logger import SupervisorLogger
     from .markers import SupervisorMarkers
-    from .review_coordinator import ReviewCoordinator
     from .display import SupervisorDisplay
-
-FileChangeCallback = Callable[[str, str], None]  # (file_path, tool_name) -> None
 
 
 class SupervisorHooks:
@@ -34,16 +31,6 @@ class SupervisorHooks:
         self.logger = logger
         self.config = WPConfig(working_dir)
         self.display = display
-
-        self._review_coordinator: Optional["ReviewCoordinator"] = None
-        self._on_file_change: Optional[FileChangeCallback] = None
-
-    def set_review_coordinator(self, coordinator: Optional["ReviewCoordinator"]) -> None:
-        """Set the review coordinator for Phase 4 file tracking."""
-        self._review_coordinator = coordinator
-
-    def set_file_change_callback(self, callback: Optional[FileChangeCallback]) -> None:
-        self._on_file_change = callback
 
     def _get_file_path(self, input_data: Dict[str, Any]) -> Optional[str]:
         tool_input = input_data.get("tool_input", {})
@@ -165,59 +152,6 @@ class SupervisorHooks:
                 pass
             return self._allow()
 
-    async def track_file_change(
-        self,
-        input_data: Dict[str, Any],
-        tool_use_id: Optional[str],
-        context: Any
-    ) -> Dict[str, Any]:
-        """PostToolUse hook for tracking file changes during Phase 4."""
-        import asyncio
-
-        try:
-            hook_event = input_data.get("hook_event_name", "")
-            if hook_event != "PostToolUse":
-                return self._allow()
-
-            tool_name = input_data.get("tool_name", "")
-            if tool_name not in ("Write", "Edit"):
-                return self._allow()
-
-            file_path = self._get_file_path(input_data)
-            if not file_path:
-                return self._allow()
-
-            loop = asyncio.get_running_loop()
-            phase = await loop.run_in_executor(None, self.markers.get_phase)
-
-            if phase != 4:
-                return self._allow()
-
-            if self._review_coordinator is not None:
-                try:
-                    await self._review_coordinator.on_file_changed(file_path, tool_name)
-                except Exception as e:
-                    await loop.run_in_executor(
-                        None,
-                        self.logger.log_event,
-                        "REVIEWER",
-                        f"File change tracking error: {e}"
-                    )
-
-            if self._on_file_change is not None:
-                try:
-                    self._on_file_change(file_path, tool_name)
-                except Exception:
-                    pass
-
-            return self._allow()
-        except Exception as e:
-            try:
-                self.logger.log_event("HOOK_ERROR", f"track_file_change exception: {e}")
-            except:
-                pass
-            return self._allow()
-
     def _run_command(self, cmd: str, cwd: str, timeout: int = 120) -> tuple:
         """Run a shell command and return (exit_code, output)."""
         import subprocess
@@ -315,20 +249,6 @@ class SupervisorHooks:
                         return {"continue": False, "stopReason": format_test_failure(out, profile)}
                     await loop.run_in_executor(None, self.logger.log_wp, "Phase 4: Tests OK")
 
-                    # [REQ-3.1] Trigger review now that tests pass.
-                    # Stop hook is the ideal trigger point: we already have test
-                    # results, and it fires once per Claude turn (natural throttling).
-                    if self._review_coordinator is not None:
-                        try:
-                            await self._review_coordinator.on_build_executed(
-                                test_cmd, command_output=out
-                            )
-                        except Exception as e:
-                            await loop.run_in_executor(
-                                None, self.logger.log_event, "REVIEWER",
-                                f"Review trigger error: {e}"
-                            )
-
                 await loop.run_in_executor(None, self.logger.log_wp, "Phase 4 COMPLETE: All builds and tests passing")
 
             return self._allow()
@@ -354,14 +274,11 @@ class SupervisorHooks:
             self.logger.log_event("HOOK", "HookMatcher import FAILED - no hooks registered")
             return {}
 
-        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify, file_tracking)")
+        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify)")
         return {
             "PreToolUse": [
                 HookMatcher(matcher="Write|Edit", hooks=[self.phase_guard]),
                 HookMatcher(hooks=[self.log_tool_use]),
-            ],
-            "PostToolUse": [
-                HookMatcher(matcher="Write|Edit", hooks=[self.track_file_change]),
             ],
             "Stop": [
                 HookMatcher(hooks=[self.build_verify]),
