@@ -134,7 +134,7 @@ if [[ -d "${CLAUDE_DIR}" ]]; then
     BACKUP_DIR="${CLAUDE_DIR}-backup-$(date +%Y%m%d-%H%M%S)"
     echo "=== Creating Backup ==="
     echo "Backing up ${CLAUDE_DIR} to $BACKUP_DIR"
-    cp -r "${CLAUDE_DIR}" "$BACKUP_DIR"
+    cp -rP "${CLAUDE_DIR}" "$BACKUP_DIR"
     echo "Backup complete: $BACKUP_DIR"
     echo ""
 fi

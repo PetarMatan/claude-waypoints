@@ -654,11 +654,7 @@ class WPOrchestrator:
 
             self.display.feedback_injection(feedback)
 
-            if round_num == max_rounds:
-                self.logger.log_event("REVIEWER", f"Max review rounds ({max_rounds}) reached, proceeding")
-                break
-
-            # Resume Opus session with feedback
+            # Resume Opus session with feedback — implementor addresses issues
             self.logger.log_event("REVIEWER", "Injecting feedback into implementation session")
             await self._resume_session_with_feedback(session_id, feedback)
 

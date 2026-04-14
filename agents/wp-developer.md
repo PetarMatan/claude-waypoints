@@ -243,7 +243,8 @@ true # wp:mark-complete tests
 - "Provably incorrect" means you can demonstrate the error objectively — not just that the
   test seems unusual or tests an unexpected edge case.
 - When in doubt, implement the code to pass the test. Only flag tests you are certain are wrong.
-- Never silently modify tests to make them pass.
+- Never silently modify tests to make them pass — i.e., don't change assertions to match broken implementation.
+- Fixing test bugs flagged by code review (incorrect mocks, weak assertions, dead imports) is expected. These are test quality fixes, not "modifying tests to make them pass."
 
 ## Test Quality Standards
 

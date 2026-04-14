@@ -31,6 +31,7 @@ class SupervisorHooks:
         self.logger = logger
         self.config = WPConfig(working_dir)
         self.display = display
+        self.compaction_occurred: bool = False
 
     def _get_file_path(self, input_data: Dict[str, Any]) -> Optional[str]:
         tool_input = input_data.get("tool_input", {})
@@ -260,6 +261,46 @@ class SupervisorHooks:
                 pass
             return self._allow()
 
+    async def pre_compact(
+        self,
+        input_data: Dict[str, Any],
+        tool_use_id: Optional[str],
+        context: Any
+    ) -> Dict[str, Any]:
+        """
+        PreCompact hook — injects phase context as custom compaction instructions
+        and sets compaction_occurred flag for post-response re-injection.
+
+        Only active for phases 2, 3, 4 (phase 1 excluded per REQ-4/EDGE-4).
+
+        Returns:
+            Dict with 'custom_instructions' containing phase input content,
+            or empty dict if phase context unavailable.
+        """
+        import asyncio
+
+        try:
+            loop = asyncio.get_running_loop()
+            phase = await loop.run_in_executor(None, self.markers.get_phase)
+
+            if phase == 1:
+                return {}
+
+            phase_context = await loop.run_in_executor(
+                None, self.markers.get_phase_context, phase
+            )
+            if not phase_context:
+                return {}
+
+            self.compaction_occurred = True
+            return {"custom_instructions": phase_context}
+        except Exception as e:
+            try:
+                self.logger.log_event("HOOK_ERROR", f"pre_compact exception: {e}")
+            except:
+                pass
+            return {}
+
     def get_hooks_config(self) -> Dict[str, Any]:
         """Get hooks config for ClaudeAgentOptions."""
         import os
@@ -274,8 +315,7 @@ class SupervisorHooks:
             self.logger.log_event("HOOK", "HookMatcher import FAILED - no hooks registered")
             return {}
 
-        self.logger.log_event("HOOK", "Registering hooks (phase_guard, log_tool_use, build_verify)")
-        return {
+        hooks_config = {
             "PreToolUse": [
                 HookMatcher(matcher="Write|Edit", hooks=[self.phase_guard]),
                 HookMatcher(hooks=[self.log_tool_use]),
@@ -284,6 +324,17 @@ class SupervisorHooks:
                 HookMatcher(hooks=[self.build_verify]),
             ],
         }
+
+        phase = self.markers.get_phase()
+        if phase in (2, 3, 4):
+            hooks_config["PreCompact"] = [
+                HookMatcher(hooks=[self.pre_compact]),
+            ]
+
+        registered = ", ".join(sorted(hooks_config.keys()))
+        self.logger.log_event("HOOK", f"Registering hooks ({registered})")
+
+        return hooks_config
 
     def get_extraction_hooks_config(self) -> Dict[str, Any]:
         """Get lightweight hooks config for internal queries (no build verification)."""

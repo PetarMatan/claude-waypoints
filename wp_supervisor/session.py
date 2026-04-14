@@ -202,6 +202,16 @@ class SessionRunner:
         )
         phase_complete = signal is not None
 
+        # Check for compaction re-injection after initial response [REQ-4]
+        if not phase_complete:
+            reinject_sid, reinject_signal = await self._handle_compaction_reinjection(
+                client_context_manager, phase, phase_checker
+            )
+            if reinject_sid:
+                session_id = reinject_sid
+            if reinject_signal:
+                phase_complete = True
+
         first_input = True
         while not phase_complete:
             if first_input:
@@ -234,6 +244,16 @@ class SessionRunner:
             )
             if signal:
                 phase_complete = True
+
+            # Check for compaction re-injection after each user-triggered response [REQ-4, REQ-7]
+            if not phase_complete:
+                reinject_sid, reinject_signal = await self._handle_compaction_reinjection(
+                    client_context_manager, phase, phase_checker
+                )
+                if reinject_sid:
+                    session_id = reinject_sid
+                if reinject_signal:
+                    phase_complete = True
 
         return session_id
 
@@ -338,6 +358,74 @@ class SessionRunner:
         if self._check_signal(text, canceled_patterns):
             return SIGNAL_CANCELED
         return None
+
+    def _build_reorientation_message(self, phase: int, phase_context: str) -> str:
+        """
+        Build the re-orientation message injected after compaction.
+
+        Contains the full phase input document + instructions to run
+        git diff --stat and git status --short to understand progress,
+        then resume work [REQ-5].
+
+        Args:
+            phase: Current phase number
+            phase_context: Full phase input document content
+
+        Returns:
+            Formatted re-orientation message string
+        """
+        return (
+            f"{phase_context}\n\n"
+            f"---\n\n"
+            f"Context was compacted. To understand your progress so far, "
+            f"check `git diff --stat` and `git status --short`, "
+            f"then continue where you left off."
+        )
+
+    async def _handle_compaction_reinjection(
+        self,
+        client: "ClaudeSDKClient",
+        phase: int,
+        signal_checker: Optional[SignalChecker] = None,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Check if compaction occurred and re-inject phase context if so.
+
+        After each response cycle, checks hooks.compaction_occurred flag.
+        If set: reads phase context, builds re-orientation message, sends it
+        via client.query(), processes the response stream, and clears the flag [REQ-4, REQ-6].
+
+        Handles edge cases:
+        - Phase context missing: skip re-injection, log warning [EDGE-3]
+        - client.query() failure: log error, continue without re-injection [ERR-1]
+        - Multiple compactions: each triggers independently [EDGE-1, REQ-7]
+
+        Args:
+            client: The SDK client to send re-injection query
+            phase: Current phase number
+            signal_checker: Optional signal checker passed through to _process_stream
+
+        Returns:
+            (session_id, detected_signal) from the re-injection response stream,
+            or (None, None) if no compaction occurred or re-injection was skipped.
+        """
+        if not self.hooks.compaction_occurred:
+            return (None, None)
+
+        self.hooks.compaction_occurred = False
+
+        phase_context = self.markers.get_phase_context(phase)
+        if not phase_context:
+            self.logger.log_event("COMPACT", f"Phase {phase} context missing, skipping re-injection")
+            return (None, None)
+
+        message = self._build_reorientation_message(phase, phase_context)
+        try:
+            await client.query(message)
+            return await self._process_stream(client, phase, signal_checker)
+        except Exception as e:
+            self.logger.log_event("COMPACT_ERROR", f"Re-injection failed: {e}")
+            return (None, None)
 
     def _record_usage(self, phase: int, result: "ResultMessage") -> None:
         """Record usage data from a ResultMessage."""

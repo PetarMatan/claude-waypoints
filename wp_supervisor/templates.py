@@ -622,7 +622,8 @@ the business logic to make all tests pass.
 - "Provably incorrect" means you can demonstrate the error objectively - not just that the
   test seems unusual or tests an unexpected edge case.
 - When in doubt, implement the code to pass the test. Only flag tests you are certain are wrong.
-- Never silently modify tests to make them pass.
+- Never silently modify tests to make them pass — i.e., don't change assertions to match broken implementation.
+- Fixing test bugs flagged by code review (incorrect mocks, weak assertions, dead imports) is expected. These are test quality fixes, not "modifying tests to make them pass."
 
 ## Important
 - Focus on making tests pass and fulfilling requirements, not on perfect code
@@ -1242,6 +1243,8 @@ If there ARE issues, output ONLY a bulleted list of problems WITH SEVERITY TAGS.
 
 REVIEWER_FEEDBACK_ACTION = (
     "For each issue: either fix it, or explain briefly why it does not apply. "
+    "Test files are not exempt — if the reviewer flags a test bug (e.g., incorrect mock setup, "
+    "weak assertion, dead import), fix it. This is not 'modifying tests to make them pass.' "
     "Do NOT simply re-signal completion without addressing each point."
 )
 
