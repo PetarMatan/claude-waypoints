@@ -22,6 +22,7 @@ from .markers import SupervisorMarkers
 from .hooks import SupervisorHooks
 from .logger import SupervisorLogger
 from .display import SupervisorDisplay
+from .stdin_reader import StdinInterruptReader
 
 
 PHASE_COMPLETE_PATTERNS = [
@@ -113,6 +114,7 @@ class SessionRunner:
         self.hooks = hooks
         self.logger = logger
         self.display = display or SupervisorDisplay()
+        self._stdin_reader = StdinInterruptReader()
 
     async def _process_stream(
         self,
@@ -197,6 +199,8 @@ class SessionRunner:
         def phase_checker(text: str) -> Optional[str]:
             return SIGNAL_COMPLETE if self._check_signal(text, signal_patterns) else None
 
+        self._start_stdin_reader(phase)
+
         session_id, signal = await self._process_stream(
             client_context_manager, phase, phase_checker
         )
@@ -211,6 +215,18 @@ class SessionRunner:
                 session_id = reinject_sid
             if reinject_signal:
                 phase_complete = True
+
+        # Check for developer interrupt after initial response [REQ-2, REQ-3]
+        if not phase_complete:
+            interrupt_sid, interrupt_signal = await self._handle_developer_interrupt(
+                client_context_manager, phase, phase_checker
+            )
+            if interrupt_sid:
+                session_id = interrupt_sid
+            if interrupt_signal:
+                phase_complete = True
+
+        self._stop_stdin_reader()
 
         first_input = True
         while not phase_complete:
@@ -238,6 +254,8 @@ class SessionRunner:
             sys.stdout.flush()
             await client_context_manager.query(user_input)
 
+            self._start_stdin_reader(phase)
+
             _, signal = await self._process_stream(
                 client_context_manager, phase, phase_checker,
                 show_thinking=True
@@ -254,6 +272,18 @@ class SessionRunner:
                     session_id = reinject_sid
                 if reinject_signal:
                     phase_complete = True
+
+            # Check for developer interrupt after each user-triggered response [REQ-2, REQ-3]
+            if not phase_complete:
+                interrupt_sid, interrupt_signal = await self._handle_developer_interrupt(
+                    client_context_manager, phase, phase_checker
+                )
+                if interrupt_sid:
+                    session_id = interrupt_sid
+                if interrupt_signal:
+                    phase_complete = True
+
+            self._stop_stdin_reader()
 
         return session_id
 
@@ -426,6 +456,70 @@ class SessionRunner:
         except Exception as e:
             self.logger.log_event("COMPACT_ERROR", f"Re-injection failed: {e}")
             return (None, None)
+
+    async def _handle_developer_interrupt(
+        self,
+        client: "ClaudeSDKClient",
+        phase: int,
+        signal_checker: Optional[SignalChecker] = None,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Check for queued developer input and inject it if present.
+
+        After each response cycle, drains the stdin reader queue.
+        If non-empty: injects the concatenated input via client.query(),
+        processes the response stream, and returns the result [REQ-2, REQ-3].
+
+        Follows the same shape as _handle_compaction_reinjection:
+        1. Check condition (queue non-empty)
+        2. If set, inject via client.query()
+        3. Run _process_stream()
+        4. Return (session_id, signal)
+
+        Args:
+            client: The SDK client to send injection query
+            phase: Current phase number
+            signal_checker: Optional signal checker passed through to _process_stream
+
+        Returns:
+            (session_id, detected_signal) from the injection response stream,
+            or (None, None) if no queued input [EDGE-1, EDGE-4].
+        """
+        queued_text = self._stdin_reader.drain()
+        if queued_text is None:
+            return (None, None)
+
+        self.display.interrupt_injection(queued_text)
+        try:
+            await client.query(queued_text)
+            return await self._process_stream(client, phase, signal_checker)
+        except Exception as e:
+            self.logger.log_event("INTERRUPT_ERROR", f"Injection failed: {e}")
+            return (None, None)
+
+    def _start_stdin_reader(self, phase: int) -> None:
+        """
+        Start the background stdin reader if phase is eligible (2, 3, or 4).
+
+        Phase 1 is excluded — it already has interactive Q&A [REQ-5].
+        Shows the interrupt hint via display when starting [REQ-6].
+
+        Args:
+            phase: Current phase number for gating.
+        """
+        if phase not in (2, 3, 4):
+            return
+        self._stdin_reader.start()
+        self.display.interrupt_hint()
+
+    def _stop_stdin_reader(self) -> None:
+        """
+        Stop the background stdin reader.
+
+        Must be called before read_user_input() so stdin returns to
+        normal blocking read. Safe to call even if reader is not running.
+        """
+        self._stdin_reader.stop()
 
     def _record_usage(self, phase: int, result: "ResultMessage") -> None:
         """Record usage data from a ResultMessage."""

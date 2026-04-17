@@ -1988,5 +1988,854 @@ class TestUserCommandsInPhaseSession:
                     ))
 
 
+# =============================================================================
+# DEVELOPER INTERRUPT TESTS - StdinInterruptReader integration with SessionRunner
+# =============================================================================
+
+from wp_supervisor.stdin_reader import StdinInterruptReader
+
+
+class TestSessionRunnerHasStdinReader:
+    """Tests that SessionRunner creates and owns a StdinInterruptReader instance."""
+
+    def _create_runner(self, tmpdir: str):
+        """Create a SessionRunner instance for testing."""
+        with patch.object(Path, 'home', return_value=Path(tmpdir)):
+            from wp_supervisor.markers import SupervisorMarkers
+            from wp_supervisor.hooks import SupervisorHooks
+            from wp_supervisor.logger import SupervisorLogger
+
+            markers = SupervisorMarkers()
+            logger = SupervisorLogger(
+                workflow_dir=markers.markers_dir,
+                workflow_id=markers.workflow_id
+            )
+            hooks = SupervisorHooks(
+                markers=markers,
+                logger=logger,
+                working_dir=tmpdir
+            )
+
+            return SessionRunner(
+                working_dir=tmpdir,
+                markers=markers,
+                hooks=hooks,
+                logger=logger
+            )
+
+    def test_session_runner_has_stdin_reader_attribute(self):
+        """SessionRunner should have a _stdin_reader attribute."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            assert hasattr(runner, '_stdin_reader')
+
+    def test_session_runner_stdin_reader_is_correct_type(self):
+        """SessionRunner._stdin_reader should be a StdinInterruptReader instance."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            assert isinstance(runner._stdin_reader, StdinInterruptReader)
+
+
+class TestStartStdinReader:
+    """Tests for SessionRunner._start_stdin_reader() phase gating [REQ-5]."""
+
+    def _create_runner(self, tmpdir: str):
+        """Create a SessionRunner with mocked stdin reader."""
+        with patch.object(Path, 'home', return_value=Path(tmpdir)):
+            from wp_supervisor.markers import SupervisorMarkers
+            from wp_supervisor.hooks import SupervisorHooks
+            from wp_supervisor.logger import SupervisorLogger
+
+            markers = SupervisorMarkers()
+            logger = SupervisorLogger(
+                workflow_dir=markers.markers_dir,
+                workflow_id=markers.workflow_id
+            )
+            hooks = SupervisorHooks(
+                markers=markers,
+                logger=logger,
+                working_dir=tmpdir
+            )
+
+            runner = SessionRunner(
+                working_dir=tmpdir,
+                markers=markers,
+                hooks=hooks,
+                logger=logger
+            )
+            runner._stdin_reader = MagicMock(spec=StdinInterruptReader)
+            runner.display = MagicMock()
+            return runner
+
+    def test_start_stdin_reader_calls_start_for_phase_2(self):
+        """_start_stdin_reader should start reader for phase 2 [REQ-1]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # when
+            runner._start_stdin_reader(phase=2)
+
+            # then
+            runner._stdin_reader.start.assert_called_once()
+
+    def test_start_stdin_reader_calls_start_for_phase_3(self):
+        """_start_stdin_reader should start reader for phase 3 [REQ-1]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # when
+            runner._start_stdin_reader(phase=3)
+
+            # then
+            runner._stdin_reader.start.assert_called_once()
+
+    def test_start_stdin_reader_calls_start_for_phase_4(self):
+        """_start_stdin_reader should start reader for phase 4 [REQ-1]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # when
+            runner._start_stdin_reader(phase=4)
+
+            # then
+            runner._stdin_reader.start.assert_called_once()
+
+    def test_start_stdin_reader_noop_for_phase_1(self):
+        """_start_stdin_reader should NOT start reader for phase 1 [REQ-5]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # when
+            runner._start_stdin_reader(phase=1)
+
+            # then
+            runner._stdin_reader.start.assert_not_called()
+
+    def test_start_stdin_reader_shows_interrupt_hint(self):
+        """_start_stdin_reader should show interrupt hint when starting [REQ-6]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # when
+            runner._start_stdin_reader(phase=2)
+
+            # then
+            runner.display.interrupt_hint.assert_called_once()
+
+    def test_start_stdin_reader_no_hint_for_phase_1(self):
+        """_start_stdin_reader should NOT show hint for phase 1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # when
+            runner._start_stdin_reader(phase=1)
+
+            # then
+            runner.display.interrupt_hint.assert_not_called()
+
+
+class TestStopStdinReader:
+    """Tests for SessionRunner._stop_stdin_reader() [REQ-8]."""
+
+    def _create_runner(self, tmpdir: str):
+        """Create a SessionRunner with mocked stdin reader."""
+        with patch.object(Path, 'home', return_value=Path(tmpdir)):
+            from wp_supervisor.markers import SupervisorMarkers
+            from wp_supervisor.hooks import SupervisorHooks
+            from wp_supervisor.logger import SupervisorLogger
+
+            markers = SupervisorMarkers()
+            logger = SupervisorLogger(
+                workflow_dir=markers.markers_dir,
+                workflow_id=markers.workflow_id
+            )
+            hooks = SupervisorHooks(
+                markers=markers,
+                logger=logger,
+                working_dir=tmpdir
+            )
+
+            runner = SessionRunner(
+                working_dir=tmpdir,
+                markers=markers,
+                hooks=hooks,
+                logger=logger
+            )
+            runner._stdin_reader = MagicMock(spec=StdinInterruptReader)
+            return runner
+
+    def test_stop_stdin_reader_calls_stop(self):
+        """_stop_stdin_reader should call _stdin_reader.stop()."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # when
+            runner._stop_stdin_reader()
+
+            # then
+            runner._stdin_reader.stop.assert_called_once()
+
+    def test_stop_stdin_reader_safe_when_not_running(self):
+        """_stop_stdin_reader should not raise when reader is not running."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            runner._stdin_reader.is_running = False
+
+            # when/then - should not raise
+            runner._stop_stdin_reader()
+
+
+class TestHandleDeveloperInterrupt:
+    """Tests for SessionRunner._handle_developer_interrupt() [REQ-2, REQ-3]."""
+
+    def _create_runner(self, tmpdir: str):
+        """Create a SessionRunner with mocked dependencies."""
+        with patch.object(Path, 'home', return_value=Path(tmpdir)):
+            from wp_supervisor.markers import SupervisorMarkers
+            from wp_supervisor.hooks import SupervisorHooks
+            from wp_supervisor.logger import SupervisorLogger
+
+            markers = SupervisorMarkers()
+            logger = SupervisorLogger(
+                workflow_dir=markers.markers_dir,
+                workflow_id=markers.workflow_id
+            )
+            hooks = SupervisorHooks(
+                markers=markers,
+                logger=logger,
+                working_dir=tmpdir
+            )
+
+            runner = SessionRunner(
+                working_dir=tmpdir,
+                markers=markers,
+                hooks=hooks,
+                logger=logger
+            )
+            runner._stdin_reader = MagicMock(spec=StdinInterruptReader)
+            runner.display = MagicMock()
+            return runner
+
+    def test_returns_none_none_when_no_queued_input(self):
+        """Should return (None, None) when drain() returns None [EDGE-1]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            runner._stdin_reader.drain.return_value = None
+
+            # given
+            mock_client = AsyncMock()
+
+            # when
+            sid, signal = run_async(runner._handle_developer_interrupt(
+                mock_client, phase=2
+            ))
+
+            # then
+            assert sid is None
+            assert signal is None
+            mock_client.query.assert_not_called()
+
+    def test_injects_queued_input_via_client_query(self):
+        """Should inject queued text via client.query() [REQ-3]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            runner._stdin_reader.drain.return_value = "please focus on error handling"
+
+            # given
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "interrupt-session"
+            text_block = MagicMock()
+            text_block.text = "Got it, focusing on error handling."
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            # when
+            sid, signal = run_async(runner._handle_developer_interrupt(
+                mock_client, phase=2
+            ))
+
+            # then
+            mock_client.query.assert_called_once_with("please focus on error handling")
+
+    def test_runs_process_stream_after_injection(self):
+        """Should call _process_stream after injecting [REQ-3]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            runner._stdin_reader.drain.return_value = "some guidance"
+
+            # given
+            mock_client = AsyncMock()
+            runner._process_stream = AsyncMock(return_value=("session-123", None))
+
+            # when
+            sid, signal = run_async(runner._handle_developer_interrupt(
+                mock_client, phase=3
+            ))
+
+            # then
+            assert sid == "session-123"
+            runner._process_stream.assert_called_once()
+
+    def test_returns_session_id_and_signal_from_process_stream(self):
+        """Should return (session_id, signal) from _process_stream [REQ-3]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            runner._stdin_reader.drain.return_value = "finish up"
+
+            # given
+            mock_client = AsyncMock()
+            runner._process_stream = AsyncMock(return_value=("sess-abc", SIGNAL_COMPLETE))
+
+            # when
+            sid, signal = run_async(runner._handle_developer_interrupt(
+                mock_client, phase=4
+            ))
+
+            # then
+            assert sid == "sess-abc"
+            assert signal == SIGNAL_COMPLETE
+
+    def test_shows_interrupt_injection_display(self):
+        """Should call display.interrupt_injection with the queued text [REQ-6]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            runner._stdin_reader.drain.return_value = "add more tests"
+
+            # given
+            mock_client = AsyncMock()
+            runner._process_stream = AsyncMock(return_value=(None, None))
+
+            # when
+            run_async(runner._handle_developer_interrupt(mock_client, phase=2))
+
+            # then
+            runner.display.interrupt_injection.assert_called_once_with("add more tests")
+
+    def test_concatenated_multiline_input_injected_as_single_message(self):
+        """Multiple queued lines should be injected as one message [REQ-7]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            # drain returns concatenated multi-line input
+            runner._stdin_reader.drain.return_value = "line one\nline two\nline three"
+
+            # given
+            mock_client = AsyncMock()
+            runner._process_stream = AsyncMock(return_value=(None, None))
+
+            # when
+            run_async(runner._handle_developer_interrupt(mock_client, phase=2))
+
+            # then - single query call with concatenated text
+            mock_client.query.assert_called_once_with("line one\nline two\nline three")
+
+    def test_handles_query_failure_gracefully(self):
+        """Should return (None, None) if client.query() raises [ERR-2]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            runner._stdin_reader.drain.return_value = "some input"
+
+            # given
+            mock_client = AsyncMock()
+            mock_client.query.side_effect = Exception("API error")
+
+            # when
+            sid, signal = run_async(runner._handle_developer_interrupt(
+                mock_client, phase=2
+            ))
+
+            # then
+            assert sid is None
+            assert signal is None
+
+    def test_passes_signal_checker_to_process_stream(self):
+        """Should pass signal_checker through to _process_stream."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+            runner._stdin_reader.drain.return_value = "guidance"
+
+            # given
+            mock_client = AsyncMock()
+            runner._process_stream = AsyncMock(return_value=(None, None))
+            checker = lambda text: SIGNAL_COMPLETE if "DONE" in text else None
+
+            # when
+            run_async(runner._handle_developer_interrupt(
+                mock_client, phase=2, signal_checker=checker
+            ))
+
+            # then - signal_checker should have been passed through
+            call_args = runner._process_stream.call_args
+            assert call_args is not None
+            # Check signal_checker was passed (positional or keyword)
+            assert checker in call_args.args or call_args.kwargs.get('signal_checker') is checker
+
+
+class TestRunPhaseSessionStdinReaderIntegration:
+    """Integration tests verifying run_phase_session() calls stdin reader methods
+    at the correct points [REQ-1, REQ-2, REQ-3, REQ-4, REQ-5]."""
+
+    def _create_runner(self, tmpdir: str):
+        """Create a SessionRunner with mocked dependencies."""
+        with patch.object(Path, 'home', return_value=Path(tmpdir)):
+            from wp_supervisor.markers import SupervisorMarkers
+            from wp_supervisor.hooks import SupervisorHooks
+            from wp_supervisor.logger import SupervisorLogger
+
+            markers = SupervisorMarkers()
+            logger = SupervisorLogger(
+                workflow_dir=markers.markers_dir,
+                workflow_id=markers.workflow_id
+            )
+            hooks = SupervisorHooks(
+                markers=markers,
+                logger=logger,
+                working_dir=tmpdir
+            )
+
+            return SessionRunner(
+                working_dir=tmpdir,
+                markers=markers,
+                hooks=hooks,
+                logger=logger
+            )
+
+    def test_starts_stdin_reader_before_initial_process_stream(self):
+        """run_phase_session should call _start_stdin_reader before first _process_stream [REQ-1]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            call_order = []
+            runner._start_stdin_reader = MagicMock(side_effect=lambda p: call_order.append(f"start_reader:{p}"))
+            runner._stop_stdin_reader = MagicMock(side_effect=lambda: call_order.append("stop_reader"))
+            runner._handle_developer_interrupt = AsyncMock(
+                return_value=(None, None),
+                side_effect=lambda *a, **kw: call_order.append("handle_interrupt") or (None, None)
+            )
+            runner._handle_compaction_reinjection = AsyncMock(return_value=(None, None))
+
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Done\n---PHASE_COMPLETE---"
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            # when
+            run_async(runner.run_phase_session(
+                client_context_manager=mock_client,
+                initial_prompt="Test",
+                phase=2,
+                signal_patterns=PHASE_COMPLETE_PATTERNS
+            ))
+
+            # then - start_reader should be called with phase
+            assert "start_reader:2" in call_order
+
+    def test_stops_stdin_reader_before_user_input_prompt(self):
+        """run_phase_session should call _stop_stdin_reader before read_user_input [REQ-2]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            call_order = []
+            runner._start_stdin_reader = MagicMock(side_effect=lambda p: call_order.append("start_reader"))
+            runner._stop_stdin_reader = MagicMock(side_effect=lambda: call_order.append("stop_reader"))
+            runner._handle_developer_interrupt = AsyncMock(return_value=(None, None))
+            runner._handle_compaction_reinjection = AsyncMock(return_value=(None, None))
+
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Working..."  # no complete signal
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            def mock_input(prompt=""):
+                call_order.append("read_input")
+                return "/done"
+
+            with patch('wp_supervisor.session.read_user_input', side_effect=mock_input):
+                run_async(runner.run_phase_session(
+                    client_context_manager=mock_client,
+                    initial_prompt="Test",
+                    phase=2,
+                    signal_patterns=PHASE_COMPLETE_PATTERNS
+                ))
+
+            # then - stop_reader should appear before read_input
+            stop_idx = call_order.index("stop_reader")
+            read_idx = call_order.index("read_input")
+            assert stop_idx < read_idx
+
+    def test_handles_developer_interrupt_after_process_stream(self):
+        """run_phase_session should call _handle_developer_interrupt after _process_stream [REQ-2, REQ-3]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            interrupt_called = [False]
+            original_handle = runner._handle_developer_interrupt
+
+            async def track_interrupt(*args, **kwargs):
+                interrupt_called[0] = True
+                return (None, None)
+
+            runner._handle_developer_interrupt = track_interrupt
+            runner._handle_compaction_reinjection = AsyncMock(return_value=(None, None))
+
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Working..."  # no complete signal
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            with patch('wp_supervisor.session.read_user_input', return_value="/done"):
+                run_async(runner.run_phase_session(
+                    client_context_manager=mock_client,
+                    initial_prompt="Test",
+                    phase=2,
+                    signal_patterns=PHASE_COMPLETE_PATTERNS
+                ))
+
+            # then
+            assert interrupt_called[0] is True
+
+    def test_interrupt_runs_after_compaction_check(self):
+        """Developer interrupt should run AFTER compaction re-injection [EDGE-3]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            call_order = []
+
+            async def mock_compaction(*args, **kwargs):
+                call_order.append("compaction")
+                return (None, None)
+
+            async def mock_interrupt(*args, **kwargs):
+                call_order.append("interrupt")
+                return (None, None)
+
+            runner._handle_compaction_reinjection = mock_compaction
+            runner._handle_developer_interrupt = mock_interrupt
+
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Working..."
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            with patch('wp_supervisor.session.read_user_input', return_value="/done"):
+                run_async(runner.run_phase_session(
+                    client_context_manager=mock_client,
+                    initial_prompt="Test",
+                    phase=2,
+                    signal_patterns=PHASE_COMPLETE_PATTERNS
+                ))
+
+            # then - compaction should come before interrupt
+            assert call_order.index("compaction") < call_order.index("interrupt")
+
+    def test_interrupt_skipped_when_phase_complete_signal_detected(self):
+        """Interrupt check should be skipped if phase_complete is True [EDGE-2]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            interrupt_called = [False]
+
+            async def mock_interrupt(*args, **kwargs):
+                interrupt_called[0] = True
+                return (None, None)
+
+            runner._handle_developer_interrupt = mock_interrupt
+            runner._handle_compaction_reinjection = AsyncMock(return_value=(None, None))
+
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Done!\n---PHASE_COMPLETE---"  # phase complete signal
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            # when
+            run_async(runner.run_phase_session(
+                client_context_manager=mock_client,
+                initial_prompt="Test",
+                phase=2,
+                signal_patterns=PHASE_COMPLETE_PATTERNS
+            ))
+
+            # then - interrupt should NOT have been called because phase is complete
+            assert interrupt_called[0] is False
+
+    def test_interrupt_injection_followed_by_normal_user_input(self):
+        """After interrupt injection, session should still prompt for user input [REQ-4]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given - interrupt returns content (means injection happened)
+            # but no phase complete signal
+            async def mock_interrupt(client, phase, signal_checker=None):
+                return ("interrupt-sid", None)  # injected but no completion
+
+            runner._handle_developer_interrupt = mock_interrupt
+            runner._handle_compaction_reinjection = AsyncMock(return_value=(None, None))
+
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Working..."  # no complete signal
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            input_called = [False]
+            def mock_input(prompt=""):
+                input_called[0] = True
+                return "/done"
+
+            with patch('wp_supervisor.session.read_user_input', side_effect=mock_input):
+                run_async(runner.run_phase_session(
+                    client_context_manager=mock_client,
+                    initial_prompt="Test",
+                    phase=2,
+                    signal_patterns=PHASE_COMPLETE_PATTERNS
+                ))
+
+            # then - user input should still have been requested
+            assert input_called[0] is True
+
+    def test_stdin_reader_restarted_after_user_input_query(self):
+        """After user sends input, stdin reader should restart for next streaming [REQ-1]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            start_calls = []
+            runner._start_stdin_reader = MagicMock(side_effect=lambda p: start_calls.append(p))
+            runner._stop_stdin_reader = MagicMock()
+            runner._handle_developer_interrupt = AsyncMock(return_value=(None, None))
+            runner._handle_compaction_reinjection = AsyncMock(return_value=(None, None))
+
+            mock_client = AsyncMock()
+            response_count = [0]
+
+            msg_working = MockAssistantMessage()
+            msg_working.session_id = "test"
+            text_working = MagicMock()
+            text_working.text = "Working..."
+            msg_working.content = [text_working]
+
+            msg_done = MockAssistantMessage()
+            msg_done.session_id = "test"
+            text_done = MagicMock()
+            text_done.text = "Done!\n---PHASE_COMPLETE---"
+            msg_done.content = [text_done]
+
+            async def mock_receive():
+                response_count[0] += 1
+                if response_count[0] <= 1:
+                    yield msg_working
+                else:
+                    yield msg_done
+            mock_client.receive_response = mock_receive
+
+            input_values = iter(["some guidance", "/done"])
+            with patch('wp_supervisor.session.read_user_input', side_effect=lambda p="": next(input_values)):
+                run_async(runner.run_phase_session(
+                    client_context_manager=mock_client,
+                    initial_prompt="Test",
+                    phase=3,
+                    signal_patterns=PHASE_COMPLETE_PATTERNS
+                ))
+
+            # then - start should have been called more than once
+            # (once for initial, once after user input)
+            assert len(start_calls) >= 2
+
+    def test_interrupt_check_also_after_user_input_response(self):
+        """_handle_developer_interrupt should be called after user-triggered response too."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given
+            interrupt_call_count = [0]
+
+            async def mock_interrupt(*args, **kwargs):
+                interrupt_call_count[0] += 1
+                return (None, None)
+
+            runner._handle_developer_interrupt = mock_interrupt
+            runner._handle_compaction_reinjection = AsyncMock(return_value=(None, None))
+
+            mock_client = AsyncMock()
+            response_count = [0]
+
+            msg_working = MockAssistantMessage()
+            msg_working.session_id = "test"
+            text_working = MagicMock()
+            text_working.text = "Working..."
+            msg_working.content = [text_working]
+
+            msg_still_working = MockAssistantMessage()
+            msg_still_working.session_id = "test"
+            text_still = MagicMock()
+            text_still.text = "Still working..."
+            msg_still_working.content = [text_still]
+
+            async def mock_receive():
+                response_count[0] += 1
+                if response_count[0] <= 1:
+                    yield msg_working
+                else:
+                    yield msg_still_working
+            mock_client.receive_response = mock_receive
+
+            input_values = iter(["some input", "/done"])
+            with patch('wp_supervisor.session.read_user_input', side_effect=lambda p="": next(input_values)):
+                run_async(runner.run_phase_session(
+                    client_context_manager=mock_client,
+                    initial_prompt="Test",
+                    phase=2,
+                    signal_patterns=PHASE_COMPLETE_PATTERNS
+                ))
+
+            # then - interrupt should be called after initial response AND after user-input response
+            assert interrupt_call_count[0] >= 2
+
+    def test_interrupt_with_phase_complete_signal_ends_session(self):
+        """If interrupt's _process_stream returns phase complete, session should end [EDGE-2]."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = self._create_runner(tmpdir)
+
+            # given - interrupt returns a phase complete signal
+            async def mock_interrupt(client, phase, signal_checker=None):
+                return ("interrupt-sid", SIGNAL_COMPLETE)
+
+            runner._handle_developer_interrupt = mock_interrupt
+            runner._handle_compaction_reinjection = AsyncMock(return_value=(None, None))
+
+            mock_client = AsyncMock()
+            msg = MockAssistantMessage()
+            msg.session_id = "test"
+            text_block = MagicMock()
+            text_block.text = "Working..."  # no complete signal in initial response
+            msg.content = [text_block]
+
+            async def mock_receive():
+                yield msg
+            mock_client.receive_response = mock_receive
+
+            input_called = [False]
+            def mock_input(prompt=""):
+                input_called[0] = True
+                return "/done"
+
+            with patch('wp_supervisor.session.read_user_input', side_effect=mock_input):
+                result = run_async(runner.run_phase_session(
+                    client_context_manager=mock_client,
+                    initial_prompt="Test",
+                    phase=2,
+                    signal_patterns=PHASE_COMPLETE_PATTERNS
+                ))
+
+            # then - session should end without user input prompt
+            assert input_called[0] is False
+            assert result == "interrupt-sid"
+
+
+class TestDisplayInterruptMethods:
+    """Tests for SupervisorDisplay interrupt-related methods [REQ-6]."""
+
+    def test_interrupt_hint_method_exists(self):
+        """SupervisorDisplay should have interrupt_hint method."""
+        from wp_supervisor.display import SupervisorDisplay
+        display = SupervisorDisplay()
+        assert hasattr(display, 'interrupt_hint')
+        assert callable(display.interrupt_hint)
+
+    def test_interrupt_injection_method_exists(self):
+        """SupervisorDisplay should have interrupt_injection method."""
+        from wp_supervisor.display import SupervisorDisplay
+        display = SupervisorDisplay()
+        assert hasattr(display, 'interrupt_injection')
+        assert callable(display.interrupt_injection)
+
+    def test_interrupt_hint_outputs_text(self, capsys):
+        """interrupt_hint should output a visible indicator [REQ-6]."""
+        from wp_supervisor.display import SupervisorDisplay
+        display = SupervisorDisplay()
+        display._use_rich = False  # force plain text
+
+        # when
+        display.interrupt_hint()
+
+        # then
+        captured = capsys.readouterr()
+        assert "Type to add guidance" in captured.out
+        assert "Ctrl+C" in captured.out
+
+    def test_interrupt_injection_shows_preview(self, capsys):
+        """interrupt_injection should show preview of injected text [REQ-6]."""
+        from wp_supervisor.display import SupervisorDisplay
+        display = SupervisorDisplay()
+        display._use_rich = False
+
+        # when
+        display.interrupt_injection("please focus on error handling")
+
+        # then
+        captured = capsys.readouterr()
+        assert "Injecting" in captured.out
+        assert "please focus on error handling" in captured.out
+
+    def test_interrupt_injection_truncates_long_text(self, capsys):
+        """interrupt_injection should truncate text longer than 80 chars."""
+        from wp_supervisor.display import SupervisorDisplay
+        display = SupervisorDisplay()
+        display._use_rich = False
+
+        # given
+        long_text = "a" * 100
+
+        # when
+        display.interrupt_injection(long_text)
+
+        # then
+        captured = capsys.readouterr()
+        assert "..." in captured.out
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

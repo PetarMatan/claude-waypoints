@@ -333,6 +333,21 @@ class SupervisorDisplay:
         else:
             print(f"[Tip: {text}]")
 
+    def interrupt_hint(self) -> None:
+        """Show hint that developer can type during streaming [REQ-6]."""
+        if self._use_rich:
+            self._console.print("[dim italic]Type to add guidance • Ctrl+C to abort[/dim italic]")
+        else:
+            print("[Type to add guidance • Ctrl+C to abort]")
+
+    def interrupt_injection(self, text: str) -> None:
+        """Show that queued developer input is being injected [REQ-3]."""
+        if self._use_rich:
+            self._console.print(f"\n[bold cyan]► Injecting your guidance:[/bold cyan] {text[:80]}{'...' if len(text) > 80 else ''}")
+        else:
+            preview = text[:80] + ('...' if len(text) > 80 else '')
+            print(f"\n► Injecting your guidance: {preview}")
+
     def feedback_injection(self, feedback: str) -> None:
         if self._use_rich:
             self._console.print(Panel(
