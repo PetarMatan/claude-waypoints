@@ -152,6 +152,76 @@ scope of work — implement exactly what is assigned, nothing more.
 {knowledge_context}
 """
 
+TECH_CAPABILITY_INSTRUCTIONS = """# Tech Capability Explorer
+
+## Your Role
+You map the CAPABILITIES of the load-bearing runtimes, SDKs, frameworks, and
+libraries that are most relevant to the user's feature — especially capabilities
+the codebase is NOT currently using.
+
+This is different from the dependencies explorer (which maps what IS used and
+how it is configured). You map what is AVAILABLE — primitives the design could
+leverage instead of reinventing.
+
+## Why This Matters
+Feature designs often assume "we will need to build X" without first checking
+whether the underlying platform already provides X. Your job is to surface
+those primitives so the design can reuse them.
+
+## What to Explore
+
+### 1. Identify load-bearing platforms
+From the user's requirements, pick the 1-3 runtimes / SDKs / frameworks /
+libraries that the feature will interact with most directly. Do NOT enumerate
+every dependency in the project.
+
+### 2. Read the installed source or reference docs
+For each load-bearing platform, locate its actual installed source or the
+official reference API and read it. Examples of where installed sources live:
+package installation directories, vendored directories, language-specific
+module caches. Prefer reading actual installed source over README snippets.
+
+### 3. Enumerate relevant primitives
+Surface primitives likely to matter for this feature. Common categories:
+- Lifecycle / control-flow (start, stop, cancel, pause, resume, dispose)
+- Extension points (hooks, callbacks, listeners, middlewares, interceptors)
+- Message / stream / iteration primitives (producers, consumers, backpressure)
+- Configuration that changes runtime behavior
+- Built-in retry, error-handling, or observability facilities
+- Concurrency primitives (locks, queues, scheduling, cancellation tokens)
+
+### 4. Match each primitive to the feature
+For every primitive you surface, briefly note whether it maps to something the
+requirements described. Silent "no match" primitives should not be included.
+
+## What to Report
+For each load-bearing platform:
+
+**Platform**: name, version, location of installed source or docs
+
+**Relevant primitives** (table):
+| Primitive | Signature / shape | Purpose | Feature mapping |
+
+**Constraints**: preconditions or mode requirements for each primitive
+(e.g. initialization requirements, thread-model requirements, configuration
+dependencies)
+
+**Reinvention flags**: any part of the requirements that sounds like it would
+require custom implementation but is actually provided by the platform. Flag
+these explicitly — they are the most valuable output of this explorer.
+
+## Guidelines
+- Cap the report at roughly 10 primitives per platform
+- Focus on load-bearing primitives — skip generic utilities
+- Prefer reading actual installed source over secondary documentation
+- If a platform exposes no relevant primitives, say so explicitly — do not pad
+- Do NOT replicate work from the dependencies explorer (version lists,
+  configuration, build tools)
+- Do NOT create any files — report findings in your response only
+
+{knowledge_context}
+"""
+
 ARCHITECTURE_INSTRUCTIONS = """# Architecture & Flow Explorer
 
 ## Your Role
@@ -385,8 +455,11 @@ IMPORTANT: Pass the gathered requirements to each subagent so they know what to 
 - **dependencies-explorer**: Maps external dependencies, APIs, configuration
 - **test-usecase-explorer**: Analyzes existing tests for behaviors and patterns
 - **architecture-explorer**: Maps end-to-end flows, integration points, framework behavior
+- **tech-capability-explorer**: Maps primitives the load-bearing runtimes / SDKs / frameworks
+  make available (especially ones the codebase is not yet using), so the design reuses
+  built-in capabilities instead of reinventing them
 
-IMPORTANT: Spawn all four agents in a SINGLE message with FOUR Task tool calls to enable parallel execution. Include the user's requirements in each task prompt.
+IMPORTANT: Spawn all five agents in a SINGLE message with FIVE Task tool calls to enable parallel execution. Include the user's requirements in each task prompt.
 
 Example:
 ```
@@ -396,6 +469,7 @@ I'll now explore the codebase in parallel to understand the existing patterns an
 [Task tool: dependencies-explorer — include full gathered requirements]
 [Task tool: test-usecase-explorer — include full gathered requirements]
 [Task tool: architecture-explorer — include full gathered requirements]
+[Task tool: tech-capability-explorer — include full gathered requirements]
 ```
 
 ### Step 3: Synthesize, Fill Gaps, and Clarify
@@ -706,6 +780,20 @@ to avoid ambiguity that cascades through later phases.]
 - **Project Structure**: [key directories and their purpose]
 - **Key Files**: [important files discovered during exploration, with full paths]
 - **Existing Patterns**: [relevant patterns, conventions, or abstractions found in the codebase]
+
+## Platform Primitives Leveraged
+Primitives from load-bearing runtimes / SDKs / frameworks that the design will rely on.
+Populate from the tech-capability-explorer output. For each primitive:
+- Name and signature
+- Source platform and version
+- What it is being used for in this feature
+
+If the design deliberately does NOT use an otherwise-relevant primitive that the
+explorer surfaced, record it here with the reason. This makes capability-vs-design
+trade-offs explicit so later phases can challenge them if needed.
+
+If no non-trivial platform primitives apply, state that explicitly — do not omit
+the section.
 
 ## Code Reference
 

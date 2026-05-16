@@ -189,15 +189,15 @@ class TestSubagentDescriptions:
 class TestSubagentBuilderBuildExplorationAgents:
     """Tests for SubagentBuilder.build_exploration_agents method."""
 
-    def test_build_exploration_agents_returns_four_agents(self):
-        """Should return exactly four exploration agents."""
+    def test_build_exploration_agents_returns_five_agents(self):
+        """Should return exactly five exploration agents."""
         # when
         agents = SubagentBuilder.build_exploration_agents(
             knowledge_context="# Architecture\nService-based"
         )
 
         # then
-        assert len(agents) == 4
+        assert len(agents) == 5
 
     def test_build_exploration_agents_returns_dict(self):
         """Should return a dictionary mapping names to AgentDefinition."""
@@ -253,7 +253,7 @@ class TestSubagentBuilderBuildExplorationAgents:
         )
 
         # then
-        assert len(agents) == 4
+        assert len(agents) == 5
         # Should not have the literal placeholder in prompts
         for agent in agents.values():
             assert "{knowledge_context}" not in agent.prompt
@@ -486,7 +486,7 @@ class TestEdgeCases:
         )
 
         # then
-        assert len(agents) == 4
+        assert len(agents) == 5
         # Should still have valid prompts
         for agent in agents.values():
             assert len(agent.prompt) > 0

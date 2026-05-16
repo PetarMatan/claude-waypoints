@@ -17,6 +17,7 @@ from .templates import (
     DEPENDENCIES_INSTRUCTIONS,
     TEST_USECASE_INSTRUCTIONS,
     ARCHITECTURE_INSTRUCTIONS,
+    TECH_CAPABILITY_INSTRUCTIONS,
     IMPLEMENTATION_SUBAGENT_INSTRUCTIONS,
 )
 
@@ -36,6 +37,7 @@ BUSINESS_LOGIC_EXPLORER = "business-logic-explorer"
 DEPENDENCIES_EXPLORER = "dependencies-explorer"
 TEST_USECASE_EXPLORER = "test-usecase-explorer"
 ARCHITECTURE_EXPLORER = "architecture-explorer"
+TECH_CAPABILITY_EXPLORER = "tech-capability-explorer"
 
 # Exploration tools for subagents. Bash is included for commands like
 # git log or directory listing; write prevention is instruction-based, not tool-enforced.
@@ -64,6 +66,12 @@ TEST_USECASE_DESCRIPTION = (
 ARCHITECTURE_DESCRIPTION = (
     "Maps system architecture, end-to-end flows, integration points, and framework behavior. "
     "Use for understanding how data/events flow through the system and where to hook in new code."
+)
+
+TECH_CAPABILITY_DESCRIPTION = (
+    "Maps capabilities of load-bearing runtimes, SDKs, and frameworks — especially "
+    "primitives the codebase is NOT yet using. Use for surfacing built-in platform "
+    "capabilities before the design reinvents them."
 )
 
 
@@ -97,6 +105,9 @@ class SubagentBuilder:
                 knowledge_context=knowledge_context
             ),
             ARCHITECTURE_EXPLORER: SubagentBuilder.build_architecture_agent(
+                knowledge_context=knowledge_context
+            ),
+            TECH_CAPABILITY_EXPLORER: SubagentBuilder.build_tech_capability_agent(
                 knowledge_context=knowledge_context
             ),
         }
@@ -160,6 +171,22 @@ class SubagentBuilder:
 
         return AgentDefinition(
             description=ARCHITECTURE_DESCRIPTION,
+            prompt=prompt,
+            tools=EXPLORATION_TOOLS,
+            model="sonnet"
+        )
+
+    @staticmethod
+    def build_tech_capability_agent(
+        knowledge_context: str = ""
+    ) -> AgentDefinition:
+        """Build the Tech Capability Explorer subagent."""
+        prompt = TECH_CAPABILITY_INSTRUCTIONS.format(
+            knowledge_context=SubagentBuilder._format_knowledge_section(knowledge_context)
+        )
+
+        return AgentDefinition(
+            description=TECH_CAPABILITY_DESCRIPTION,
             prompt=prompt,
             tools=EXPLORATION_TOOLS,
             model="sonnet"

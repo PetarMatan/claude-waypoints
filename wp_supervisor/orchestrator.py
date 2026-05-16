@@ -590,7 +590,8 @@ class WPOrchestrator:
         reviewer = ReviewerAgent(
             logger=self.logger,
             requirements_summary=requirements_summary,
-            working_dir=str(self.working_dir)
+            working_dir=str(self.working_dir),
+            model=self._model,
         )
         await reviewer.start()
 

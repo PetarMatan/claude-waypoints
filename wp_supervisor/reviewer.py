@@ -60,11 +60,13 @@ class ReviewerAgent:
         self,
         logger: "SupervisorLogger",
         requirements_summary: str,
-        working_dir: str
+        working_dir: str,
+        model: str = "sonnet"
     ) -> None:
         self._logger = logger
         self._requirements_summary = requirements_summary
         self._working_dir = working_dir
+        self._model = model
         self._state = ReviewerState.INITIALIZING
         self._options = None
         self._session_id: Optional[str] = None
@@ -100,13 +102,13 @@ class ReviewerAgent:
     async def start(self) -> None:
         """Start the reviewer agent session. Transitions to READY or DEGRADED."""
         try:
-            self._logger.log_event("REVIEWER", "Starting reviewer agent (Sonnet)")
+            self._logger.log_event("REVIEWER", f"Starting reviewer agent ({self._model})")
 
             from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
 
             self._options = ClaudeAgentOptions(
                 cwd=self._working_dir,
-                model="sonnet",
+                model=self._model,
                 max_budget_usd=1.0,
                 permission_mode="bypassPermissions",
                 hooks=self._build_hooks_config(),
@@ -150,7 +152,7 @@ class ReviewerAgent:
             return result
 
         except asyncio.TimeoutError:
-            self._logger.log_event("REVIEWER", "Review timed out (120s)")
+            self._logger.log_event("REVIEWER", "Review timed out (900s)")
             self._state = ReviewerState.READY
             return ReviewResult()
         except Exception as e:
@@ -196,7 +198,7 @@ class ReviewerAgent:
                                 text += block.text
             return text
 
-        return await asyncio.wait_for(_run(), timeout=120.0)
+        return await asyncio.wait_for(_run(), timeout=900.0)
 
     def _parse_issues(self, response_text: str) -> List[str]:
         """Parse reviewer response into a list of issues."""

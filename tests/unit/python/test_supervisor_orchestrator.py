@@ -1495,7 +1495,7 @@ class TestIntegrationTaskGuidance:
 
 class TestBuildExplorationSubagents:
 
-    def test_build_exploration_subagents_returns_four_agents(self):
+    def test_build_exploration_subagents_returns_five_agents(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(Path, 'home', return_value=Path(tmpdir)):
                 from wp_supervisor.orchestrator import WPOrchestrator
@@ -1503,7 +1503,7 @@ class TestBuildExplorationSubagents:
 
                 agents = orchestrator._build_exploration_subagents()
 
-                assert len(agents) == 4
+                assert len(agents) == 5
 
     def test_build_exploration_subagents_returns_dict(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1535,7 +1535,7 @@ class TestBuildExplorationSubagents:
 
                 agents = orchestrator._build_exploration_subagents()
 
-                assert len(agents) == 4
+                assert len(agents) == 5
 
 
 class TestSubagentIntegrationWithPhaseSession:
@@ -1598,7 +1598,7 @@ class TestSubagentIntegrationWithPhaseSession:
 
                 assert len(captured_subagents) == 1
                 assert captured_subagents[0] is not None
-                assert len(captured_subagents[0]) == 4
+                assert len(captured_subagents[0]) == 5
 
     def test_phase2_does_not_build_subagents(self):
         with tempfile.TemporaryDirectory() as tmpdir:
